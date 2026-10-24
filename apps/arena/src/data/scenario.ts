@@ -1,10 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CheckResult, PublicScenario, ScenarioRequest, TaskTemplateId } from "@overclock/contracts";
-import { check } from "./checker";
+import type { HoldoutApp } from "../holdout/meta";
+import { emptyHoldout } from "../holdout/model";
+import { applyHoldoutEdit, isHoldoutEntityKind, type HoldoutEntityKind } from "../holdout/task";
+import type { ClassicApp } from "./apps";
+import { appendEntries, check, entityMap } from "./checker";
 import { generate } from "./generate";
 import { cloneDataset, type Dataset } from "./model";
-import { expectedOutcome, TEMPLATES } from "./rules";
+import { expectedOutcome, TEMPLATES, type EntityKey } from "./rules";
 import type { ArenaStore } from "./store";
 
 export interface ScenarioState {
@@ -21,11 +25,10 @@ export interface ScenarioState {
   judgeEdits: { at: number; entity: string; patch: Record<string, unknown> }[];
 }
 
-export interface AppOrigins {
-  CRM: string;
-  Orders: string;
-  Support: string;
-}
+/** App name -> origin. The holdout app's origin is optional so older callers keep working. */
+export type AppOrigins = Record<ClassicApp, string> & Partial<Record<HoldoutApp, string>>;
+
+export type JudgeEntity = "order" | "ticket" | "customer" | HoldoutEntityKind;
 
 /** Holdout seeds (>= 9000) and the holdout template are never used while developing prompts. */
 export const HOLDOUT_SEED_MIN = 9000;
@@ -42,7 +45,11 @@ export class ScenarioManager {
     const saved = join(dataDir, "scenario.json");
     if (existsSync(saved)) {
       try {
-        this.state = JSON.parse(readFileSync(saved, "utf8")) as ScenarioState;
+        const state = JSON.parse(readFileSync(saved, "utf8")) as ScenarioState;
+        // Snapshots saved before the fourth app existed have no holdout tables.
+        state.base.holdout ??= emptyHoldout();
+        if (state.initial) state.initial.holdout ??= emptyHoldout();
+        this.state = state;
       } catch {
         this.state = null;
       }
@@ -89,7 +96,7 @@ export class ScenarioManager {
     const s = this.state;
     if (!s) return null;
     const t = TEMPLATES[s.template];
-    const appOrigin = (name: string) => this.origins[name as keyof AppOrigins];
+    const appOrigin = (name: string) => this.origins[name as keyof AppOrigins] ?? "";
     return {
       scenarioId: s.scenarioId,
       seed: s.seed,
@@ -114,16 +121,12 @@ export class ScenarioManager {
     if (!s) return [];
     const exp = expectedOutcome(s.template, s.base, s.recordKeys);
     const cur = this.store.dump();
-    const version = new Map<string, number>();
-    for (const c of cur.customers) version.set(`customer:${c.id}`, c.version);
-    for (const o of cur.orders) version.set(`order:${o.id}`, o.version);
-    for (const t of cur.tickets) version.set(`ticket:${t.id}`, t.version);
-    const baseVersion = new Map<string, number>();
-    for (const c of s.base.customers) baseVersion.set(`customer:${c.id}`, c.version);
-    for (const o of s.base.orders) baseVersion.set(`order:${o.id}`, o.version);
-    for (const t of s.base.tickets) baseVersion.set(`ticket:${t.id}`, t.version);
-    const notesTouched = new Set(cur.notes.filter((n) => !s.base.notes.some((b) => b.id === n.id)).map((n) => `ticket:${n.ticket_id}`));
-    return exp.records.filter((r) => r.entities.every((e) => version.get(e.key) === baseVersion.get(e.key) && !notesTouched.has(e.key))).map((r) => r.recordKey);
+    const versionOf = (d: Dataset) => new Map([...entityMap(d)].map(([k, v]) => [k, v.version]));
+    const version = versionOf(cur);
+    const baseVersion = versionOf(s.base);
+    const baseAppends = new Set(appendEntries(s.base).map((a) => a.id));
+    const appended = new Set<EntityKey>(appendEntries(cur).filter((a) => !baseAppends.has(a.id)).map((a) => a.key));
+    return exp.records.filter((r) => r.entities.every((e) => version.get(e.key) === baseVersion.get(e.key) && !appended.has(e.key))).map((r) => r.recordKey);
   }
 
   /**
@@ -131,11 +134,13 @@ export class ScenarioManager {
    * change is applied to the live database and to the base snapshot, so the oracle's expected
    * outcome follows the new data (a correct agent must notice the change before writing).
    */
-  editRecord(entity: "order" | "ticket" | "customer", id: string, patch: Record<string, string | number>): boolean {
+  editRecord(entity: JudgeEntity, id: string, patch: Record<string, string | number>): boolean {
     const s = this.state;
     if (!s) return false;
     let ok = false;
-    if (entity === "order") {
+    if (isHoldoutEntityKind(entity)) {
+      ok = applyHoldoutEdit(this.store.holdout, s.base.holdout, entity, id, patch);
+    } else if (entity === "order") {
       ok = !!this.store.orders.update(id, patch);
       const b = s.base.orders.find((o) => o.id === id);
       if (b) Object.assign(b, patch, { version: b.version + 1 });
@@ -162,7 +167,7 @@ export class ScenarioManager {
       records: exp.records.length,
       needChange: exp.records.filter((r) => r.needsChange).length,
       escalations: exp.records.filter((r) => r.escalated).length,
-      notes: exp.records.reduce((n, r) => n + r.notes.length, 0),
+      notes: exp.records.reduce((n, r) => n + r.notes.length + (r.appends?.length ?? 0), 0),
     };
   }
 }

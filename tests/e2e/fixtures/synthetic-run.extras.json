@@ -1,0 +1,945 @@
+{
+  "runId": "run-replay-0001",
+  "artifacts": {
+    "am-orders": {
+      "kind": "app-model",
+      "app": "Orders",
+      "origin": "http://127.0.0.1:4102",
+      "pages": [
+        {
+          "routePattern": "/orders",
+          "title": "Orders /orders",
+          "controls": 12,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/orders/:id",
+          "title": "Orders /orders/:id",
+          "controls": 15,
+          "forms": 0,
+          "tables": 0
+        },
+        {
+          "routePattern": "/orders/:id/edit",
+          "title": "Orders /orders/:id/edit",
+          "controls": 18,
+          "forms": 1,
+          "tables": 0
+        },
+        {
+          "routePattern": "/orders?status=",
+          "title": "Orders /orders?status=",
+          "controls": 21,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/orders?page=",
+          "title": "Orders /orders?page=",
+          "controls": 24,
+          "forms": 0,
+          "tables": 1
+        }
+      ],
+      "fingerprint": "fp-Orders-v1"
+    },
+    "am-crm": {
+      "kind": "app-model",
+      "app": "CRM",
+      "origin": "http://127.0.0.1:4101",
+      "pages": [
+        {
+          "routePattern": "/customers",
+          "title": "CRM /customers",
+          "controls": 12,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/customers?email=",
+          "title": "CRM /customers?email=",
+          "controls": 15,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/customers/:id",
+          "title": "CRM /customers/:id",
+          "controls": 18,
+          "forms": 0,
+          "tables": 0
+        },
+        {
+          "routePattern": "/customers/:id/edit",
+          "title": "CRM /customers/:id/edit",
+          "controls": 21,
+          "forms": 1,
+          "tables": 0
+        },
+        {
+          "routePattern": "/customers?page=",
+          "title": "CRM /customers?page=",
+          "controls": 24,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/accounts/holds",
+          "title": "CRM /accounts/holds",
+          "controls": 27,
+          "forms": 0,
+          "tables": 1
+        }
+      ],
+      "fingerprint": "fp-CRM-v1"
+    },
+    "am-support": {
+      "kind": "app-model",
+      "app": "Support",
+      "origin": "http://127.0.0.1:4103",
+      "pages": [
+        {
+          "routePattern": "/tickets",
+          "title": "Support /tickets",
+          "controls": 12,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/tickets?order=",
+          "title": "Support /tickets?order=",
+          "controls": 15,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/tickets/:id",
+          "title": "Support /tickets/:id",
+          "controls": 18,
+          "forms": 0,
+          "tables": 0
+        },
+        {
+          "routePattern": "/tickets/:id/edit",
+          "title": "Support /tickets/:id/edit",
+          "controls": 21,
+          "forms": 1,
+          "tables": 0
+        },
+        {
+          "routePattern": "/tickets/:id/notes",
+          "title": "Support /tickets/:id/notes",
+          "controls": 24,
+          "forms": 0,
+          "tables": 0
+        },
+        {
+          "routePattern": "/tickets?status=",
+          "title": "Support /tickets?status=",
+          "controls": 27,
+          "forms": 0,
+          "tables": 1
+        },
+        {
+          "routePattern": "/queues",
+          "title": "Support /queues",
+          "controls": 30,
+          "forms": 0,
+          "tables": 1
+        }
+      ],
+      "fingerprint": "fp-Support-v1"
+    },
+    "plans": {
+      "kind": "plan-candidates",
+      "candidates": [
+        {
+          "id": "c-detail",
+          "name": "Per-record detail reads",
+          "summary": "Open each order, look up the customer by email in CRM, read the ticket, then write corrections.",
+          "estimate": {
+            "modelMs": 3900,
+            "browserCriticalPathMs": 21500,
+            "recoveryMs": 1200,
+            "coordinationMs": 900,
+            "verificationMs": 3400,
+            "workers": 8,
+            "modelCostUsd": 0.21
+          }
+        },
+        {
+          "id": "c-scan",
+          "name": "Shared list scans + local joins",
+          "summary": "Scan the Orders, CRM and Support lists once, join locally, then visit only records that need writes.",
+          "estimate": {
+            "modelMs": 4300,
+            "browserCriticalPathMs": 17800,
+            "recoveryMs": 1400,
+            "coordinationMs": 1300,
+            "verificationMs": 3400,
+            "workers": 8,
+            "modelCostUsd": 0.24
+          }
+        },
+        {
+          "id": "c-seq",
+          "name": "Order-at-a-time pipeline",
+          "summary": "Process one order fully before the next; simplest locking, no parallel writes to one customer.",
+          "estimate": {
+            "modelMs": 3100,
+            "browserCriticalPathMs": 61000,
+            "recoveryMs": 900,
+            "coordinationMs": 200,
+            "verificationMs": 3400,
+            "workers": 1,
+            "modelCostUsd": 0.18
+          }
+        }
+      ]
+    },
+    "effects": {
+      "kind": "effect-classification",
+      "nodes": [
+        {
+          "segment": "p0.s1",
+          "effect": "read",
+          "retry": "safe"
+        },
+        {
+          "segment": "p1.s1",
+          "effect": "read",
+          "retry": "safe"
+        },
+        {
+          "segment": "p1.s2",
+          "effect": "read",
+          "retry": "safe"
+        },
+        {
+          "segment": "p1.s3",
+          "effect": "read",
+          "retry": "safe"
+        },
+        {
+          "segment": "p1.s4",
+          "effect": "local-write",
+          "retry": "safe"
+        },
+        {
+          "segment": "p1.s5",
+          "effect": "remote-write",
+          "retry": "verify-before-retry"
+        },
+        {
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "retry": "verify-before-retry"
+        },
+        {
+          "segment": "p2.s1",
+          "effect": "remote-write",
+          "retry": "verify-before-retry"
+        }
+      ]
+    },
+    "costs": {
+      "kind": "cost-estimates",
+      "candidates": [
+        {
+          "modelMs": 3900,
+          "browserCriticalPathMs": 21500,
+          "recoveryMs": 1200,
+          "coordinationMs": 900,
+          "verificationMs": 3400,
+          "workers": 8,
+          "modelCostUsd": 0.21
+        },
+        {
+          "modelMs": 4300,
+          "browserCriticalPathMs": 17800,
+          "recoveryMs": 1400,
+          "coordinationMs": 1300,
+          "verificationMs": 3400,
+          "workers": 8,
+          "modelCostUsd": 0.24
+        },
+        {
+          "modelMs": 3100,
+          "browserCriticalPathMs": 61000,
+          "recoveryMs": 900,
+          "coordinationMs": 200,
+          "verificationMs": 3400,
+          "workers": 1,
+          "modelCostUsd": 0.18
+        }
+      ]
+    },
+    "risk": {
+      "kind": "risk-report",
+      "findings": [
+        {
+          "severity": "high",
+          "segment": "p1.s6",
+          "issue": "Ticket notes are append-only: a retried submit duplicates the note",
+          "mitigation": "verify-before-retry with note read-back"
+        },
+        {
+          "severity": "medium",
+          "segment": "p2.s1",
+          "issue": "Account hold must wait for every order of the customer",
+          "mitigation": "phase barrier (p2 after p1 sealed)"
+        }
+      ]
+    },
+    "dry": {
+      "kind": "dry-run",
+      "probes": [
+        {
+          "segment": "p1.s5",
+          "record": "ORD-1001",
+          "ok": true,
+          "ms": 780
+        },
+        {
+          "segment": "p1.s6",
+          "record": "ORD-1003",
+          "ok": true,
+          "ms": 910,
+          "note": "confirm modal detected and handled"
+        }
+      ]
+    }
+  },
+  "program": {
+    "programId": "prog-1",
+    "template": {
+      "phases": [
+        {
+          "id": "p0",
+          "kind": "once",
+          "dependsOn": [],
+          "segmentIds": [
+            "p0.s1"
+          ]
+        },
+        {
+          "id": "p1",
+          "kind": "foreach",
+          "dependsOn": [
+            "p0"
+          ],
+          "segmentIds": [
+            "p1.s1",
+            "p1.s2",
+            "p1.s3",
+            "p1.s4",
+            "p1.s5",
+            "p1.s6"
+          ]
+        },
+        {
+          "id": "p2",
+          "kind": "foreach",
+          "dependsOn": [
+            "p1"
+          ],
+          "segmentIds": [
+            "p2.s1"
+          ]
+        }
+      ],
+      "segments": [
+        {
+          "nodeIds": [
+            "p0.s1.n1",
+            "p0.s1.n2"
+          ],
+          "reads": [
+            "orders:list"
+          ],
+          "writes": [],
+          "id": "p0.s1",
+          "phaseId": "p0",
+          "app": "Orders",
+          "dependsOn": [],
+          "effect": "read",
+          "kind": "scan",
+          "label": "Orders · open /orders → scan table",
+          "estimatedMs": 1800
+        },
+        {
+          "nodeIds": [
+            "p1.s1.n1",
+            "p1.s1.n2"
+          ],
+          "reads": [
+            "order:{orderId}"
+          ],
+          "writes": [],
+          "id": "p1.s1",
+          "phaseId": "p1",
+          "app": "Orders",
+          "dependsOn": [],
+          "effect": "read",
+          "kind": "read",
+          "label": "Orders · open /orders/… → extract",
+          "estimatedMs": 420
+        },
+        {
+          "nodeIds": [
+            "p1.s2.n1",
+            "p1.s2.n2"
+          ],
+          "reads": [
+            "customer:{email}"
+          ],
+          "writes": [],
+          "id": "p1.s2",
+          "phaseId": "p1",
+          "app": "CRM",
+          "dependsOn": [],
+          "effect": "read",
+          "kind": "read",
+          "label": "CRM · open /customers?email=… → scan table",
+          "estimatedMs": 520
+        },
+        {
+          "nodeIds": [
+            "p1.s3.n1",
+            "p1.s3.n2"
+          ],
+          "reads": [
+            "ticket:{orderId}"
+          ],
+          "writes": [],
+          "id": "p1.s3",
+          "phaseId": "p1",
+          "app": "Support",
+          "dependsOn": [],
+          "effect": "read",
+          "kind": "read",
+          "label": "Support · open /tickets?order=… → extract",
+          "estimatedMs": 480
+        },
+        {
+          "nodeIds": [
+            "p1.s4.n1",
+            "p1.s4.n2",
+            "p1.s4.n3"
+          ],
+          "reads": [],
+          "writes": [],
+          "id": "p1.s4",
+          "phaseId": "p1",
+          "dependsOn": [
+            "p1.s1",
+            "p1.s2",
+            "p1.s3"
+          ],
+          "effect": "local-write",
+          "kind": "compute",
+          "label": "compute · decide corrections",
+          "estimatedMs": 40
+        },
+        {
+          "nodeIds": [
+            "p1.s5.n1",
+            "p1.s5.n2",
+            "p1.s5.n3",
+            "p1.s5.n4"
+          ],
+          "reads": [],
+          "writes": [
+            "order:{orderId}"
+          ],
+          "id": "p1.s5",
+          "phaseId": "p1",
+          "app": "Orders",
+          "dependsOn": [
+            "p1.s4"
+          ],
+          "effect": "remote-write",
+          "kind": "write",
+          "label": "Orders · open /orders/…/edit → fill → submit",
+          "estimatedMs": 950
+        },
+        {
+          "nodeIds": [
+            "p1.s6.n1",
+            "p1.s6.n2",
+            "p1.s6.n3",
+            "p1.s6.n4",
+            "p1.s6.n5"
+          ],
+          "reads": [],
+          "writes": [
+            "ticket:{ticketId}"
+          ],
+          "id": "p1.s6",
+          "phaseId": "p1",
+          "app": "Support",
+          "dependsOn": [
+            "p1.s4"
+          ],
+          "effect": "remote-write",
+          "kind": "write",
+          "label": "Support · open /tickets/…/edit → select → submit",
+          "estimatedMs": 1050
+        },
+        {
+          "nodeIds": [
+            "p2.s1.n1",
+            "p2.s1.n2",
+            "p2.s1.n3",
+            "p2.s1.n4"
+          ],
+          "reads": [],
+          "writes": [
+            "customer:{customerId}"
+          ],
+          "id": "p2.s1",
+          "phaseId": "p2",
+          "app": "CRM",
+          "dependsOn": [],
+          "effect": "remote-write",
+          "kind": "write",
+          "label": "CRM · open /customers/…/edit → select → submit",
+          "estimatedMs": 900
+        }
+      ]
+    },
+    "ir": {
+      "version": "1.0",
+      "nodes": [
+        {
+          "id": "p0.s1.n1",
+          "segment": "p0.s1",
+          "effect": "read",
+          "app": "Orders"
+        },
+        {
+          "id": "p0.s1.n2",
+          "segment": "p0.s1",
+          "effect": "read",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s1.n1",
+          "segment": "p1.s1",
+          "effect": "read",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s1.n2",
+          "segment": "p1.s1",
+          "effect": "read",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s2.n1",
+          "segment": "p1.s2",
+          "effect": "read",
+          "app": "CRM"
+        },
+        {
+          "id": "p1.s2.n2",
+          "segment": "p1.s2",
+          "effect": "read",
+          "app": "CRM"
+        },
+        {
+          "id": "p1.s3.n1",
+          "segment": "p1.s3",
+          "effect": "read",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s3.n2",
+          "segment": "p1.s3",
+          "effect": "read",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s4.n1",
+          "segment": "p1.s4",
+          "effect": "local-write",
+          "app": null
+        },
+        {
+          "id": "p1.s4.n2",
+          "segment": "p1.s4",
+          "effect": "local-write",
+          "app": null
+        },
+        {
+          "id": "p1.s4.n3",
+          "segment": "p1.s4",
+          "effect": "local-write",
+          "app": null
+        },
+        {
+          "id": "p1.s5.n1",
+          "segment": "p1.s5",
+          "effect": "remote-write",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s5.n2",
+          "segment": "p1.s5",
+          "effect": "remote-write",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s5.n3",
+          "segment": "p1.s5",
+          "effect": "remote-write",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s5.n4",
+          "segment": "p1.s5",
+          "effect": "remote-write",
+          "app": "Orders"
+        },
+        {
+          "id": "p1.s6.n1",
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s6.n2",
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s6.n3",
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s6.n4",
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "app": "Support"
+        },
+        {
+          "id": "p1.s6.n5",
+          "segment": "p1.s6",
+          "effect": "remote-write",
+          "app": "Support"
+        },
+        {
+          "id": "p2.s1.n1",
+          "segment": "p2.s1",
+          "effect": "remote-write",
+          "app": "CRM"
+        },
+        {
+          "id": "p2.s1.n2",
+          "segment": "p2.s1",
+          "effect": "remote-write",
+          "app": "CRM"
+        },
+        {
+          "id": "p2.s1.n3",
+          "segment": "p2.s1",
+          "effect": "remote-write",
+          "app": "CRM"
+        },
+        {
+          "id": "p2.s1.n4",
+          "segment": "p2.s1",
+          "effect": "remote-write",
+          "app": "CRM"
+        }
+      ]
+    }
+  },
+  "scenario": {
+    "scenarioId": "t1-4242-60",
+    "seed": 4242,
+    "template": "t1-order-reconcile",
+    "title": "Reconcile orders across CRM, Orders, and Support",
+    "goal": "Reconcile these 60 customer orders across CRM, Orders, and Support. Update mismatched records and verify every correction.",
+    "records": [
+      {
+        "orderId": "ORD-1001",
+        "customerEmail": "customer1@example.com"
+      },
+      {
+        "orderId": "ORD-1002",
+        "customerEmail": "customer8@example.com"
+      },
+      {
+        "orderId": "ORD-1003",
+        "customerEmail": "customer15@example.com"
+      },
+      {
+        "orderId": "ORD-1004",
+        "customerEmail": "customer22@example.com"
+      },
+      {
+        "orderId": "ORD-1005",
+        "customerEmail": "customer29@example.com"
+      },
+      {
+        "orderId": "ORD-1006",
+        "customerEmail": "customer36@example.com"
+      },
+      {
+        "orderId": "ORD-1007",
+        "customerEmail": "customer43@example.com"
+      },
+      {
+        "orderId": "ORD-1008",
+        "customerEmail": "customer50@example.com"
+      },
+      {
+        "orderId": "ORD-1009",
+        "customerEmail": "customer2@example.com"
+      },
+      {
+        "orderId": "ORD-1010",
+        "customerEmail": "customer9@example.com"
+      },
+      {
+        "orderId": "ORD-1011",
+        "customerEmail": "customer16@example.com"
+      },
+      {
+        "orderId": "ORD-1012",
+        "customerEmail": "customer23@example.com"
+      },
+      {
+        "orderId": "ORD-1013",
+        "customerEmail": "customer30@example.com"
+      },
+      {
+        "orderId": "ORD-1014",
+        "customerEmail": "customer37@example.com"
+      },
+      {
+        "orderId": "ORD-1015",
+        "customerEmail": "customer44@example.com"
+      },
+      {
+        "orderId": "ORD-1016",
+        "customerEmail": "customer51@example.com"
+      },
+      {
+        "orderId": "ORD-1017",
+        "customerEmail": "customer3@example.com"
+      },
+      {
+        "orderId": "ORD-1018",
+        "customerEmail": "customer10@example.com"
+      },
+      {
+        "orderId": "ORD-1019",
+        "customerEmail": "customer17@example.com"
+      },
+      {
+        "orderId": "ORD-1020",
+        "customerEmail": "customer24@example.com"
+      },
+      {
+        "orderId": "ORD-1021",
+        "customerEmail": "customer31@example.com"
+      },
+      {
+        "orderId": "ORD-1022",
+        "customerEmail": "customer38@example.com"
+      },
+      {
+        "orderId": "ORD-1023",
+        "customerEmail": "customer45@example.com"
+      },
+      {
+        "orderId": "ORD-1024",
+        "customerEmail": "customer52@example.com"
+      },
+      {
+        "orderId": "ORD-1025",
+        "customerEmail": "customer4@example.com"
+      },
+      {
+        "orderId": "ORD-1026",
+        "customerEmail": "customer11@example.com"
+      },
+      {
+        "orderId": "ORD-1027",
+        "customerEmail": "customer18@example.com"
+      },
+      {
+        "orderId": "ORD-1028",
+        "customerEmail": "customer25@example.com"
+      },
+      {
+        "orderId": "ORD-1029",
+        "customerEmail": "customer32@example.com"
+      },
+      {
+        "orderId": "ORD-1030",
+        "customerEmail": "customer39@example.com"
+      },
+      {
+        "orderId": "ORD-1031",
+        "customerEmail": "customer46@example.com"
+      },
+      {
+        "orderId": "ORD-1032",
+        "customerEmail": "customer53@example.com"
+      },
+      {
+        "orderId": "ORD-1033",
+        "customerEmail": "customer5@example.com"
+      },
+      {
+        "orderId": "ORD-1034",
+        "customerEmail": "customer12@example.com"
+      },
+      {
+        "orderId": "ORD-1035",
+        "customerEmail": "customer19@example.com"
+      },
+      {
+        "orderId": "ORD-1036",
+        "customerEmail": "customer26@example.com"
+      },
+      {
+        "orderId": "ORD-1037",
+        "customerEmail": "customer33@example.com"
+      },
+      {
+        "orderId": "ORD-1038",
+        "customerEmail": "customer40@example.com"
+      },
+      {
+        "orderId": "ORD-1039",
+        "customerEmail": "customer47@example.com"
+      },
+      {
+        "orderId": "ORD-1040",
+        "customerEmail": "customer54@example.com"
+      },
+      {
+        "orderId": "ORD-1041",
+        "customerEmail": "customer6@example.com"
+      },
+      {
+        "orderId": "ORD-1042",
+        "customerEmail": "customer13@example.com"
+      },
+      {
+        "orderId": "ORD-1043",
+        "customerEmail": "customer20@example.com"
+      },
+      {
+        "orderId": "ORD-1044",
+        "customerEmail": "customer27@example.com"
+      },
+      {
+        "orderId": "ORD-1045",
+        "customerEmail": "customer34@example.com"
+      },
+      {
+        "orderId": "ORD-1046",
+        "customerEmail": "customer41@example.com"
+      },
+      {
+        "orderId": "ORD-1047",
+        "customerEmail": "customer48@example.com"
+      },
+      {
+        "orderId": "ORD-1048",
+        "customerEmail": "customer55@example.com"
+      },
+      {
+        "orderId": "ORD-1049",
+        "customerEmail": "customer7@example.com"
+      },
+      {
+        "orderId": "ORD-1050",
+        "customerEmail": "customer14@example.com"
+      },
+      {
+        "orderId": "ORD-1051",
+        "customerEmail": "customer21@example.com"
+      },
+      {
+        "orderId": "ORD-1052",
+        "customerEmail": "customer28@example.com"
+      },
+      {
+        "orderId": "ORD-1053",
+        "customerEmail": "customer35@example.com"
+      },
+      {
+        "orderId": "ORD-1054",
+        "customerEmail": "customer42@example.com"
+      },
+      {
+        "orderId": "ORD-1055",
+        "customerEmail": "customer49@example.com"
+      },
+      {
+        "orderId": "ORD-1056",
+        "customerEmail": "customer1@example.com"
+      },
+      {
+        "orderId": "ORD-1057",
+        "customerEmail": "customer8@example.com"
+      },
+      {
+        "orderId": "ORD-1058",
+        "customerEmail": "customer15@example.com"
+      },
+      {
+        "orderId": "ORD-1059",
+        "customerEmail": "customer22@example.com"
+      },
+      {
+        "orderId": "ORD-1060",
+        "customerEmail": "customer29@example.com"
+      }
+    ],
+    "applications": [
+      {
+        "name": "CRM",
+        "origin": "http://127.0.0.1:4101"
+      },
+      {
+        "name": "Orders",
+        "origin": "http://127.0.0.1:4102"
+      },
+      {
+        "name": "Support",
+        "origin": "http://127.0.0.1:4103"
+      }
+    ],
+    "holdout": false
+  },
+  "check": {
+    "scenarioId": "t1-4242-60",
+    "totalRecords": 60,
+    "correctRecords": 59,
+    "accuracy": 0.9833333333333333,
+    "mismatches": [
+      {
+        "recordKey": "ORD-1021",
+        "entity": "ticket",
+        "field": "status",
+        "expected": "resolved",
+        "actual": "open"
+      }
+    ],
+    "duplicateWrites": 0,
+    "collateralWrites": 0,
+    "escalationExpected": 3,
+    "checkedAt": 1792778438675
+  }
+}

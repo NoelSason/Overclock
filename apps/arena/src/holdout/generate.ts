@@ -289,13 +289,12 @@ export function generateHoldout(seed: number, n: number): HoldoutGenerated {
   });
 
   // Custody history.
-  const unitName = new Map(b.units.map((u) => [u.id, u.id]));
   const seedEntries: Omit<CustodyEntry, "id">[] = [];
   const add = (s: Specimen, ms: number, text: string, actor: string) => seedEntries.push({ accession: s.accession, text, at: iso(ms), actor });
   for (const s of b.specimens) {
     const stored = Date.parse(s.stored_at);
     add(s, stored - r.int(2, 72) * HOUR, `Received at intake from ${r.pick(SITES)}`, "intake");
-    add(s, stored, `Placed in ${unitName.get(s.unit_id) ?? s.unit_id} at ${s.position}`, "intake");
+    add(s, stored, `Placed in ${s.unit_id} at ${s.position}`, "intake");
     if (r.chance(0.3)) add(s, stored + r.int(5, 120) * DAY, "Aliquot drawn for assay (0.5 mL)", "lab");
     if (s.state === "quarantined") add(s, stored + r.int(10, 200) * DAY, "Quarantined pending QC review", "qc");
     if (s.state === "discard_pending") add(s, stored + r.int(10, 200) * DAY, "Discard requested: sample integrity", "qc");

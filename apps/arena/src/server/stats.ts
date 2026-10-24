@@ -1,15 +1,17 @@
-import { APP_NAMES, type AppName } from "./variations";
+import { APP_NAMES, type AppName } from "../data/apps";
 
 export interface AppStats {
   requests: number;
   inFlight: number;
   maxInFlight: number;
   throttled429: number;
-  /** Committed state-changing POSTs (edit, note, import), including ones answered with an injected 500. */
+  /** Committed state-changing requests (edit, note, import, API write), including ones answered with an injected 500. */
   writes: number;
   injectedBeforeCommit: number;
   injectedAfterCommit: number;
   conflicts409: number;
+  /** State-changing requests refused with 403 because the session has the read-only viewer role. */
+  deniedWrites: number;
 }
 
 export interface ArenaStats {
@@ -18,11 +20,11 @@ export interface ArenaStats {
 }
 
 function emptyStats(inFlight = 0): AppStats {
-  return { requests: 0, inFlight, maxInFlight: inFlight, throttled429: 0, writes: 0, injectedBeforeCommit: 0, injectedAfterCommit: 0, conflicts409: 0 };
+  return { requests: 0, inFlight, maxInFlight: inFlight, throttled429: 0, writes: 0, injectedBeforeCommit: 0, injectedAfterCommit: 0, conflicts409: 0, deniedWrites: 0 };
 }
 
 export class StatsRegistry {
-  private apps: Record<AppName, AppStats> = { CRM: emptyStats(), Orders: emptyStats(), Support: emptyStats() };
+  private apps = Object.fromEntries(APP_NAMES.map((a) => [a, emptyStats()])) as Record<AppName, AppStats>;
   private lastResetAt = Date.now();
 
   of(app: AppName): AppStats {

@@ -19,6 +19,11 @@ export interface ExternalRunInput {
   signal?: AbortSignal;
   /** Stop when model spend reaches this many USD. No cap when omitted. */
   budgetUsd?: number;
+  /**
+   * Claude effort sent with every model call. Default "low", the effort Overclock's own Haiku
+   * calls use (OVERCLOCK_HELPER_EFFORT default); null sends none (API default).
+   */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
 }
 
 export interface ExternalEpisode {
@@ -54,6 +59,10 @@ export interface ExternalRunResult {
   error?: string;
   /** Per-episode detail, in order (records, then the wrap-up). */
   episodes?: ExternalEpisode[];
+  /** Requests the origin allowlist refused. */
+  blockedRequests?: number;
+  /** The framework's own token counters (Stagehand metrics), for cross-checking the metered numbers. */
+  frameworkReported?: { inputTokens: number; outputTokens: number };
 }
 
 /** Thrown when the baseline cannot run in this environment (missing package, browser, or API key). */
@@ -102,7 +111,10 @@ export interface ResolvedRunInput {
   maxStepsPerRecord: number;
   signal: AbortSignal | undefined;
   budgetUsd: number | undefined;
+  effort: NonNullable<ExternalRunInput["effort"]> | null;
 }
+
+const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
 /** Validate and normalize the input. Throws TypeError on input the adapter cannot run. */
 export function resolveRunInput(input: ExternalRunInput): ResolvedRunInput {
@@ -134,7 +146,9 @@ export function resolveRunInput(input: ExternalRunInput): ResolvedRunInput {
   if (!Number.isInteger(maxStepsPerRecord) || maxStepsPerRecord < 1) throw new TypeError("maxStepsPerRecord must be a positive integer");
   const budgetUsd = input.budgetUsd;
   if (budgetUsd !== undefined && (typeof budgetUsd !== "number" || !Number.isFinite(budgetUsd) || budgetUsd <= 0)) throw new TypeError("budgetUsd must be a positive number");
-  return { goal: input.goal, records: input.records, applications, credentials: { username: c.username, password: c.password }, model, maxStepsPerRecord, signal: input.signal, budgetUsd };
+  const effort = input.effort === undefined ? "low" : input.effort;
+  if (effort !== null && !EFFORTS.has(effort)) throw new TypeError(`effort must be one of ${[...EFFORTS].join(", ")} or null`);
+  return { goal: input.goal, records: input.records, applications, credentials: { username: c.username, password: c.password }, model, maxStepsPerRecord, signal: input.signal, budgetUsd, effort };
 }
 
 /** Stable display key for a record: an id-like field, else the first primitive value, else its position. Same rule as the sequential baseline. */

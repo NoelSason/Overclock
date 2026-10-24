@@ -8,6 +8,8 @@ import { z } from "zod";
  *   so a model cannot invent a target it never saw.
  * - Values are expressions in the closed, side-effect-free Overclock expression language.
  * - No recursion and no free-form maps, so it fits the structured-output JSON schema subset.
+ * - Absent values are `null` rather than optional keys: structured outputs cap a schema at 24
+ *   optional parameters, and required-nullable fields don't count toward that limit.
  */
 
 const Expr = z
@@ -24,9 +26,9 @@ const ControlRef = z.string().describe("Control id copied exactly from the app m
 
 const StepBase = {
   id: z.string().describe("Unique step id within the plan, snake_case"),
-  when: Expr.optional().describe("Guard: the step is skipped when this evaluates falsy"),
-  after: z.array(z.string()).optional().describe("Extra step ids this step must wait for"),
-  note: z.string().optional(),
+  when: Expr.nullable().describe("Guard: the step is skipped when this evaluates falsy"),
+  after: z.array(z.string()).nullable().describe("Extra step ids this step must wait for"),
+  note: z.string().nullable(),
 };
 
 export const DslGoto = z.object({ ...StepBase, op: z.literal("goto"), app: z.string(), url: Template });
@@ -60,7 +62,7 @@ export const DslExtract = z.object({
       name: z.string(),
       control: ControlRef,
       parse: z.enum(["string", "number", "boolean"]),
-      optional: z.boolean().optional(),
+      optional: z.boolean().nullable(),
     }),
   ),
 });
@@ -69,10 +71,10 @@ export const DslExtractTable = z.object({
   op: z.literal("extractTable"),
   table: ControlRef,
   columns: z.array(z.object({ name: z.string(), header: z.string() })),
-  key: z.string().optional().describe("Output column name that uniquely keys rows"),
-  links: z.array(z.string()).optional().describe("Output column names whose cell link href should be captured as <name>Href"),
-  paginateNext: ControlRef.optional().describe("'Next page' control; the runtime clicks it until disabled/absent or maxPages"),
-  maxPages: z.number().int().optional(),
+  key: z.string().nullable().describe("Output column name that uniquely keys rows"),
+  links: z.array(z.string()).nullable().describe("Output column names whose cell link href should be captured as <name>Href"),
+  paginateNext: ControlRef.nullable().describe("'Next page' control; the runtime clicks it until disabled/absent or maxPages"),
+  maxPages: z.number().int().nullable(),
 });
 export const DslCompute = z.object({
   ...StepBase,
@@ -83,8 +85,8 @@ export const DslAssert = z.object({ ...StepBase, op: z.literal("assert"), expr: 
 export const DslWait = z.object({
   ...StepBase,
   op: z.literal("waitFor"),
-  control: ControlRef.optional(),
-  text: z.string().optional(),
+  control: ControlRef.nullable(),
+  text: z.string().nullable(),
 });
 
 export const DslStep = z.discriminatedUnion("op", [
@@ -105,9 +107,9 @@ export type DslStepOp = DslStep["op"];
 export const DslPhase = z.object({
   id: z.string(),
   kind: z.enum(["once", "foreach"]),
-  over: Expr.optional().describe("foreach only: list expression, usually $input.records"),
-  key: Expr.optional().describe("foreach only: stable unique key per item, e.g. $rec.orderId"),
-  maxIterations: z.number().int().optional(),
+  over: Expr.nullable().describe("foreach only: list expression, usually $input.records"),
+  key: Expr.nullable().describe("foreach only: stable unique key per item, e.g. $rec.orderId"),
+  maxIterations: z.number().int().nullable(),
   dependsOn: z.array(z.string()).describe("Phase ids that must fully complete first"),
   steps: z.array(DslStep),
 });

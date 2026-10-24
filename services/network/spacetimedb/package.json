@@ -1,0 +1,16 @@
+{
+  "name": "@overclock/network-module",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Overclock Network SpacetimeDB module (built and published by the spacetime CLI).",
+  "scripts": {
+    "build": "spacetime build"
+  },
+  "dependencies": {
+    "spacetimedb": "2.13.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

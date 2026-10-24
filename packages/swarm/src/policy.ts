@@ -23,6 +23,8 @@ export function decidePolicy(config: RunConfig, models: AppModel[], directives: 
   const competitive = config.ablation.competitiveSynthesis !== false;
   const probes = config.ablation.dryRunProbes !== false;
   if (cacheHit && config.cache === "warm") return { intelligence: "warm-cache", candidates: 0, catalog: false, critique: false, dryRun: false, reason: "warm start: app fingerprints match a previously compiled program for this task", features };
+  // Modes B and C are defined as one planner with no discovery swarm.
+  if (config.mode === "compiled-single" || config.mode === "compiled-parallel") return { intelligence: "single-planner", candidates: 1, catalog: false, critique: false, dryRun: false, reason: `${config.mode}: one planner, no discovery swarm (mode definition)`, features };
   if (config.intelligence === "single-planner") return { intelligence: "single-planner", candidates: 1, catalog: false, critique: false, dryRun: false, reason: "single-planner mode requested", features };
   if (config.intelligence === "parallel-scout") {
     const k = competitive ? Math.min(3, directives) : 1;

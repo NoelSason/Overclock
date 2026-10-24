@@ -24,7 +24,9 @@
     "benchmark:overclock": "tsx packages/benchmarks/src/cli.ts --mode overclock",
     "benchmark:all": "tsx packages/benchmarks/src/cli.ts --suite all",
     "benchmark:ablations": "tsx packages/benchmarks/src/cli.ts --suite ablations",
-    "demo:reset": "tsx apps/cli/src/main.ts reset --seed 4242 --records 100"
+    "demo:reset": "tsx apps/cli/src/main.ts reset --seed 4242 --records 100",
+    "benchmark:staged": "tsx packages/benchmarks/src/cli.ts --mode staged",
+    "benchmark:report": "tsx packages/benchmarks/src/cli.ts --report"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

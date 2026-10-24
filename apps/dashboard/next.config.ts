@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   // The workspace root holds the shared contracts package; Turbopack must be able to resolve it.
   turbopack: { root: path.resolve(import.meta.dirname, "../..") },
   devIndicators: false,
+  // Do not write AGENTS.md into the app directory on `next dev`.
+  agentRules: false,
   poweredByHeader: false,
 };
 

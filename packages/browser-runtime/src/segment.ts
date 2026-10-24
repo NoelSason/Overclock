@@ -272,11 +272,11 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
       const stale = learned.findIndex((k) => k.startsWith(node.id + "#prelude:"));
       if (stale >= 0) learned.splice(stale);
     }
+    const learnedValues = learned.map((k) => overrides.get(k));
     await checkPreconditions(env, node);
 
     let outcome: ActionOutcome | null = null;
     let modelCalls = 0;
-    let nodeRepairs = 0;
     let pending: RuntimeError | null = null;
     for (let attempt = 0; ; attempt++) {
       let err: unknown;
@@ -300,7 +300,6 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
         fail(node, modelCalls, err);
         throw err;
       }
-      nodeRepairs++;
       result.repairs++;
       modelCalls += repair.modelCalls;
       result.modelCalls += repair.modelCalls;
@@ -328,7 +327,9 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
     }
     result.actions++;
     hooks.onAction?.({ taskId: input.taskId, nodeId: node.id, actionType: node.type, ms: outcome.ms, ok: true, modelCalls, locatorTier: outcome.locatorTier ?? undefined });
-    if (learned.length && nodeRepairs === 0) hooks.onReuse?.({ taskId: input.taskId, segmentId: input.segmentId, nodeId: node.id, keys: learned });
+    // Learned overrides that were in effect and not replaced by a repair during this node.
+    const reused = learned.filter((k, i) => overrides.get(k) === learnedValues[i]);
+    if (reused.length) hooks.onReuse?.({ taskId: input.taskId, segmentId: input.segmentId, nodeId: node.id, keys: reused });
 
     if (node.verify && isWrite(node)) {
       hooks.onOp?.("verify", node);

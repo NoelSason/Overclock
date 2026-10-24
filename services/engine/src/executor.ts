@@ -1,5 +1,6 @@
 import type { ActionNode, AppBinding, EventPayload, RecordOutcome, RunConfig, SemanticLocator, TaskState, VerificationStatus } from "@overclock/contracts";
 import {
+  executeAction,
   ApprovalRequiredError,
   AssertionFailedError,
   BrowserWorker,
@@ -18,7 +19,7 @@ import {
   type SegmentHooks,
   type StorageState,
 } from "@overclock/browser-runtime";
-import type { CompiledProgram, CompiledSegment } from "@overclock/compiler";
+import { evaluateBool, type CompiledProgram, type CompiledSegment } from "@overclock/compiler";
 import type { LatencyModel } from "@overclock/optimizer";
 import { AimdController, Scheduler, type SegmentGate, type TaskInstance } from "@overclock/scheduler";
 import type { Tracer } from "@overclock/telemetry";
@@ -230,10 +231,8 @@ export class Executor {
       const start = this.o.now();
       try {
         // Pure compute nodes (no browser): evaluate in order with the record scope.
-        const { executeAction } = await import("@overclock/browser-runtime");
         for (const n of t.segment.nodes) {
           if (n.when) {
-            const { evaluateBool } = await import("@overclock/compiler");
             if (!evaluateBool(n.when, { rec: t.record.scope.rec, out: t.record.scope.out, input: t.record.scope.input, phase: t.record.scope.phase, key: t.recordKey })) {
               t.record.scope.out[n.id] = null;
               continue;
@@ -300,13 +299,7 @@ export class Executor {
       if (t.state !== "READY" || t.inline || t.segment.kind === "write") continue;
       const outputs = this.o.substitute!(t);
       if (!outputs) continue;
-      // Claim the task through the normal lease path so state transitions stay consistent.
-      const leased = this.scheduler.lease("substitution", (app) => app === t.segment.app);
-      if (!leased) return;
-      if (leased.taskId !== t.taskId) {
-        this.scheduler.retry(leased.taskId, 0, "lease returned (substitution probe)");
-        continue;
-      }
+      if (!this.scheduler.claim(t.taskId, "access-path")) continue;
       const produced: string[] = [];
       for (const [nodeId, out] of Object.entries(outputs)) {
         t.record.scope.out[nodeId] = out;

@@ -571,10 +571,45 @@ export class RecoveryEngine {
 
   // L2 ------------------------------------------------------------------------------------------
 
+  /**
+   * Role-focused question for Jev: what the step does, what it was recorded against, and which
+   * observed control now plays that role. Phrasing calibrated live (see models.ts optionText).
+   */
+  private reflexQuestion(ctx: Ctx, obs: Observation, l1: L1Result): { task: string; instructions: string; intent: string } {
+    if (ctx.failure === "dialog") {
+      const d = l1.dialog;
+      const about = `a dialog titled "${d?.title ?? ""}" ("${(d?.text ?? ctx.dialogText).slice(0, 200)}")`;
+      return ctx.afterWrite
+        ? { task: `A browser automation step submitted the edit form on this page, and ${about} opened.`, instructions: "Which dialog button confirms the submitted edit?", intent: "the dialog button that confirms the submitted edit" }
+        : { task: `${about[0]!.toUpperCase()}${about.slice(1)} is covering the page while a browser automation step tries to continue.`, instructions: "Which dialog button closes this dialog without changing anything?", intent: "the dialog button that closes the dialog without changing anything" };
+    }
+    const d = ctx.desc!;
+    const name = d.label ?? d.names[0] ?? "the original control";
+    const broken = ctx.failure === "hidden" ? "is hidden" : ctx.error.constructor.name === "AmbiguousLocatorError" ? "now matches several controls" : "can no longer be found";
+    const noun = d.kind === "select" ? "dropdown" : d.kind === "field" ? "text field" : d.kind === "value" ? "field" : d.kind;
+    const recorded = `It was recorded against a ${noun} labelled "${name}", which ${broken}.`;
+    switch (d.kind) {
+      case "select":
+      case "field":
+      case "checkbox":
+        return { task: `A browser automation step sets the "${name}" ${noun} on this page${d.desired ? ` to "${d.desired}"` : ""}. ${recorded}`, instructions: `Which ${noun} on the page now holds the "${name}" value that the step must set?`, intent: intentOf(ctx.node, d) };
+      case "button":
+        if (ctx.write) return { task: `A browser automation step submits the form being edited on this page. ${recorded}`, instructions: "Which button on the page now submits the form being edited?", intent: intentOf(ctx.node, d) };
+        return { task: `A browser automation step clicks "${name}"${ctx.node.description ? ` (${ctx.node.description})` : ""} on this page. ${recorded}`, instructions: `Which button on the page now does what "${name}" did?`, intent: intentOf(ctx.node, d) };
+      case "value":
+        return { task: `A browser automation step reads the "${name}" value on this page. ${recorded}`, instructions: `Which field on the page now shows the "${name}" value?`, intent: intentOf(ctx.node, d) };
+      default:
+        return { task: `A browser automation step uses the ${noun} "${name}" on this page. ${recorded}`, instructions: `Which ${noun} on the page now does what "${name}" did?`, intent: intentOf(ctx.node, d) };
+    }
+    void obs;
+  }
+
   private async reflex(ctx: Ctx, obs: Observation, l1: L1Result, jev: ReflexModel): Promise<{ plan?: Plan; calls: number; budget?: boolean }> {
     const t = performance.now();
-    const threshold = this.writeish(ctx) ? REFLEX_WRITE_CONFIDENCE : REFLEX_READ_CONFIDENCE;
-    const intent = ctx.failure === "dialog" ? (ctx.afterWrite ? "the dialog button that confirms the edit that was just submitted" : "the dialog button that closes this informational dialog without changing anything") : intentOf(ctx.node, ctx.desc!);
+    const writeish = this.writeish(ctx);
+    const threshold = writeish ? REFLEX_WRITE_CONFIDENCE : REFLEX_READ_CONFIDENCE;
+    const qn = this.reflexQuestion(ctx, obs, l1);
+    const intent = qn.intent;
     this.emit(ctx, 2, "started", `Asking the reflex model for ${intent} among ${l1.shortlist.length} observed candidate(s)`);
     let calls = 0;
     const shot = this.deps.useVision ? await screenshotForVision(ctx.page) : null;
@@ -584,27 +619,30 @@ export class RecoveryEngine {
       this.emit(ctx, 2, "failed", why, { ms, detail: `${calls} model call(s)` });
     };
     if (l1.shortlist.length) {
-      const options: Record<string, string> = {};
-      for (const c of l1.shortlist) options[c.id] = candidateText(obs, c);
-      options.none = "None of these controls clearly fits";
+      const state = { task: qn.task, page: { title: obs.title, url: obs.url } };
       try {
         calls++;
         this.modelCalls++;
-        const ans = await jev.choose("recovery.reflex", {
-          state: {
-            step: { type: ctx.node.type, effect: ctx.node.effect, description: ctx.node.description, originalTarget: ctx.desc?.summary },
-            failure: ctx.error.message.slice(0, 200),
-            page: { url: obs.url, title: obs.title, headings: obs.headings.slice(0, 5), openDialog: l1.dialog ? { title: l1.dialog.title, text: l1.dialog.text.slice(0, 300) } : undefined },
-          },
-          instructions: `A browser automation step failed because its control changed. Which observed control is ${intent}? Choose "none" unless one option clearly fits.`,
-          options,
-          ...(shot ? { screenshot: shot.image } : {}),
-        });
-        const c = l1.shortlist.find((x) => x.id === ans.label);
+        let picked: { c: ObservedControl | undefined; confidence: number; margin: number; ms: number; label: string };
+        if (l1.shortlist.length === 1) {
+          // One candidate: a choice question is meaningless, so ask whether it fits.
+          const only = l1.shortlist[0]!;
+          const yn = await jev.yesNo("recovery.reflex", { state, question: `Is ${optionText(obs, only, l1.shortlist)} the control the step needs? ${qn.instructions}`, ...(shot ? { screenshot: shot.image } : {}) });
+          picked = { c: only, confidence: yn.p, margin: 1, ms: yn.ms, label: only.id };
+        } else {
+          const options: Record<string, string> = {};
+          for (const c of l1.shortlist) options[c.id] = optionText(obs, c, l1.shortlist);
+          const ans = await jev.choose("recovery.reflex", { state, instructions: qn.instructions, options, ...(shot ? { screenshot: shot.image } : {}) });
+          const probs = Object.values(ans.probabilities as Record<string, number>).sort((a, b) => b - a);
+          picked = { c: l1.shortlist.find((x) => x.id === ans.label), confidence: ans.confidence, margin: (probs[0] ?? 0) - (probs[1] ?? 0), ms: ans.ms, label: ans.label };
+        }
+        const c = picked.c;
         if (!c) {
-          fail(`Reflex model chose "${ans.label}" (confidence ${ans.confidence.toFixed(2)})`);
-        } else if (ans.confidence < threshold) {
-          fail(`Reflex model chose ${c.id} "${c.label ?? c.name}" with confidence ${ans.confidence.toFixed(2)} < ${threshold}`);
+          fail(`Reflex model chose "${picked.label}", which is not a candidate`);
+        } else if (picked.confidence < threshold) {
+          fail(`Reflex model chose ${c.id} "${c.label ?? c.name}" with confidence ${picked.confidence.toFixed(2)} < ${threshold}`);
+        } else if (writeish && picked.margin < 0.5) {
+          fail(`Reflex model chose ${c.id} "${c.label ?? c.name}" but the runner-up is close (probability margin ${picked.margin.toFixed(2)} < 0.5)`);
         } else {
           const v = this.corroborate(ctx, obs, c, l1.dialog);
           const plan = v.ok ? await v.plan : null;

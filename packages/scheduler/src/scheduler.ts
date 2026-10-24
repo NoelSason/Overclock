@@ -372,6 +372,20 @@ export class Scheduler {
     return true;
   }
 
+  /** Claim one specific READY task (e.g. to satisfy it from an alternative access path). */
+  claim(taskId: string, workerId: string): TaskInstance | null {
+    const i = this.ready.findIndex((t) => t.taskId === taskId);
+    if (i < 0) return null;
+    const t = this.ready[i]!;
+    if (this.suspended.has(t.segmentId) || !this.gatePermits(t)) return null;
+    this.ready.splice(i, 1);
+    t.workerId = workerId;
+    t.attempt++;
+    t.startedAt = this.hooks.now();
+    this.setState(t, "RUNNING", { workerId, attempt: t.attempt });
+    return t;
+  }
+
   /** Take a ready browser-free (compute) task. */
   takeInline(): TaskInstance | null {
     const i = this.ready.findIndex((t) => t.inline && !this.suspended.has(t.segmentId) && this.gatePermits(t));

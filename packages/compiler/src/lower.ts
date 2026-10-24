@@ -225,7 +225,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
             table: {
               target: c ? locatorOf(c) : { strategies: [{ kind: "css", selector: "table" }], confidence: 0, evidence: [] },
               columns,
-              key: s.key,
+              key: s.key ?? undefined,
               linkColumns: s.links ?? [],
               pagination: next ? { next: locatorOf(next), maxPages: Math.min(200, s.maxPages ?? 50) } : undefined,
             },
@@ -281,7 +281,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
       }
       const records = Array.isArray(input.inputs.records) ? input.inputs.records.length : 0;
       const maxIterations = Math.min(phase.maxIterations ?? Math.max(records, 1) * 4, 5000);
-      nodes.push(base(phase.id, "foreach", { over: phase.over, key: phase.key, as: "rec", maxIterations, body, dependsOn: [...phase.dependsOn], timeoutMs: 3_600_000 }));
+      nodes.push(base(phase.id, "foreach", { over: phase.over ?? undefined, key: phase.key ?? undefined, as: "rec", maxIterations, body, dependsOn: [...phase.dependsOn], timeoutMs: 3_600_000 }));
     } else {
       for (const n of body) if (n.dependsOn.length === 0) n.dependsOn = [...phase.dependsOn];
       nodes.push(...body);
