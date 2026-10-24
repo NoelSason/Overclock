@@ -322,19 +322,34 @@ describe.skipIf(!LIVE)("live model tiers (OVERCLOCK_LIVE=1)", () => {
     return { h, result, error };
   }
 
-  it("L2: Jev chooses among ambiguous observed candidates", async () => {
+  it("L2: Jev chooses among ambiguous observed candidates (text only)", async () => {
     const jev = new JevProvider(jevConfigFromEnv(), ledger);
     expect(jev.usable).toBe(true);
+    // Text-only confidence for this pair calibrated at 0.74-0.86 against the 0.85 write bar, so
+    // either outcome is legitimate; liveCase asserts it is safe (right field or no write at all).
     const { h, result } = await liveCase("L2 Jev choose", { jev });
+    expect(h.engine.stats().modelCalls).toBe(1);
+    expect(h.events.some((e) => e.level === 2 && (e.phase === "succeeded" || e.phase === "failed"))).toBe(true);
+    if (result) expect(app.items.get("I-2")!.status).toBe("closed");
+  });
+
+  it("L2 vision: Jev with a screenshot picks the status field", async () => {
+    const jev = new JevProvider(jevConfigFromEnv(), ledger);
+    const { h, result } = await liveCase("L2 Jev choose + screenshot", { jev, useVision: true });
     expect(result).not.toBeNull();
     expect(h.engine.stats().byLevel[2]!.successes).toBe(1);
     expect(app.items.get("I-2")!.status).toBe("closed");
   });
 
-  it("L2 vision: Jev with a screenshot", async () => {
+  it("full ladder: L1 ambiguous -> L2 Jev -> L3 Claude only if Jev is not confident", async () => {
     const jev = new JevProvider(jevConfigFromEnv(), ledger);
-    const { h } = await liveCase("L2 Jev choose + screenshot", { jev, useVision: true });
-    expect(h.events.some((e) => e.level === 2 && e.phase !== "started")).toBe(true);
+    const claude = new ClaudeProvider(claudeConfigFromEnv(), ledger);
+    const { h, result } = await liveCase("L1 -> L2 -> L3 ladder", { jev, claude });
+    expect(result).not.toBeNull();
+    const s = h.engine.stats();
+    expect(s.byLevel[2]!.successes + s.byLevel[3]!.successes).toBe(1);
+    // Claude is consulted only when Jev's answer was rejected.
+    expect(s.byLevel[3]!.attempts).toBe(s.byLevel[2]!.successes ? 0 : 1);
   });
 
   it("L3: Claude recompiles the failing step against the observation", async () => {

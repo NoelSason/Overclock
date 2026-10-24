@@ -181,7 +181,7 @@ export function ExecutionGraph({ store, onOpenProgram }: { store: RunStore; onOp
         </div>
       ) : (
         <>
-          <div className="h-[420px] w-full">
+          <div className="h-[380px] w-full sm:h-[460px]">
             <ReactFlow
               key={program.programId}
               nodes={nodes}
@@ -189,7 +189,7 @@ export function ExecutionGraph({ store, onOpenProgram }: { store: RunStore; onOp
               nodeTypes={nodeTypes}
               colorMode="dark"
               fitView
-              fitViewOptions={{ padding: 0.12 }}
+              fitViewOptions={{ padding: 0.06 }}
               minZoom={0.2}
               maxZoom={1.6}
               nodesDraggable={false}

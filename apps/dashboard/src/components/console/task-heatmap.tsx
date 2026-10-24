@@ -104,9 +104,9 @@ export function TaskHeatmap({ store }: { store: RunStore }) {
       id="heatmap"
       title="Tasks"
       subtitle={nRows ? `${fmtInt(nRows)} records × ${index.cols.length} segments` : undefined}
-      actions={<TaskStateCounts counts={view.taskCounts} />}
       bodyClassName="p-3"
     >
+      <TaskStateCounts counts={view.taskCounts} />
       <div ref={wrapRef} className="relative w-full">
         {nRows === 0 ? (
           <Empty>Tasks appear once the program is compiled and records are fanned out.</Empty>
@@ -167,7 +167,7 @@ function TaskStateCounts({ counts }: { counts: Partial<Record<TaskState, number>
   const present = TASK_STATES.filter((s) => (counts[s] ?? 0) > 0);
   if (present.length === 0) return null;
   return (
-    <ul aria-label="Tasks by state" className="flex flex-wrap justify-end gap-x-2.5 gap-y-0.5">
+    <ul aria-label="Tasks by state" className="mb-2.5 flex flex-wrap gap-x-3 gap-y-1">
       {present.map((s) => (
         <li key={s} className="inline-flex items-center gap-1 text-[11px] text-muted" title={CATEGORY[TASK_CATEGORY[s]].label}>
           <span aria-hidden className="h-2 w-2 rounded-sm" style={{ background: taskColor(s) }} />

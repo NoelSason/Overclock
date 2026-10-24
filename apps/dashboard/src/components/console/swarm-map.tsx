@@ -17,7 +17,7 @@ const ROLE: Record<AgentRole, { label: string; order: number }> = {
 };
 
 const STATUS_TONE: Record<AgentView["status"], Tone> = { running: "accent", done: "ok", failed: "bad" };
-const RECENT_PAGES = 4;
+const RECENT_PAGES = 3;
 
 export interface ArtifactRef {
   agentId: string;
@@ -35,7 +35,7 @@ export function SwarmMap({ store, onOpenArtifact }: { store: RunStore; onOpenArt
   const routesByApp = discoveredRoutes(view);
 
   return (
-    <Panel id="swarm" title="Discovery swarm" subtitle={agents.length ? `${agents.length} agents` : undefined} bodyClassName="flex flex-col gap-3 p-3">
+    <Panel id="swarm" title="Discovery swarm" subtitle={agents.length ? `${agents.length} agents` : undefined} bodyClassName="flex flex-col gap-3 p-3 xl:max-h-[820px] xl:overflow-y-auto">
       <PolicyBlock view={view} />
       {routesByApp.length > 0 && (
         <div aria-label="Discovered routes per app" className="flex flex-wrap gap-1.5">
@@ -154,7 +154,9 @@ function AgentCard({ agent, lastT, pages, onOpenArtifact }: { agent: AgentView; 
                   <span className="text-[10px] text-dim uppercase">{art.kind}</span>
                   <span className="truncate text-xs text-fg group-hover:text-accent-soft">{art.title}</span>
                 </div>
-                <p className="mt-0.5 line-clamp-2 text-[11px] text-muted">{art.summary}</p>
+                <p className="mt-0.5 line-clamp-1 text-[11px] text-muted" title={art.summary}>
+                  {art.summary}
+                </p>
                 {art.stats && (
                   <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
                     {Object.entries(art.stats).map(([k, val]) => (
