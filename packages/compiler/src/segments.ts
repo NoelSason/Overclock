@@ -30,7 +30,7 @@ function label(app: string | undefined, nodes: ActionNode[]): string {
  *    other dependency is already upstream of the segment (the segment graph stays acyclic);
  *  - pure computations at join points become browser-free compute segments.
  */
-export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n: ActionNode) => number): CompiledSegment[] {
+export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n: ActionNode) => number, external: ReadonlyMap<string, string> = new Map()): CompiledSegment[] {
   const scopeIds = new Set(nodes.map((n) => n.id));
   const order = topoSort(nodes.map((n) => ({ ...n, deps: n.dependsOn.filter((d) => scopeIds.has(d)) })));
   const segs: (CompiledSegment & { closed: boolean })[] = [];
@@ -44,7 +44,7 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
       const d = stack.pop()!;
       if (out.has(d)) continue;
       out.add(d);
-      stack.push(...byId.get(d)!.dependsOn);
+      stack.push(...(byId.get(d)?.dependsOn ?? []));
     }
     return out;
   };
@@ -72,8 +72,9 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
 
   for (const raw of order) {
     const n = nodes.find((x) => x.id === raw.id)!;
-    const deps = n.dependsOn.filter((d) => scopeIds.has(d));
-    const depSegs = new Set(deps.map((d) => segOf.get(d)!));
+    // Dependencies on already-released segments (incremental compilation) count as real segment deps.
+    const deps = n.dependsOn.filter((d) => scopeIds.has(d) || external.has(d));
+    const depSegs = new Set(deps.map((d) => segOf.get(d) ?? external.get(d)!));
     let target: (typeof segs)[number] | undefined;
     if (n.app) {
       // Continue an open chain on the same app whose last node we depend on. Page state lives on
@@ -84,7 +85,8 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
       const pos = new Map(nodes.map((x, i) => [x.id, i]));
       const candidates = [...deps].sort((a, b) => pos.get(b)! - pos.get(a)!);
       for (const d of candidates) {
-        const s = byId.get(segOf.get(d)!)!;
+        const s = segOf.has(d) ? byId.get(segOf.get(d)!) : undefined;
+        if (!s) continue;
         if (s.closed || s.app !== n.app || s.nodeIds.at(-1) !== d) continue;
         if (n.type === "navigate" && s.nodes.some(isWrite)) continue;
         const extra = [...depSegs].filter((x) => x !== s.id && !upstreamOf(s.id).has(x));
@@ -94,12 +96,12 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
         break;
       }
     } else if (depSegs.size === 1) {
-      const s = byId.get([...depSegs][0]!)!;
-      if (!s.closed && (n.type === "compute" || n.type === "assert" || n.type === "branch")) target = s;
+      const s = byId.get([...depSegs][0]!);
+      if (s && !s.closed && (n.type === "compute" || n.type === "assert" || n.type === "branch")) target = s;
     }
     if (!target && n.app && n.type !== "navigate") {
       // A page action that cannot join its page's chain would run on a page no worker loaded.
-      const pageDep = deps.map((d) => byId.get(segOf.get(d)!)!).find((s) => s.app === n.app);
+      const pageDep = deps.map((d) => (segOf.has(d) ? byId.get(segOf.get(d)!) : undefined)).find((s) => s?.app === n.app);
       if (pageDep && !pageDep.closed) throw new Error(`Cannot place ${n.id}: its page chain on ${n.app} would form a cycle`);
     }
     const seg = target ?? newSeg(n, depSegs);

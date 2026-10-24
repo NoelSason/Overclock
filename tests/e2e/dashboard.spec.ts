@@ -68,7 +68,7 @@ function expected(view: RunView): Shown {
     taskCounts: Object.fromEntries(
       (Object.entries(view.taskCounts) as [TaskState, number][])
         .filter(([, n]) => n > 0)
-        .map(([s, n]) => [s, String(n)])
+        .map(([s, n]): [string, string] => [s, String(n)])
         .sort(([a], [b]) => a.localeCompare(b)),
     ),
   };

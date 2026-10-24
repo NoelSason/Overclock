@@ -109,12 +109,6 @@ export function PipelineTimeline({ store }: { store: RunStore }) {
                   <rect x={x(o.start)} y={TOP - 6} width={Math.max(1, x(o.end) - x(o.start))} height={rows.length * (ROW_H + ROW_GAP) + 2} fill="#3d8bff" fillOpacity={0.14} stroke="#3d8bff" strokeOpacity={0.55} strokeDasharray="3 3">
                     <title>{`discovery ∥ execution ${fmtMs(o.end - o.start)}`}</title>
                   </rect>
-                  {i === 0 && (
-                    <text x={x(o.start) + 6} y={TOP - 10} className="text-[10.5px] font-medium" fill="#8ab4ff">
-                      discovery{" "}
-                      <tspan style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>∥</tspan> execution: {fmtMs(m.overlapMs)}
-                    </text>
-                  )}
                 </g>
               ))}
               {rows.map((stage, i) => (
@@ -140,6 +134,11 @@ export function PipelineTimeline({ store }: { store: RunStore }) {
                 view.verifiedTimeline.map((t, i) => (i % Math.max(1, Math.ceil(view.verifiedTimeline.length / plotW)) === 0 ? <line key={i} x1={x(t)} x2={x(t)} y1={rowY(execIndex) + 3} y2={rowY(execIndex) + ROW_H - 3} stroke="#0e1217" strokeOpacity={0.55} /> : null))}
               <Marker x={m.firstActionMs === null ? null : x(m.firstActionMs)} y={2} label={`first action ${fmtMs(m.firstActionMs)}`} color="#8ab4ff" bottom={height - AXIS_H} width={width} />
               <Marker x={m.firstVerifiedMs === null ? null : x(m.firstVerifiedMs)} y={16} label={`time to first verified action ${fmtMs(m.firstVerifiedMs)}`} color="#2fd27a" bottom={height - AXIS_H} width={width} />
+              {overlaps[0] && (
+                <text x={x(overlaps[0].start) + 6} y={TOP - 10} className="text-[10.5px] font-medium" fill="#8ab4ff" stroke="#0e1217" strokeWidth={3} paintOrder="stroke">
+                  {`discovery ‖ execution: ${fmtMs(m.overlapMs)}`}
+                </text>
+              )}
               {complete && <line x1={x(m.elapsedMs)} x2={x(m.elapsedMs)} y1={TOP - 4} y2={height - AXIS_H + 2} stroke="#e6ebf1" strokeOpacity={0.5} />}
             </svg>
           )
@@ -156,7 +155,7 @@ function Marker({ x, y, label, color, bottom, width }: { x: number | null; y: nu
     <g>
       <line x1={x} x2={x} y1={y + 10} y2={bottom} stroke={color} strokeWidth={1.5} />
       <circle cx={x} cy={y + 10} r={2.5} fill={color} />
-      <text x={anchorEnd ? x - 6 : x + 6} y={y + 9} textAnchor={anchorEnd ? "end" : "start"} className="text-[10.5px] font-medium" fill={color}>
+      <text x={anchorEnd ? x - 6 : x + 6} y={y + 9} textAnchor={anchorEnd ? "end" : "start"} className="text-[10.5px] font-medium" fill={color} stroke="#0e1217" strokeWidth={3} paintOrder="stroke">
         {label}
       </text>
     </g>

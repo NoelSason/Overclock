@@ -143,17 +143,11 @@ export class IncrementalCompiler {
     const analyzed = verificationPlacement(dependencyAnalysis(scoped).nodes).nodes;
     let segs: CompiledSegment[];
     try {
-      segs = formSegments(`${ps.header.id}.tmp`, analyzed, this.o.estimate);
+      segs = formSegments(`${ps.header.id}.tmp`, analyzed, this.o.estimate, ps.nodeSeg);
     } catch (err) {
       issues.push({ severity: "error", code: "segments", message: (err as Error).message });
       this.compileMs += performance.now() - t0;
       return { released: [], issues };
-    }
-    // External dependencies on released segments.
-    for (const s of segs) {
-      const ext = new Set<string>();
-      for (const n of s.nodes) for (const d of n.dependsOn) if (ps.nodeSeg.has(d)) ext.add(ps.nodeSeg.get(d)!);
-      s.dependsOn = [...new Set([...s.dependsOn, ...ext])];
     }
     const lastStepIndex = ps.header.steps.length - 1;
     const stepIndex = new Map(ps.header.steps.map((s, i) => [s.id, i]));
@@ -167,8 +161,10 @@ export class IncrementalCompiler {
       const write = s.nodes.some(isWrite);
       const pure = s.nodes.every((n) => PURE_TYPES.has(n.type));
       const maxIdx = Math.max(...stepNodes.map((id) => stepIndex.get(id) ?? -1));
-      // An impure page chain is complete once a later step exists that is not part of it.
-      const closed = ps.sealed || write || pure || maxIdx < lastStepIndex;
+      // A page chain is complete once a later step exists that is not part of it (the stream
+      // moved on), or at a write, or when the phase is sealed. Releasing earlier would force a
+      // re-navigation for the steps that continue the page.
+      const closed = ps.sealed || write || maxIdx < lastStepIndex;
       if (!closed) continue;
       const stableId = `${ps.header.id}.f${++ps.counter}`;
       tmpToStable.set(s.id, stableId);
