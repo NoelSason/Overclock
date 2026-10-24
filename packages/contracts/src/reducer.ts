@@ -112,8 +112,8 @@ export interface RunView {
   fragments: Record<string, { fragmentId: string; phaseId: string; segmentIds: string[]; state: FragmentState; label: string; reason?: string | undefined; effect?: string | undefined; history: { t: number; state: FragmentState; reason?: string | undefined }[] }>;
   scoutPages: { t: number; agentId: string; app: string; url: string; routePattern: string; loadMs: number; controls: number }[];
   network: {
-    lookups: { t: number; outcome: string; source: string; candidates: number; ms: number; capabilityId?: string | undefined; version?: number | undefined }[];
-    imports: { t: number; capabilityId: string; version: number; outcome: string; bound: number; unbound: number; rebindMs: number; fetchMs: number; source: string; avoided?: { modelCalls: number; discoveryMs: number; estimated: true } | undefined }[];
+    lookups: { t: number; outcome: string; source: string; candidates: number; ms: number; capabilityId?: string | undefined; version?: number | undefined; identity?: string | undefined }[];
+    imports: { t: number; capabilityId: string; version: number; outcome: string; bound: number; unbound: number; rebindMs: number; fetchMs: number; source: string; avoided?: { modelCalls: number; discoveryMs: number; estimated: true } | undefined; publisher?: string | undefined; writeCanary?: boolean | undefined; relabeled?: { key: string; from: string; to: string; evidence: string }[] | undefined; refused?: string[] | undefined }[];
     publishes: { t: number; capabilityId: string; version: number; state: string; ms: number; redactions: number; bytes: number; rejected?: string | undefined }[];
     repairs: { t: number; capabilityId: string; jobId: string; phase: string; fencingToken?: number | undefined; ms?: number | undefined; detail?: string | undefined }[];
     updates: { t: number; capabilityId: string; version: number; state: string; propagationMs?: number | undefined }[];
@@ -357,10 +357,10 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       if (view.scoutPages.length > 500) view.scoutPages.shift();
       break;
     case "network.lookup":
-      view.network.lookups.push({ t: ev.t, outcome: ev.outcome, source: ev.source, candidates: ev.candidates, ms: ev.ms, capabilityId: ev.capabilityId, version: ev.version });
+      view.network.lookups.push({ t: ev.t, outcome: ev.outcome, source: ev.source, candidates: ev.candidates, ms: ev.ms, capabilityId: ev.capabilityId, version: ev.version , identity: ev.identity });
       break;
     case "network.import":
-      view.network.imports.push({ t: ev.t, capabilityId: ev.capabilityId, version: ev.version, outcome: ev.outcome, bound: ev.bound, unbound: ev.unbound, rebindMs: ev.rebindMs, fetchMs: ev.fetchMs, source: ev.source, avoided: ev.avoided });
+      view.network.imports.push({ t: ev.t, capabilityId: ev.capabilityId, version: ev.version, outcome: ev.outcome, bound: ev.bound, unbound: ev.unbound, rebindMs: ev.rebindMs, fetchMs: ev.fetchMs, source: ev.source, avoided: ev.avoided, publisher: ev.publisher, writeCanary: ev.writeCanary, relabeled: ev.relabeled, refused: ev.refused });
       break;
     case "network.publish":
       view.network.publishes.push({ t: ev.t, capabilityId: ev.capabilityId, version: ev.version, state: ev.state, ms: ev.ms, redactions: ev.redactions, bytes: ev.bytes, rejected: ev.rejected });

@@ -1,6 +1,6 @@
 # Overclock benchmarks
 
-Generated from 4 result files with 48 executed runs (6 failed). Latest result file: 2026-10-24T19:00:09.156Z.
+Generated from 11 result files with 55 executed runs (7 failed). Latest result file: 2026-10-24T19:29:57.547Z.
 
 Every number on this page comes from an executed run recorded in `benchmarks/results/`. Nothing is estimated, extrapolated, or filled in.
 
@@ -37,35 +37,35 @@ Modes A–E on the same scenario under both conditions. E vs C vs D runs first, 
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 95.8 s | n/a (n=3) | 95.0 s | 100.0% (100.0%) | 100.0% | 15.7 | $0.3407 | $0.0116 | 6 | 59883 | 57.5% |
-| `compiled-parallel` | t1 seed 4242 | 25 | 3 | 0 | 42.4 s | n/a (n=3) | 41.7 s | 100.0% (100.0%) | 100.0% | 35.3 | $0.1603 | $0.0078 | 4 | 21179 | 90.4% |
-| `overclock-staged` | t1 seed 4242 | 25 | 3 | 0 | 3.2 min | n/a (n=3) | 3.2 min | 100.0% (100.0%) | 100.0% | 7.9 | $1.05 | $0.0422 | 13 | 172334 | 70.6% |
-| `compiled-single` | t1 seed 4242 | 25 | 3 | 0 | 59.0 s | n/a (n=3) | 56.8 s | 100.0% (92.0%) | 100.0% | 25.4 | $0.1870 | $0.0077 | 4 | 22512 | 98.7% |
-| `compiled-single` | t1 seed 4242 | 100 | 1 | 0 | 59.7 s | n/a (n=1) | 48.1 s | 100.0% (100.0%) | 100.0% | 100.5 | $0.1584 | $0.0016 | 4 | 21062 | 99.3% |
-| `compiled-parallel` | t1 seed 4242 | 100 | 1 | 0 | 57.6 s | n/a (n=1) | 54.6 s | 100.0% (100.0%) | 100.0% | 104.1 | $0.1818 | $0.0018 | 4 | 22231 | 97.1% |
-| `overclock-staged` | t1 seed 4242 | 100 | 1 | 0 | 2.5 min | n/a (n=1) | 2.4 min | 100.0% (100.0%) | 100.0% | 40.5 | $0.8787 | $0.0088 | 12 | 148956 | 82.3% |
-| `overclock` | t1 seed 4242 | 100 | 1 | 0 | 107.4 s | n/a (n=1) | 103.3 s | 100.0% (100.0%) | 100.0% | 55.9 | $0.3729 | $0.0037 | 6 | 61270 | 66.2% |
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 95.8 s | n/a (n=3) | 95.0 s | 100.0% (100.0%) | n/a | 15.7 | $0.3407 | $0.0116 | 6 | 59883 | 57.5% |
+| `compiled-parallel` | t1 seed 4242 | 25 | 3 | 0 | 42.4 s | n/a (n=3) | 41.7 s | 100.0% (100.0%) | n/a | 35.3 | $0.1603 | $0.0078 | 4 | 21179 | 90.4% |
+| `overclock-staged` | t1 seed 4242 | 25 | 3 | 0 | 3.2 min | n/a (n=3) | 3.2 min | 100.0% (100.0%) | n/a | 7.9 | $1.05 | $0.0422 | 13 | 172334 | 70.6% |
+| `compiled-single` | t1 seed 4242 | 25 | 3 | 0 | 59.0 s | n/a (n=3) | 56.8 s | 100.0% (92.0%) | n/a | 25.4 | $0.1870 | $0.0077 | 4 | 22512 | 98.7% |
+| `compiled-single` | t1 seed 4242 | 100 | 1 | 0 | 59.7 s | n/a (n=1) | 48.1 s | 100.0% (100.0%) | n/a | 100.5 | $0.1584 | $0.0016 | 4 | 21062 | 99.3% |
+| `compiled-parallel` | t1 seed 4242 | 100 | 1 | 0 | 57.6 s | n/a (n=1) | 54.6 s | 100.0% (100.0%) | n/a | 104.1 | $0.1818 | $0.0018 | 4 | 22231 | 97.1% |
+| `overclock-staged` | t1 seed 4242 | 100 | 1 | 0 | 2.5 min | n/a (n=1) | 2.4 min | 100.0% (100.0%) | n/a | 40.5 | $0.8787 | $0.0088 | 12 | 148956 | 82.3% |
+| `overclock` | t1 seed 4242 | 100 | 1 | 0 | 107.4 s | n/a (n=1) | 103.3 s | 100.0% (100.0%) | n/a | 55.9 | $0.3729 | $0.0037 | 6 | 61270 | 66.2% |
 
 **Cold start, realistic-latency**
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 2.1 min | n/a (n=3) | 117.1 s | 100.0% (100.0%) | 100.0% | 12.2 | $0.3864 | $0.0185 | 6 | 61942 | 45.0% |
-| `compiled-parallel` | t1 seed 4242 | 25 | 3 | 0 | 95.6 s | n/a (n=3) | 43.7 s | 100.0% (80.0%) | 100.0% | 14.0 | $0.1892 | $0.0103 | 5 | 27514 | 77.1% |
-| `overclock-staged` | t1 seed 4242 | 25 | 3 | 0 | 3.0 min | n/a (n=3) | 2.9 min | 100.0% (92.0%) | 100.0% | 8.0 | $0.9909 | $0.0395 | 13 | 168475 | 41.3% |
-| `compiled-single` | t1 seed 4242 | 25 | 3 | 0 | 86.7 s | n/a (n=3) | 63.0 s | 100.0% (100.0%) | 100.0% | 17.3 | $0.1527 | $0.0064 | 4 | 20800 | 99.9% |
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 2.1 min | n/a (n=3) | 117.1 s | 100.0% (100.0%) | n/a | 12.2 | $0.3864 | $0.0185 | 6 | 61942 | 45.0% |
+| `compiled-parallel` | t1 seed 4242 | 25 | 3 | 0 | 95.6 s | n/a (n=3) | 43.7 s | 100.0% (80.0%) | n/a | 14.0 | $0.1892 | $0.0103 | 5 | 27514 | 77.1% |
+| `overclock-staged` | t1 seed 4242 | 25 | 3 | 0 | 3.0 min | n/a (n=3) | 2.9 min | 100.0% (92.0%) | n/a | 8.0 | $0.9909 | $0.0395 | 13 | 168475 | 41.3% |
+| `compiled-single` | t1 seed 4242 | 25 | 3 | 0 | 86.7 s | n/a (n=3) | 63.0 s | 100.0% (100.0%) | n/a | 17.3 | $0.1527 | $0.0064 | 4 | 20800 | 99.9% |
 
 **Warm start, local** (cache reuse; not comparable with cold runs)
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 2.1 s | n/a (n=3) | 1.4 s | 100.0% (100.0%) | 100.0% | 702.9 | $0.0000 | $0.0000 | 0 | 0 | 85.1% |
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 2.1 s | n/a (n=3) | 1.4 s | 100.0% (100.0%) | n/a | 702.9 | $0.0000 | $0.0000 | 0 | 0 | 85.1% |
 
 **Warm start, realistic-latency** (cache reuse; not comparable with cold runs)
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 5.9 s | n/a (n=3) | 2.4 s | 100.0% (100.0%) | 100.0% | 253.3 | $0.0000 | $0.0000 | 0 | 0 | 59.6% |
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 5.9 s | n/a (n=3) | 2.4 s | 100.0% (100.0%) | n/a | 253.3 | $0.0000 | $0.0000 | 0 | 0 | 59.6% |
 
 ### Suite `modes@speed-standard`
 
@@ -75,7 +75,7 @@ Single-mode runs started with `--mode`. Runs from separate invocations pool here
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 54.0 s | n/a (n=1) | 53.2 s | 100.0% (100.0%) | 100.0% | 27.8 | $0.2678 | $0.0107 | 5 | 42054 | 62.0% |
+| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 54.0 s | n/a (n=1) | 53.2 s | 100.0% (100.0%) | n/a | 27.8 | $0.2678 | $0.0107 | 5 | 42054 | 62.0% |
 
 ### Suite `modes@speed-fast`
 
@@ -85,7 +85,37 @@ Single-mode runs started with `--mode`. Runs from separate invocations pool here
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 46.3 s | n/a (n=1) | 45.2 s | 100.0% (100.0%) | 100.0% | 32.4 | $0.3022 | $0.0121 | 6 | 36279 | 1.9% |
+| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 46.3 s | n/a (n=1) | 45.2 s | 100.0% (100.0%) | n/a | 32.4 | $0.3022 | $0.0121 | 6 | 36279 | 1.9% |
+
+### Suite `modes@e-standard`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 61.7 s | n/a (n=3) | 60.1 s | 100.0% (100.0%) | 100.0% | 24.3 | $0.1748 | $0.0094 | 5 | 36251 | 1.4% |
+
+### Suite `modes@e-fast`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `overclock` | t1 seed 4242 | 25 | 2 | 1 | 35.2 s | n/a (n=2) | 34.4 s | 100.0% (100.0%) | 100.0% | 42.7 | $0.8452 | $0.0338 | 7 | 69072 | 63.9% |
+
+### Suite `modes@e2-fast`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 21.6 s | n/a (n=1) | 20.5 s | 100.0% (100.0%) | 100.0% | 69.6 | $0.4590 | $0.0184 | 5 | 34775 | 3.3% |
 
 ## Holdout
 
@@ -99,9 +129,9 @@ Scenarios never used during development. These numbers are the best evidence of 
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t3 seed 9001 | 25 | 1 | 0 | 54.4 s | n/a (n=1) | 54.2 s | 100.0% (100.0%) | 100.0% | 27.6 | $0.2533 | $0.0101 | 6 | 51566 | 74.8% |
-| `overclock-staged` | t3 seed 9001 | 25 | 1 | 0 | 67.4 s | n/a (n=1) | 67.1 s | 100.0% (100.0%) | 100.0% | 22.3 | $0.4768 | $0.0191 | 11 | 104264 | 41.3% |
-| `compiled-parallel` | t3 seed 9001 | 25 | 1 | 0 | 16.2 s | n/a (n=1) | 15.9 s | 100.0% (100.0%) | 100.0% | 92.8 | $0.0758 | $0.0030 | 3 | 14242 | 95.3% |
+| `overclock` | t3 seed 9001 | 25 | 1 | 0 | 54.4 s | n/a (n=1) | 54.2 s | 100.0% (100.0%) | n/a | 27.6 | $0.2533 | $0.0101 | 6 | 51566 | 74.8% |
+| `overclock-staged` | t3 seed 9001 | 25 | 1 | 0 | 67.4 s | n/a (n=1) | 67.1 s | 100.0% (100.0%) | n/a | 22.3 | $0.4768 | $0.0191 | 11 | 104264 | 41.3% |
+| `compiled-parallel` | t3 seed 9001 | 25 | 1 | 0 | 16.2 s | n/a (n=1) | 15.9 s | 100.0% (100.0%) | n/a | 92.8 | $0.0758 | $0.0030 | 3 | 14242 | 95.3% |
 | `overclock` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | `overclock-staged` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | `compiled-parallel` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
@@ -110,9 +140,9 @@ Scenarios never used during development. These numbers are the best evidence of 
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t3 seed 9001 | 25 | 1 | 0 | 31.3 s | n/a (n=1) | 28.0 s | 100.0% (100.0%) | 100.0% | 47.9 | $0.0759 | $0.0030 | 4 | 22222 | 13.3% |
-| `overclock-staged` | t3 seed 9001 | 25 | 1 | 0 | 67.4 s | n/a (n=1) | 66.1 s | 100.0% (100.0%) | 100.0% | 22.2 | $0.4118 | $0.0165 | 10 | 89470 | 28.9% |
-| `compiled-parallel` | t3 seed 9001 | 25 | 1 | 0 | 20.8 s | n/a (n=1) | 19.3 s | 100.0% (100.0%) | 100.0% | 72.2 | $0.0742 | $0.0030 | 3 | 14166 | 77.7% |
+| `overclock` | t3 seed 9001 | 25 | 1 | 0 | 31.3 s | n/a (n=1) | 28.0 s | 100.0% (100.0%) | n/a | 47.9 | $0.0759 | $0.0030 | 4 | 22222 | 13.3% |
+| `overclock-staged` | t3 seed 9001 | 25 | 1 | 0 | 67.4 s | n/a (n=1) | 66.1 s | 100.0% (100.0%) | n/a | 22.2 | $0.4118 | $0.0165 | 10 | 89470 | 28.9% |
+| `compiled-parallel` | t3 seed 9001 | 25 | 1 | 0 | 20.8 s | n/a (n=1) | 19.3 s | 100.0% (100.0%) | n/a | 72.2 | $0.0742 | $0.0030 | 3 | 14166 | 77.7% |
 | `overclock` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | `overclock-staged` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | `compiled-parallel` | t4 seed 9101 | 25 | 0 | 1 | n/a | n/a (n=0) | n/a | n/a (n/a) | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
@@ -196,6 +226,9 @@ Median time per pipeline stage from the engine summary (`stageMs`), with each as
 | `holdout` | `compiled-parallel` | t3 seed 9001 (holdout) | 25 | realistic-latency | cold | 1 | 20.8 s | 3.5 s (16.7%) | 13.0 s (62.4%) | — | 4.2 s (20.1%) | 0 ms (0.0%) | 0 ms (0.0%) |
 | `modes@speed-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 54.0 s | 1.8 s (3.2%) | 50.1 s (92.6%) | — | 49.0 s (90.6%) | 0 ms (0.0%) | 44.3 s (81.9%) |
 | `modes@speed-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 46.3 s | 1.8 s (3.8%) | 12.9 s (28.0%) | 30.4 s (65.7%) | 42.3 s (91.4%) | 0 ms (0.0%) | 41.0 s (88.6%) |
+| `modes@e-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 61.7 s | 1.7 s (2.7%) | 47.0 s (76.1%) | 13.3 s (21.5%) | 42.7 s (69.3%) | 0 ms (0.0%) | 41.2 s (66.7%) |
+| `modes@e-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 2 | 35.2 s | 1.7 s (4.9%) | 21.4 s (60.8%) | 19.4 s (55.0%) | 33.8 s (96.0%) | 0 ms (0.0%) | 29.9 s (84.8%) |
+| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 21.6 s | 1.8 s (8.1%) | 13.5 s (62.6%) | 5.2 s (24.2%) | 17.7 s (82.1%) | 0 ms (0.0%) | 16.5 s (76.3%) |
 
 ## Duplicate and incorrect writes
 
@@ -231,6 +264,9 @@ Totals from the arena checker over every run with a checker result, including fa
 | `holdout` | `compiled-parallel` | t4 seed 9101 (holdout) | 25 | realistic-latency | cold | 1 | 14 | 0 | 0 | 0 | 0 |
 | `modes@speed-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
 | `modes@speed-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
+| `modes@e-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 0 | 0 | 0 | 0 | 0 |
+| `modes@e-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 14 | 0 | 0 | 0 | 0 |
+| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
 
 ## Limitations
 
@@ -263,8 +299,9 @@ Totals from the arena checker over every run with a checker result, including fa
 - `overclock`: 1 of 1 runs failed and are excluded from its medians (t4 seed 9101 (holdout), 25 records, realistic-latency, cold, suite `holdout`).
 - `overclock-staged`: 1 of 1 runs failed and are excluded from its medians (t4 seed 9101 (holdout), 25 records, realistic-latency, cold, suite `holdout`).
 - `compiled-parallel`: 1 of 1 runs failed and are excluded from its medians (t4 seed 9101 (holdout), 25 records, realistic-latency, cold, suite `holdout`).
+- `overclock`: 1 of 3 runs failed and are excluded from its medians (t1 seed 4242, 25 records, local, cold, suite `modes@e-fast`).
 - `2026-10-24T15-36-33.748Z-all.json`: skippedButWrong was added to every run after the suite finished, computed from each run's stored outcomes in the engine (GET /api/runs/<runId>/result) and the checker mismatches already in this file. Nothing else was changed.
-- 12 groups have fewer than 3 completed runs; those medians are single observations or pairs, not stable estimates.
+- 14 groups have fewer than 3 completed runs; those medians are single observations or pairs, not stable estimates.
 - Groups with fewer than 5 completed runs have no p95.
 - All results come from the local synthetic arena on the machine listed for each file. The realistic-latency condition injects latency into the arena apps; it does not reproduce real sites' authentication, rate limits, or UI variety.
 - Model latency and cost depend on the provider at run time, so reruns vary.
@@ -278,6 +315,13 @@ Totals from the arena checker over every run with a checker result, including fa
 | `2026-10-24T16-30-14.598Z-holdout.json` | `holdout` | 2026-10-24T16:30:14.618Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 12 | 6 | $1.37 / $10.00 |
 | `2026-10-24T18-59-14.612Z-modes@speed-standard.json` | `modes@speed-standard` | 2026-10-24T18:59:14.634Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.2678 / $3.00 |
 | `2026-10-24T19-00-09.135Z-modes@speed-fast.json` | `modes@speed-fast` | 2026-10-24T19:00:09.156Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.3022 / $3.00 |
+| `2026-10-24T19-21-57.695Z-modes@e-standard.json` | `modes@e-standard` | 2026-10-24T19:21:57.718Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1748 / $2.00 |
+| `2026-10-24T19-22-59.871Z-modes@e-fast.json` | `modes@e-fast` | 2026-10-24T19:22:59.893Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.8614 / $2.00 |
+| `2026-10-24T19-23-37.604Z-modes@e-standard.json` | `modes@e-standard` | 2026-10-24T19:23:37.625Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1479 / $2.00 |
+| `2026-10-24T19-24-26.043Z-modes@e-fast.json` | `modes@e-fast` | 2026-10-24T19:24:26.066Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 1 | $0.8202 / $2.00 |
+| `2026-10-24T19-24-56.317Z-modes@e-standard.json` | `modes@e-standard` | 2026-10-24T19:24:56.338Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.3840 / $2.00 |
+| `2026-10-24T19-26-36.030Z-modes@e-fast.json` | `modes@e-fast` | 2026-10-24T19:26:36.056Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.8291 / $2.00 |
+| `2026-10-24T19-29-57.525Z-modes@e2-fast.json` | `modes@e2-fast` | 2026-10-24T19:29:57.547Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.4590 / $2.00 |
 
 Notes recorded by the harness:
 
@@ -296,6 +340,27 @@ Notes recorded by the harness:
 - `2026-10-24T19-00-09.135Z-modes@speed-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label speed-fast --budget 3
 - `2026-10-24T19-00-09.135Z-modes@speed-fast.json`: Code version: 7b38a24 (uncommitted changes, tree digest 96a356e0b4e9).
 - `2026-10-24T19-00-09.135Z-modes@speed-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-21-57.695Z-modes@e-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e-standard --budget 2
+- `2026-10-24T19-21-57.695Z-modes@e-standard.json`: Code version: 1a0c9d5 (uncommitted changes, tree digest 5cb163877670).
+- `2026-10-24T19-21-57.695Z-modes@e-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-22-59.871Z-modes@e-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e-fast --budget 2
+- `2026-10-24T19-22-59.871Z-modes@e-fast.json`: Code version: 88f4d66 (uncommitted changes, tree digest bd0d4b0fb310).
+- `2026-10-24T19-22-59.871Z-modes@e-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-23-37.604Z-modes@e-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e-standard --budget 2
+- `2026-10-24T19-23-37.604Z-modes@e-standard.json`: Code version: 88f4d66 (uncommitted changes, tree digest 7622fc6b5afa).
+- `2026-10-24T19-23-37.604Z-modes@e-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-24-26.043Z-modes@e-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e-fast --budget 2
+- `2026-10-24T19-24-26.043Z-modes@e-fast.json`: Code version: 88f4d66 (uncommitted changes, tree digest af4fbc20653a).
+- `2026-10-24T19-24-26.043Z-modes@e-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-24-56.317Z-modes@e-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e-standard --budget 2
+- `2026-10-24T19-24-56.317Z-modes@e-standard.json`: Code version: 88f4d66 (uncommitted changes, tree digest 07e7fe94f518).
+- `2026-10-24T19-24-56.317Z-modes@e-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-26-36.030Z-modes@e-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e-fast --budget 2
+- `2026-10-24T19-26-36.030Z-modes@e-fast.json`: Code version: 88f4d66 (uncommitted changes, tree digest d51941df0330).
+- `2026-10-24T19-26-36.030Z-modes@e-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e2-fast --budget 2
+- `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Code version: 88f4d66 (uncommitted changes, tree digest 73b6a85b4630).
+- `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
 
 ## Methodology
 
@@ -315,7 +380,7 @@ Every run also sets `thumbnails: false` and `cache: "cold"` (or `"warm"` for war
 
 - **Wall time** comes from the engine's run summary and starts when the instruction is submitted, so it includes discovery and planning. Per-stage times (`stageMs`), overlap, and recovery time also come from the summary.
 - **Time to first verified action** is the summary's `firstVerifiedMs`: time from submission until the first useful action was read back and verified. Runs that never verified anything are counted separately, not as a number.
-- **Accuracy** is the arena checker's `correctRecords / totalRecords`, read from `GET /api/check` immediately after the run completes. The checker holds ground truth the engine never sees, so accuracy never depends on what the engine claims. **Engine-verified** is the engine's own claim, shown for contrast: the share of input records it reports VERIFIED or correctly SKIPPED. Records that a later phase derives (such as customers to hold) aren't input records and aren't counted. Result files recorded before that rule counted them, so the share is capped at 100%.
+- **Accuracy** is the arena checker's `correctRecords / totalRecords`, read from `GET /api/check` immediately after the run completes. The checker holds ground truth the engine never sees, so accuracy never depends on what the engine claims. **Engine-verified** is the engine's own claim, shown for contrast: the share of input records it reports VERIFIED or correctly SKIPPED. Records that a later phase derives (such as customers to hold) aren't input records and aren't counted. Runs recorded before that rule also counted derived records, so the column is n/a for them.
 - **Correct records per minute** = checker-correct records ÷ wall minutes.
 - **Cost** is the reported model cost per run. **Cost per correct record** = total cost ÷ total checker-correct records over a group's completed runs.
 - **Model calls**, **tokens**, and **utilization** are engine-reported.

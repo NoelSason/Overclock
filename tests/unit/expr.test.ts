@@ -19,6 +19,12 @@ describe("expression language", () => {
 
   it("supports aggregation helpers used for cross-record dependencies", () => {
     expect(evaluate("countBy(filterBy($out.scan.rows, 'status', '==', 'refunded'), 'cust')", scope)).toEqual({ C1: 2, C2: 1 });
+    // '~=' folds case and surrounding whitespace on both sides (cross-app text such as emails); null never matches.
+    expect(evaluate("len(filterBy($out.scan.rows, 'status', '~=', '  REFUNDED '))", scope)).toBe(evaluate("len(filterBy($out.scan.rows, 'status', '==', 'refunded'))", scope));
+    const crm = { ...scope, out: { crm: { rows: [{ id: "C1", email: " Ann@X.com" }, { id: "C2", email: "bob@x.com" }, { id: "C3", email: null }] } } };
+    expect(evaluate("pluck(filterBy($out.crm.rows, 'email', '~=', 'ann@x.COM '), 'id')", crm)).toEqual(["C1"]);
+    expect(evaluate("pluck(filterBy($out.crm.rows, 'email', '==', 'ann@x.com'), 'id')", crm)).toEqual([]);
+    expect(evaluate("len(filterBy($out.crm.rows, 'email', '~=', null))", crm)).toBe(0);
     expect(evaluate("pluck(filterBy(entries(countBy(filterBy($out.scan.rows, 'status', '==', 'refunded'), 'cust')), 'value', '>=', 2), 'key')", scope)).toEqual(["C1"]);
     expect(evaluate("lookup($out.scan.rows, 'id', 'b')", scope)).toEqual({ id: "b", status: "delivered", cust: "C1" });
     expect(evaluate("range(1, 4)", scope)).toEqual([1, 2, 3, 4]);

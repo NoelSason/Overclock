@@ -328,7 +328,9 @@ function guardList(list: unknown[], ctx: EvalCtx): unknown[] {
   return list;
 }
 
-const FILTER_OPS = new Set(["==", "!=", "<", "<=", ">", ">=", "in", "contains"]);
+/** filterBy operators. "~=" is text equality ignoring case and surrounding whitespace on both sides. */
+const FILTER_OPS = new Set(["==", "!=", "~=", "<", "<=", ">", ">=", "in", "contains"]);
+const foldText = (x: unknown) => asStr(x).trim().toLowerCase();
 
 export const FUNCTIONS: Record<string, Fn> = {
   lower: { min: 1, max: 1, impl: ([s]) => asStr(s).toLowerCase() },
@@ -373,6 +375,8 @@ export const FUNCTIONS: Record<string, Fn> = {
             return looseEquals(v, value);
           case "!=":
             return !looseEquals(v, value);
+          case "~=":
+            return v !== null && v !== undefined && value !== null && value !== undefined && foldText(v) === foldText(value);
           case "in":
             return asList(value).some((x) => looseEquals(v, x));
           case "contains":

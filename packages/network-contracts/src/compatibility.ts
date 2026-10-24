@@ -46,6 +46,12 @@ export const RebindReport = z.object({
   ambiguous: z.array(z.string()),
   /** Writes whose controls bound uniquely and whose effects match the declared ones. */
   writesSafe: z.boolean(),
+  /**
+   * Some write's submit button bound structurally (its label changed; it is the sole write button
+   * of a form whose fields all bound by label). Writes are then allowed only behind a write canary:
+   * one record writes and verifies by fresh read-back before any other record writes.
+   */
+  writeCanary: z.boolean().optional(),
   pagesVisited: z.number(),
   ms: z.number(),
   fingerprintMatches: z.number(),

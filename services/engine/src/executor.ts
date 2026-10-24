@@ -394,7 +394,8 @@ export class Executor {
       this.o.latency.observeSegment(seg.id, ms);
       this.aimdRecord(app, { ms, ok: true });
       this.scheduler.complete(t.taskId, state, Object.keys(r.outputs).concat(r.skipped), ms);
-      if (this.scheduler.gateOf(seg.id) === "canary" && (state === "VERIFIED" || state === "COMPLETED")) {
+      // A write canary opens only on a verified write; a read canary on completion.
+      if (this.scheduler.gateOf(seg.id) === "canary" && (seg.kind === "write" ? state === "VERIFIED" : state === "COMPLETED")) {
         if (this.scheduler.canarySucceeded(seg.id)) this.o.onCanaryPassed?.(seg.id);
       }
       span.end("ok", { ms });

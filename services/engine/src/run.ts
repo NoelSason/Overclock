@@ -214,7 +214,16 @@ export class RunController implements RunHandle {
         workers: { initial: workers, max: mode === "compiled-single" ? 1 : fixed ? workers : this.config.maxWorkers, adaptive: !fixed && mode !== "compiled-single" },
         thumbnails: this.config.thumbnails,
         onThumbnail: (wid, jpeg) => this.storeThumb(wid, jpeg),
+        onCanaryPassed: (segId) => this.emit({ type: "log", level: "info", message: `write canary passed for ${segId}: one record wrote and verified by fresh read-back; the other records may write` }),
+        onCanaryFailed: (segId, reason) => this.emit({ type: "log", level: "error", message: `write canary failed for ${segId}; its writes stay blocked: ${reason.slice(0, 200)}` }),
       });
+      if (imported?.writeCanary && swarm.policy.intelligence === "network-import") {
+        // A submit button bound structurally (its label changed): no record writes until one has
+        // written and verified through it.
+        const writes = [...compiled.segments.values()].filter((seg) => seg.kind === "write");
+        for (const seg of writes) this.executor.scheduler.setGate(seg.id, "canary");
+        this.emit({ type: "log", level: "info", message: `write canary on ${writes.length} write segment(s) of the imported capability: a rebound submit button changed its label` });
+      }
       await this.executor.start({ incremental: false });
       this.emit({ type: "stage", stage: "execution", phase: "end" });
       if (!this.abort.signal.aborted) cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models, review: swarm.review });

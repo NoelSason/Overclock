@@ -94,18 +94,39 @@ describe("rebinding", () => {
     expect(r.report.writesSafe).toBe(true);
   });
 
-  it("renamed save button: binds structurally, REQUIRES_REBINDING, writes not safe", async () => {
+  it("renamed save button: binds structurally, REQUIRES_REBINDING, writes allowed only behind a write canary", async () => {
     await patchVariations(env, { renameButtons: { Orders: { "Update order": "Apply changes" } } });
     const r = track("renamed save button", await rebind());
-    expect(["REQUIRES_REBINDING", "REQUIRES_REPAIR"]).toContain(r.report.outcome);
     expect(r.report.outcome).toBe("REQUIRES_REBINDING");
-    expect(r.report.writesSafe).toBe(false);
+    // The button is the sole write button of a form whose fields all bound by label.
+    expect(r.report.writesSafe).toBe(true);
+    expect(r.report.writeCanary).toBe(true);
+    expect(r.details.structuralWrites).toEqual(["Orders:/orders/:id/edit:button:update_order"]);
+    expect(r.details.relabeled).toEqual([{ key: "Orders:/orders/:id/edit:button:update_order", from: "Update order", to: "Apply changes", evidence: "structural" }]);
     const save = r.details.bindings.find((b) => b.key === "Orders:/orders/:id/edit:button:update_order")!;
     expect(save.evidence).toBe("structural");
     const local = r.models.find((m) => m.app === "Orders")!.controls[save.localId!]!;
     expect(local.name).toBe("Apply changes");
     expect(r.report.fingerprintMismatches).toBeGreaterThan(0);
     expect(r.program).not.toBeNull();
+  });
+
+  it("renamed save button on an irreversible write: not write-safe (structural evidence never carries those)", async () => {
+    await patchVariations(env, { renameButtons: { Orders: { "Update order": "Apply changes" } } });
+    const risky = structuredClone(cap);
+    for (const ph of risky.procedure.plan.phases) for (const st of ph.steps) if (st.op === "submit" && st.control === "Orders:/orders/:id/edit:button:update_order") st.irreversible = true;
+    const r = track("renamed irreversible save", await rebindCapability({ capability: overTheWire(risky), apps: env.apps, browser: env.browser, storageState: env.operator }));
+    expect(r.report.writesSafe).toBe(false);
+    expect(r.report.writeCanary).toBe(false);
+    expect(r.details.structuralWrites).toEqual([]);
+  });
+
+  it("renamed save button plus its fields moved into a tab: REQUIRES_REPAIR, writes not safe", async () => {
+    await patchVariations(env, { renameButtons: { Orders: { "Update order": "Apply changes" } }, editInTab: { Orders: true } });
+    const r = track("renamed save + tab", await rebind());
+    expect(r.report.outcome).toBe("REQUIRES_REPAIR");
+    expect(r.report.writesSafe).toBe(false);
+    expect(r.report.writeCanary).toBe(false);
   });
 
   it("fields moved into a tab: REQUIRES_REPAIR, writes not safe", async () => {

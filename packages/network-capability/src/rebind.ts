@@ -77,6 +77,10 @@ export interface RebindResult {
     bindings: Binding[];
     /** Problems that make writes unsafe even when every control bound (e.g. `hidden-in-tab:<key>`). */
     flags: string[];
+    /** Submit buttons bound structurally that writes may use behind a write canary (see RebindReport.writeCanary). */
+    structuralWrites: string[];
+    /** Bindings whose label differs from the publisher's: what changed in the interface. */
+    relabeled: { key: string; from: string; to: string; evidence: Evidence }[];
     missingRoutes: MissingRoute[];
     fingerprints: FingerprintCheck[];
     /**
@@ -303,6 +307,8 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
   const models: AppModel[] = [];
   let pagesVisited = 0;
 
+  const structuralWrites: string[] = [];
+  const relabeled: RebindResult["details"]["relabeled"] = [];
   const done = (outcome: CompatibilityOutcome, extra: { plan?: DslPlan; program?: ExecutionProgram | null; issues?: Issue[]; writesSafe?: boolean } = {}): RebindResult => {
     timings.totalMs = Math.round(performance.now() - t0);
     const unbound = bindingsList.filter((b) => !b.localId && !b.reason?.startsWith("ambiguous")).map((b) => ({ key: b.key, reason: b.reason ?? "unbound" }));
@@ -317,6 +323,7 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
         unbound,
         ambiguous,
         writesSafe: extra.writesSafe ?? false,
+        writeCanary: (extra.writesSafe ?? false) && structuralWrites.length > 0,
         pagesVisited,
         ms: timings.totalMs,
         fingerprintMatches: fpMatch,
@@ -327,7 +334,7 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
       bindings,
       program: extra.program ?? null,
       issues: extra.issues ?? [],
-      details: { bindings: bindingsList, flags, missingRoutes, fingerprints, paramValues, timings },
+      details: { bindings: bindingsList, flags, structuralWrites, relabeled, missingRoutes, fingerprints, paramValues, timings },
     };
   };
 
@@ -557,6 +564,24 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
     }
   }
 
+  // A submit button that bound structurally (sole write button of a form with the identical field
+  // schema) may carry writes only when every field and guard of its writes bound by label and none
+  // is irreversible. The label changed, the form did not; the executor then requires a write canary.
+  for (const sc of submits) {
+    const b = bindingOf.get(sc.step.control);
+    if (b?.evidence !== "structural" || sc.step.irreversible) continue;
+    if (cap.requirements.expectedEffects.some((e) => e.stepId === sc.step.id && e.effect === "irreversible")) continue;
+    const sameKey = submits.filter((x) => x.step.control === sc.step.control);
+    const fieldsByLabel = sameKey.every((x) => [...x.fills.map((f) => f.control), ...x.step.guards.map((g) => g.control)].every((k) => bindingOf.get(k)?.evidence === "label"));
+    if (fieldsByLabel && !structuralWrites.includes(sc.step.control)) structuralWrites.push(sc.step.control);
+  }
+  for (const b of bindingsList) {
+    if (!b.localId || b.evidence === "label") continue;
+    const pc = pcByKey.get(b.key);
+    const lc = localOf(b.key);
+    if (pc && lc) relabeled.push({ key: b.key, from: primaryText(pc), to: primaryText(lc.d), evidence: b.evidence });
+  }
+
   // ---- rewrite to fresh local ids and compile against the local models
   const plan = mapControlRefs(cap.procedure.plan, (ref) => bindings.get(ref) ?? ref);
   const tCompile = performance.now();
@@ -578,11 +603,12 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
   else if (fpMismatch) outcome = "STRUCTURALLY_COMPATIBLE";
   else outcome = "EXACT_COMPATIBLE";
 
-  // Writes are safe only on unique, label-level bindings with matching declared effects.
+  // Writes are safe only on unique, label-level bindings with matching declared effects, plus the
+  // structurally bound submit buttons above (which put the writes behind a write canary).
   const writesSafe =
     submits.length === 0 ||
     ((outcome === "EXACT_COMPATIBLE" || outcome === "STRUCTURALLY_COMPATIBLE" || outcome === "REQUIRES_REBINDING") &&
-      [...writeCritical].every((k) => bindingOf.get(k)?.localId && bindingOf.get(k)?.evidence === "label") &&
+      [...writeCritical].every((k) => bindingOf.get(k)?.localId && (bindingOf.get(k)?.evidence === "label" || structuralWrites.includes(k))) &&
       !flags.length &&
       compiled);
 

@@ -80,6 +80,8 @@ export interface ImportedCapability {
   versionId: string;
   version: number;
   outcome: CompatibilityOutcome;
+  /** Some write's submit button bound structurally: writes must pass a write canary first. */
+  writeCanary: boolean;
 }
 
 interface Emitter {
@@ -96,7 +98,7 @@ export async function importCapability(o: Emitter & { client: INetworkClient; co
   const op = canonicalOperation(o.config.goal, recordFieldsOf(o.config.records));
   const look = await o.client.lookup({ origins, canonicalOperation: op, signatures: [] });
   const best = look.candidates[0];
-  o.emit({ type: "network.lookup", origins, outcome: best ? "FOUND" : "NO_CAPABILITY", source: look.source, candidates: look.candidates.length, ms: Math.round(look.ms), ...(best ? { capabilityId: best.capabilityId, version: best.version } : {}) });
+  o.emit({ type: "network.lookup", origins, outcome: best ? "FOUND" : "NO_CAPABILITY", source: look.source, candidates: look.candidates.length, ms: Math.round(look.ms), ...(best ? { capabilityId: best.capabilityId, version: best.version } : {}), ...(o.client.identity ? { identity: o.client.identity.slice(0, 16) } : {}) });
   if (!best) return null;
 
   let fetched: Awaited<ReturnType<INetworkClient["fetchArtifact"]>>;
@@ -118,18 +120,23 @@ export async function importCapability(o: Emitter & { client: INetworkClient; co
   const errors = r.issues.filter((i) => i.severity === "error");
   const executable = EXECUTABLE.includes(r.report.outcome) && r.report.writesSafe && r.program !== null && errors.length === 0;
   const outcome: CompatibilityOutcome = executable ? r.report.outcome : EXECUTABLE.includes(r.report.outcome) ? "REQUIRES_REPAIR" : r.report.outcome;
-  o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome, bound: r.report.bound, unbound: r.report.unbound.length, rebindMs: Math.round(r.report.ms), fetchMs: Math.round(fetched.ms), source: fetched.source });
+  const refused = executable
+    ? []
+    : [
+        ...r.report.unbound.slice(0, 3).map((u) => `unbound ${u.key} (${u.reason})`),
+        ...r.report.ambiguous.slice(0, 3).map((k) => `ambiguous ${k}`),
+        ...r.details.flags.slice(0, 3),
+        ...(r.report.writesSafe ? [] : ["writes not provably safe"]),
+        ...errors.slice(0, 2).map((e) => e.message),
+      ];
+  const writeCanary = executable && r.report.writeCanary === true;
+  o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome, bound: r.report.bound, unbound: r.report.unbound.length, rebindMs: Math.round(r.report.ms), fetchMs: Math.round(fetched.ms), source: fetched.source, publisher: fetched.capability.publisherId, writeCanary, relabeled: r.details.relabeled, ...(refused.length ? { refused } : {}) });
   if (!executable) {
-    const why = [
-      ...r.report.unbound.slice(0, 3).map((u) => `unbound ${u.key} (${u.reason})`),
-      ...r.details.flags.slice(0, 3),
-      ...(r.report.writesSafe ? [] : ["writes not provably safe"]),
-      ...errors.slice(0, 2).map((e) => e.message),
-    ];
-    o.emit({ type: "log", level: "warn", message: `network: ${best.versionId} is ${outcome} here (${why.join("; ") || "no executable program"}); discovering cold` });
+    o.emit({ type: "log", level: "warn", message: `network: ${best.versionId} is ${outcome} here (${refused.join("; ") || "no executable program"}); discovering cold` });
     return null;
   }
-  return { plan: r.plan, models: r.models, capabilityId: best.capabilityId, versionId: best.versionId, version: best.version, outcome };
+  if (r.details.relabeled.length) o.emit({ type: "log", level: "info", message: `network: the interface changed since publication; rebound ${r.details.relabeled.map((x) => `"${x.from}" -> "${x.to}" (${x.evidence})`).join(", ")}${writeCanary ? "; writes run behind a write canary" : ""}` });
+  return { plan: r.plan, models: r.models, capabilityId: best.capabilityId, versionId: best.versionId, version: best.version, outcome, writeCanary };
 }
 
 /**
