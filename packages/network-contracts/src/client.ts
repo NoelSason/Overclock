@@ -12,7 +12,7 @@ import type { KnowledgePolicy } from "./publication";
 
 export interface NetworkConfig {
   enabled: boolean;
-  /** SpacetimeDB host, e.g. ws://127.0.0.1:3000 */
+  /** SpacetimeDB host, e.g. ws://127.0.0.1:3100 */
   endpoint: string;
   /** Database name or identity. */
   database: string;

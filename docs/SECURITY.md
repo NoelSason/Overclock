@@ -191,8 +191,11 @@ Redaction is pattern based, so a secret in an unusual format can slip through.
 
 **Status: In progress.** The code exists in `packages/network-capability`,
 `packages/network-client`, `services/network/spacetimedb`, and
-`services/network/validation-worker`, has no tests yet, and is not called by the engine. See
-[`NETWORK.md`](NETWORK.md).
+`services/network/validation-worker`. The sanitizer, static analysis, rebinding, and
+validation worker pass `tests/network-capability/` (23 tests on 2026-10-24). The module's
+authorization, payload, and promotion rules have tests in `tests/network/registry.test.ts`,
+which run against a real local SpacetimeDB and were not run for this report. The engine doesn't
+call any of it yet. See [`NETWORK.md`](NETWORK.md).
 
 A capability crosses three boundaries: from the publishing runtime to the network, from the
 network to a validator, and from the network to an importing runtime. None of them trusts the
@@ -269,4 +272,4 @@ import capabilities yet.
   fallback for exploration have no automated tests.
 - The engine and arena APIs are unauthenticated and rely on binding to localhost.
 - Redaction and sanitization are pattern based.
-- The network pipeline is untested and not connected to the engine.
+- The network pipeline is not connected to the engine, and validation never executes writes.

@@ -7,7 +7,7 @@
  *   --database     database name (default: OVERCLOCK_NETWORK_DATABASE or overclock-network)
  *   --no-generate  skip regenerating packages/network-client/src/generated
  *
- * The endpoint comes from OVERCLOCK_NETWORK_ENDPOINT (default ws://127.0.0.1:3000) and must be
+ * The endpoint comes from OVERCLOCK_NETWORK_ENDPOINT (default ws://127.0.0.1:3100) and must be
  * local; use scripts/network-deploy.ts for Maincloud. The CLI identity that publishes is the
  * database owner, which the module's `init` bootstraps as the network admin.
  */

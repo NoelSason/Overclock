@@ -197,11 +197,17 @@ function codeVersion(root: string): string | undefined {
 }
 
 /**
- * First argument passed to the adapter's `runExternal`: the run config (goal, applications, records,
- * exactly what the engine gets) plus the arena operator login and an abort signal. This satisfies
- * both `runExternal(config, scenario)` and the adapter's own `ExternalRunInput` shape.
+ * First argument passed to the adapter's `runExternal`: the same goal, applications, and records the
+ * engine gets, plus the arena operator login, an abort signal, and the run's budget.
  */
-type ExternalInput = RunConfigInput & { records: Record<string, unknown>[]; credentials: { username: string; password: string }; signal: AbortSignal };
+type ExternalInput = {
+  goal: string;
+  applications: { name: string; origin: string }[];
+  records: Record<string, unknown>[];
+  credentials: { username: string; password: string };
+  signal: AbortSignal;
+  budgetUsd?: number;
+};
 
 /** Arena operator login, from the same env vars and defaults the arena uses. Never logged. */
 function arenaCredentials(): { username: string; password: string } {
@@ -221,7 +227,21 @@ async function loadExternal(root: string): Promise<{ runner?: ExternalRunner; no
     // Checked to be a function above; its return value is validated on every call.
     const runExternal = fn as (input: ExternalInput, scenario: PublicScenario) => unknown;
     return {
-      runner: async (config, scenario, signal) => parseExternalResult(await runExternal({ ...config, records: config.records ?? scenario.records, credentials: arenaCredentials(), signal }, scenario)),
+      // Explicit fields only: the run config's `mode` is an engine ExecutionMode, not the adapter's agent mode.
+      runner: async (config, scenario, signal) => {
+        const r = await runExternal(
+          {
+            goal: config.goal,
+            applications: config.applications.map((a) => ({ name: a.name, origin: a.origin })),
+            records: config.records ?? scenario.records,
+            credentials: arenaCredentials(),
+            signal,
+            ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
+          },
+          scenario,
+        );
+        return parseExternalResult(r);
+      },
       note: "External baseline: runExternal from packages/external-baselines.",
     };
   } catch (err) {

@@ -6,9 +6,10 @@ another runtime that has never seen the application reuses that knowledge with l
 and fewer model calls, after checking it against its own live view of the app.
 
 **Status (2026-10-24): In progress.** The contracts, the SpacetimeDB module, the capability
-layer (export, sanitize, analyze, rebind), the network client, and the validation worker exist
-in code. None of them has an automated test yet, and the engine doesn't call any of them. A
-run with a network knowledge policy behaves like a cold run today.
+layer (export, sanitize, analyze, rebind), the network client, the validation worker, and setup
+scripts exist in code. The capability layer and validation worker have passing tests, and the
+client and module have tests against a real local SpacetimeDB. The engine doesn't call any of
+them yet, so a run with a network knowledge policy behaves like a cold run today.
 
 ## Research question
 
@@ -42,15 +43,16 @@ The CLI has no `--knowledge` flag yet. Set the field through the SDK or `POST /a
 
 | Component | Location | Status |
 | --- | --- | --- |
-| Contracts: capability, compatibility, publication, repair, client interface | `packages/network-contracts` | In progress (types only; no tests) |
-| Capability layer: export, sanitizer, static analysis, rebinding, registry helpers | `packages/network-capability` | In progress (test config and fixtures in `tests/network-capability/`, no test files yet) |
-| SpacetimeDB module: tables, reducers, procedures, views | `services/network/spacetimedb` | In progress (client bindings are generated from it, so it builds; no tests) |
-| Network client and disabled client | `packages/network-client` | In progress (no tests) |
-| Validation worker | `services/network/validation-worker` | In progress (no tests) |
+| Contracts: capability, compatibility, publication, repair, client interface | `packages/network-contracts` | Partial (types; exercised by the tests in the following rows) |
+| Capability layer: export, sanitizer, static analysis, rebinding, registry helpers | `packages/network-capability` | Partial: `tests/network-capability/` passed (23 tests) on 2026-10-24; not used by the engine |
+| Validation worker | `services/network/validation-worker` | Partial: covered by `tests/network-capability/validator.test.ts`; not deployed |
+| SpacetimeDB module: tables, reducers, procedures, views | `services/network/spacetimedb` | In progress: `tests/network/registry.test.ts` and `repair.test.ts` run it on a real local server; not run for this report |
+| Network client and disabled client | `packages/network-client` | In progress: `tests/network/` (registry, repair, resilience, disabled); not run for this report |
+| Setup scripts | `scripts/network-*.ts` | In progress |
 | Engine integration: lookup, import, publish, repair, `network.*` events | `services/engine` | Proposed (not wired) |
 | Dashboard **Knowledge network** panel | `apps/dashboard/src/components/console/network-panel.tsx` | Partial (renders `network.*` events, which nothing emits yet) |
 | Benchmark arm: network warm vs strict cold | `packages/benchmarks` | Proposed |
-| Two-runtime transfer test | `tests/network/` | Not yet automated (directory is empty) |
+| Engine-level two-runtime transfer (runtime B executes with less discovery) | none | Not yet automated |
 
 ## Portable capabilities
 
@@ -200,7 +202,7 @@ engine doesn't read them yet.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OVERCLOCK_NETWORK_ENABLED` | `false` | Turn the client on. |
-| `OVERCLOCK_NETWORK_ENDPOINT` | `ws://127.0.0.1:3000` | SpacetimeDB host. |
+| `OVERCLOCK_NETWORK_ENDPOINT` | `ws://127.0.0.1:3100` | SpacetimeDB host. The default is moving from port 3000 to 3100 so it doesn't collide with the dashboard; check `.env.example` for the current value. |
 | `OVERCLOCK_NETWORK_DATABASE` | `overclock-network` | Database name. |
 | `OVERCLOCK_NETWORK_MODE` | `network-read` | Default knowledge policy. |
 | `OVERCLOCK_NETWORK_PUBLISH_ENABLED` | `false` | Allow publishing. |
@@ -210,55 +212,84 @@ engine doesn't read them yet.
 
 ### Local SpacetimeDB
 
-You need the `spacetime` CLI (version 2.x).
+You need the `spacetime` CLI, version 2.x. If it's missing, the scripts print the install
+command.
 
-1. Start a local server on loopback:
-
-   ```bash
-   spacetime start --listen-addr 127.0.0.1:3000
-   ```
-
-   SpacetimeDB and the dashboard (`pnpm dashboard`) both default to port 3000. If you run
-   both, start the dashboard on another port, for example
-   `pnpm --filter @overclock/dashboard exec next dev -p 3100`.
-
-2. Install the module's own dependencies. The module is outside the workspace globs and has its
-   own lockfile:
+1. Start the local network. The script starts SpacetimeDB on the host and port of
+   `OVERCLOCK_NETWORK_ENDPOINT` if it isn't running, installs the module's own dependencies (the module is outside the workspace globs
+   and has its own lockfile), publishes the module, and regenerates the client bindings:
 
    ```bash
-   cd services/network/spacetimedb && pnpm install --ignore-workspace
+   pnpm exec tsx scripts/network-dev.ts
    ```
 
-3. Publish the module to the local server. Pass `-s local` every time: the CLI's default
-   server is Maincloud.
+   Add `--clean` to destroy the database's data and republish, or `--database <name>` to use
+   another database. The endpoint comes from `OVERCLOCK_NETWORK_ENDPOINT` and must be local.
+   Server logs go to `.data/network/`.
+
+2. The CLI identity that publishes becomes the database owner, which the module bootstraps as
+   the network's first admin. Every other identity (each runtime and each validator) registers
+   as `pending`, then the owner authorizes it:
 
    ```bash
-   spacetime publish -s local -p services/network/spacetimedb overclock-network
+   pnpm exec tsx scripts/network-authorize.ts --identity <hex> --role publisher
    ```
 
-   The identity that publishes becomes the network's first admin.
+   Replace `<hex>` with the runtime's identity (`NetworkClient.identity`). The role is one of
+   `publisher`, `validator`, `repairer`, or `admin`.
 
-4. Regenerate the client bindings after any module change:
+3. **Optional:** regenerate the bindings on their own after a module change:
 
    ```bash
-   spacetime generate --lang typescript --module-path services/network/spacetimedb --out-dir packages/network-client/src/generated
+   pnpm exec tsx scripts/network-generate.ts
    ```
 
-5. Inspect state with SQL, for example:
+4. **Optional:** inspect state with SQL. Pass `-s local`, because the CLI's default server is
+   Maincloud:
 
    ```bash
    spacetime sql -s local overclock-network "SELECT * FROM capability_versions"
    ```
 
-Every other identity (each runtime and each validator) registers as `pending` with
-`register_publisher` and must be authorized by the admin with `authorize_publisher`. No script
-automates this yet.
+Watch for port collisions. `pnpm dashboard` uses port 3000, which is also SpacetimeDB's own
+default, and `pnpm test:e2e` starts a dashboard on port 3100
+(`OVERCLOCK_E2E_DASHBOARD_PORT`), which is the network's new default. If you run the network
+alongside either one, give one of them another port.
 
 ### Maincloud
 
-To host the network on SpacetimeDB's Maincloud instead, sign in with `spacetime login`, publish
-with `-s maincloud`, and set `OVERCLOCK_NETWORK_ENDPOINT=wss://maincloud.spacetimedb.com`. This
-path has not been exercised.
+Local SpacetimeDB is the default for development and every test. To deploy to Maincloud, sign
+in first (an interactive browser login), then run the deploy script:
+
+```bash
+spacetime login
+pnpm exec tsx scripts/network-deploy.ts --database <name>
+```
+
+Database names are global on Maincloud, so pick a suffixed name. The script never reads,
+prints, or stores the CLI token. `--clean` destroys all data in the Maincloud database and
+republishes. Then set `OVERCLOCK_NETWORK_ENDPOINT` to the Maincloud host and
+`OVERCLOCK_NETWORK_DATABASE` to the name. This path has not been exercised for this report.
+
+### Latency probe
+
+`scripts/network-probe.ts` measures connect time, subscription time, reducer round trips, and
+propagation between two client identities on an endpoint. `--read-only` only connects and
+subscribes; `--temp` publishes a throwaway database and deletes it afterwards.
+
+```bash
+pnpm exec tsx scripts/network-probe.ts --read-only
+```
+
+### Tests
+
+```bash
+npx vitest run -c tests/network-capability/vitest.config.ts   # arena in-process; no SpacetimeDB
+npx vitest run --config tests/network/vitest.config.ts        # real local SpacetimeDB
+```
+
+The network suite starts SpacetimeDB if needed, publishes the module to a fresh database named
+`overclock-net-test-<random>`, and deletes it afterwards. Neither suite calls a model.
 
 ### Two runtimes
 

@@ -15,7 +15,7 @@ export const MODULE_PATH = join(REPO_ROOT, "services", "network", "spacetimedb")
 export const BINDINGS_DIR = join(REPO_ROOT, "packages", "network-client", "src", "generated");
 export const NETWORK_STATE_DIR = join(REPO_ROOT, ".data", "network");
 
-export const LOCAL_ENDPOINT = "ws://127.0.0.1:3000";
+export const LOCAL_ENDPOINT = "ws://127.0.0.1:3100";
 export const MAINCLOUD_ENDPOINT = "https://maincloud.spacetimedb.com";
 
 /** `SPACETIME_BIN`, else the official installer location, else `spacetime` on PATH. */
@@ -36,7 +36,7 @@ export function httpBase(endpoint: string): string {
 /** CLI `--server` value: the configured nickname when one matches, else the HTTP URL. */
 export function cliServerFor(endpoint: string): string {
   const base = httpBase(endpoint);
-  if (base === "http://127.0.0.1:3000" || base === "http://localhost:3000") return "local";
+  if (base === "http://127.0.0.1:3000" || base === "http://localhost:3000") return "local"; // the CLI's built-in "local" nickname
   if (base === MAINCLOUD_ENDPOINT) return "maincloud";
   return base;
 }
@@ -122,7 +122,7 @@ export async function ensureLocalServer(endpoint = LOCAL_ENDPOINT): Promise<{ st
   mkdirSync(NETWORK_STATE_DIR, { recursive: true });
   const log = openSync(join(NETWORK_STATE_DIR, "spacetime-server.log"), "a");
   const u = new URL(endpoint);
-  const listen = `${u.hostname === "localhost" ? "127.0.0.1" : u.hostname}:${u.port || "3000"}`;
+  const listen = `${u.hostname === "localhost" ? "127.0.0.1" : u.hostname}:${u.port || "3100"}`;
   const child = spawn(spacetimeBin(), ["start", "--listen-addr", listen, "--non-interactive"], { detached: true, stdio: ["ignore", log, log] });
   child.unref();
   const deadline = Date.now() + 30_000;

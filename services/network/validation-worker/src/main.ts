@@ -50,7 +50,7 @@ async function resolveApps(): Promise<AppBinding[]> {
 function networkConfig(): NetworkConfig {
   return {
     enabled: true,
-    endpoint: process.env.OVERCLOCK_NETWORK_ENDPOINT || "ws://127.0.0.1:3000",
+    endpoint: process.env.OVERCLOCK_NETWORK_ENDPOINT || "ws://127.0.0.1:3100",
     database: process.env.OVERCLOCK_NETWORK_DATABASE || "overclock-network",
     mode: "network-read",
     publishEnabled: false,

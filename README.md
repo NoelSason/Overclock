@@ -8,7 +8,7 @@ verified execution programs instead of reasoning about every action.
 > **Status (2026-10-24, Cal Hacks build).** The compiler, scheduler, browser runtime,
 > recovery ladder, arena, benchmark harness, SDK, CLI, and dashboard are implemented, and most
 > of them have automated tests. Mode E (the streaming pipeline, with online access-path
-> substitution) has just landed in code and has not been run end to end yet. The Overclock
+> substitution) has landed in code and has not been run end to end yet. The Overclock
 > Network (SpacetimeDB) has a tested capability layer but is not wired into the engine.
 > **No benchmark results exist yet.** See [Feature status](#feature-status) and
 > [`PROGRESS.md`](PROGRESS.md).
@@ -17,9 +17,9 @@ verified execution programs instead of reasoning about every action.
 
 Most browser agents run an observe, reason, act loop: they look at the page, ask a model what
 to do next, perform one action, and repeat. On a task that touches 100 records across three
-web apps, that means hundreds of sequential model calls. Each call adds seconds of latency,
-the agent works on one record at a time, and the final "done" is the model's claim rather
-than something the system checked.
+web apps, with a few actions per record, that is hundreds of model calls in a row. Every call
+adds model latency, the agent works on one record at a time, and the final "done" is the
+model's claim rather than something the system checked.
 
 ## The approach
 
@@ -59,10 +59,11 @@ stage-gated system, including all cold-start overhead?
 
 ### B. Collective execution intelligence (Overclock Network)
 
-Validated, portable capabilities that one runtime discovered are shared through SpacetimeDB
-and safely reused by independent runtimes. A capability carries the plan plus semantic,
-data-free control descriptors, so a fresh runtime rebinds every control against its own live
-observation before anything executes.
+The Overclock Network shares validated, portable capabilities that one runtime discovered
+through SpacetimeDB, so independent runtimes can reuse them safely. A capability carries the
+plan plus semantic, data-free control descriptors, so a fresh runtime rebinds every control
+against its own live observation before anything executes. This layer is in progress: the
+capability layer is tested, but the engine doesn't use it yet.
 
 **Research question:** Can a fresh runtime execute a compatible workflow with less discovery
 and fewer model calls because another runtime already learned it?
@@ -135,17 +136,17 @@ mode by the same ground truth.
 | Mode | Engine `--mode` | Benchmark `--mode` | Planner | Workers | What it is |
 | --- | --- | --- | --- | --- | --- |
 | A | `sequential-agent` | `sequential` | Claude Haiku 5.5, one call per action | 1 | Classic observe, reason, act loop. Completions are model claims, never `VERIFIED`. |
-| B | `compiled-single` | `compiled` | one planner, no swarm | 1 | Compiled program on one worker. |
-| C | `compiled-parallel` | `parallel` | one planner, no swarm | 8, fixed | Same program on a fixed pool. |
-| D | `overclock-staged` | `staged` | adaptive discovery swarm | up to 16, adaptive | Discovery, planning, compilation, and execution run strictly in sequence. |
-| E | `overclock` | `overclock` | streaming planner | up to 16, adaptive | Streaming discovery, incremental compilation, online optimization. |
+| B | `compiled-single` | `compiled` | one planner after the discovery crawl; no competing candidates, critique, or probes | 1 | Compiled program on one worker. |
+| C | `compiled-parallel` | `parallel` | same as B | 8, fixed | Same program on a fixed pool. |
+| D | `overclock-staged` | `staged` | adaptive swarm: up to 3 competing candidates, critique, dry-run probes, cost-based selection | up to 16, adaptive | Discovery, planning, compilation, and execution run strictly in sequence. |
+| E | `overclock` | `overclock` | one streaming planner; critique before writes | up to 16, adaptive | Streaming discovery, incremental compilation, online access paths. |
 
 ### What each comparison isolates
 
 | Comparison | Isolates |
 | --- | --- |
 | E vs C | The whole Overclock system against the strongest simple compiled baseline, with all cold-start overhead counted. |
-| E vs D | Streaming and incremental compilation alone: same discovery, scheduler, and verifier, only stage gating differs. This answers research question A. |
+| E vs D | The streaming pipeline against the stage-gated swarm, with the same compiler, scheduler, and verifier. This answers research question A. It is not stage gating alone: E also plans one strategy instead of competing several, skips dry-run probes, and adds online access paths. The `overclock-no-access-paths` ablation isolates access paths; the planning differences are not isolated. |
 | D vs B | What the discovery swarm, competing strategies, and adaptive parallel scheduling add over one compiled program on one worker. |
 | Network warm vs strict cold | Capability transfer between runtimes, mode E in both arms. This answers research question B. Not in the harness yet. |
 
@@ -321,7 +322,7 @@ written or not wired in. **Proposed** means design only.
 | Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts` (1 stale failure), `tests/unit/arena-oracle.test.ts` |
 | Benchmark harness, suites, report, holdout freeze gate | Working (tested) | `tests/unit/benchmark.test.ts` |
 | Benchmark results | Pending | `benchmarks/results/` is empty |
-| Capability export, sanitizer, static analysis, rebinding, validation worker | In progress (tested) | `tests/network-capability/` (23 tests passed on 2026-10-24) |
+| Capability export, sanitizer, static analysis, rebinding, validation worker | Partial | `tests/network-capability/` (23 tests passed on 2026-10-24); not used by the engine |
 | SpacetimeDB module and network client | In progress | `tests/network/` against a real local SpacetimeDB; not run for this report |
 | Engine integration with the network | Proposed | Not wired |
 

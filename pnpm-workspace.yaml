@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - services/*
+  - services/network/validation-worker
   - packages/*
 allowBuilds:
   '@google/genai': false

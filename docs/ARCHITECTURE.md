@@ -199,7 +199,7 @@ it. A failed guard raises `PreconditionFailedError`, which triggers invalidation
 
 ### Read-back verification
 
-After a write, the worker navigates fresh to the verification URL (never the form it just
+After a write, the worker navigates fresh to the verification URL (never the form it
 submitted) and compares each expected field. Values are whitespace-normalized. A field matches
 when it is loosely equal (numbers and numeric strings compare equal), equal ignoring case, or,
 for expected text of 12 characters or more, contained in the actual text (for example a note
@@ -402,7 +402,10 @@ The first browser action of execution happens after every earlier stage has fini
 ### Mode E: streaming (In progress)
 
 `runStreamingPipeline` (`services/engine/src/streaming.ts`) is implemented but has not been
-run end to end. It works as follows:
+run end to end. Unlike mode D, it plans a single strategy (the first directive, `per-record`)
+instead of competing several, runs no dry-run probes, and uses critique only to gate writes. A
+comparison of E with D therefore measures these differences together with the overlap. It works
+as follows:
 
 1. **First-pass discovery.** One sample per route pattern, up to 12 pages per app: enough to
    start planning.
@@ -429,9 +432,9 @@ run end to end. It works as follows:
 6. **Read fragments.** A read fragment enters the scheduler with a `canary` gate: one record
    runs first, and when it succeeds the fragment fans out to every record. While it runs, its
    page is read-only at the network layer.
-7. **Write fragments.** A write fragment enters with a `deferred` gate.
-   While reads run, the access-path controller may replace remaining per-record detail reads
-   with a shared list scan (see [Online optimization](#online-optimization)).
+7. **Write fragments.** A write fragment enters with a `deferred` gate. Meanwhile, as reads
+   run, the access-path controller may replace the remaining per-record detail reads with a
+   shared list scan (see [Online optimization](#online-optimization)).
 8. **Whole-plan validation.** When the stream ends, the full plan is lowered and validated with
    the same checks the staged path runs.
 9. **Write gates.** Writes stay deferred until every one of these holds:

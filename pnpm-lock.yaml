@@ -187,9 +187,18 @@ importers:
       '@overclock/engine':
         specifier: workspace:*
         version: link:services/engine
+      '@overclock/external-baselines':
+        specifier: workspace:*
+        version: link:packages/external-baselines
       '@overclock/models':
         specifier: workspace:*
         version: link:packages/models
+      '@overclock/network-capability':
+        specifier: workspace:*
+        version: link:packages/network-capability
+      '@overclock/network-client':
+        specifier: workspace:*
+        version: link:packages/network-client
       '@overclock/network-contracts':
         specifier: workspace:*
         version: link:packages/network-contracts
@@ -644,6 +653,8 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  services/network/validation-worker: {}
 
 packages:
 

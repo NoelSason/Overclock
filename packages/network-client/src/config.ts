@@ -1,6 +1,6 @@
 import { KnowledgePolicy, type NetworkConfig } from "@overclock/network-contracts";
 
-export const DEFAULT_NETWORK_ENDPOINT = "ws://127.0.0.1:3000";
+export const DEFAULT_NETWORK_ENDPOINT = "ws://127.0.0.1:3100";
 export const DEFAULT_NETWORK_DATABASE = "overclock-network";
 export const DEFAULT_LOOKUP_TIMEOUT_MS = 500;
 

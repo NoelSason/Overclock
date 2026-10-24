@@ -13,7 +13,7 @@ import { client } from "./helpers";
 describe("config and disabled mode", () => {
   it("reads config from the environment with safe defaults", () => {
     const off = networkConfigFromEnv("/tmp/rt", {});
-    expect(off).toMatchObject({ enabled: false, endpoint: "ws://127.0.0.1:3000", database: "overclock-network", mode: "network-read", publishEnabled: false, lookupTimeoutMs: 500 });
+    expect(off).toMatchObject({ enabled: false, endpoint: "ws://127.0.0.1:3100", database: "overclock-network", mode: "network-read", publishEnabled: false, lookupTimeoutMs: 500 });
     const on = networkConfigFromEnv("/tmp/rt", {
       OVERCLOCK_NETWORK_ENABLED: "true",
       OVERCLOCK_NETWORK_ENDPOINT: "https://maincloud.spacetimedb.com",

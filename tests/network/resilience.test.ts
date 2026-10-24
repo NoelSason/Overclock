@@ -20,7 +20,7 @@ beforeAll(async () => {
   validator = await authorizedClient(admin, "rs-validator", "validator");
   await publisher.registerApplication(origin, ["/orders/:id"]);
   const target = new URL(env().endpoint);
-  proxy = new TcpProxy(target.hostname, Number(target.port || 3000));
+  proxy = new TcpProxy(target.hostname, Number(target.port || 3100));
   await proxy.start();
 });
 
