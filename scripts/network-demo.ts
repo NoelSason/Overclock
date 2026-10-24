@@ -165,6 +165,8 @@ async function main(): Promise<void> {
     // The validator runs as a service: it picks up every PROPOSED version for the arena's apps.
     const health = (await arena.health()) as { origins: Record<string, string> };
     const apps = Object.entries(health.origins).map(([name, origin]) => ({ name, origin }));
+    // The admin promotes from its own view of the registry, scoped to these origins.
+    await admin.watchOrigins(apps.map((a) => a.origin));
     const sessions = new SessionManager(browser, () => ({ username: process.env.ARENA_USERNAME || "operator", password: process.env.ARENA_PASSWORD || "overclock-arena" }));
     let validation: { versionId: string; outcome: string; category: string; ms: number } | null = null;
     const worker = await startValidationWorker({
