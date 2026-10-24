@@ -154,6 +154,7 @@ export class NetworkClient implements INetworkClient {
 
   private readonly statusListeners = new Set<(connected: boolean) => void>();
   private readonly changeListeners = new Set<(c: CapabilityChange) => void>();
+  private tokenSave: Promise<void> = Promise.resolve();
   private readonly repairListeners = new Set<(j: RepairJobView) => void>();
   private readonly activityListeners = new Set<(a: NetworkActivity) => void>();
 
@@ -291,7 +292,8 @@ export class NetworkClient implements INetworkClient {
     this.rebuildAttempt = 0;
     if (token && token !== this.token) {
       this.token = token;
-      this.tokens.save(this.tokenKey, token).catch(() => {});
+      // close() waits for this, so a short-lived client never loses the identity it was given.
+      this.tokenSave = this.tokens.save(this.tokenKey, token).catch(() => {});
     }
     this.firstConnect?.resolve();
     this.emitStatus(true);
@@ -345,6 +347,7 @@ export class NetworkClient implements INetworkClient {
 
   async close(): Promise<void> {
     this.closed = true;
+    await this.tokenSave;
     if (this.rebuildTimer !== null) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
     const conn = this.conn;
