@@ -60,6 +60,8 @@ const SLICE_OF: Partial<Record<EventType, Slice>> = {
   "network.update": "network",
 };
 
+export const ALL_SLICES: readonly Slice[] = ["meta", "stages", "swarm", "candidates", "program", "fragments", "tasks", "workers", "telemetry", "approvals", "network"];
+
 export type ConnectionState = "loading" | "live" | "reconnecting" | "ended" | "error";
 
 export interface ConnectionInfo {

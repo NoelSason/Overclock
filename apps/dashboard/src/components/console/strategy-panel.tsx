@@ -87,15 +87,18 @@ function Candidate({ c, rank, maxTotal }: { c: CandidateView; rank: number | und
           <div className="mt-1 flex h-2 overflow-hidden rounded-sm bg-sunken" style={{ width: `${Math.max(4, (e.totalMs / maxTotal) * 100)}%` }} role="img" aria-label={`Estimate breakdown for ${c.name}`}>
             {PARTS.map((p) => (e[p.key] > 0 ? <span key={p.key} style={{ width: `${(e[p.key] / Math.max(1, e.totalMs)) * 100}%`, background: p.color }} title={`${p.label} ${fmtMs(e[p.key])}`} /> : null))}
           </div>
-          <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
-            {PARTS.map((p) => (
-              <div key={p.key} className="flex items-center gap-1.5">
-                <span aria-hidden className="h-1.5 w-1.5 rounded-sm" style={{ background: p.color }} />
-                <dt className="truncate text-muted">{p.label}</dt>
-                <dd className="tnum ml-auto font-mono text-fg">{fmtMs(e[p.key])}</dd>
-              </div>
-            ))}
-          </dl>
+          <details className="mt-1.5" open={c.selected}>
+            <summary className="cursor-pointer text-[11px] text-muted hover:text-fg">Estimate breakdown</summary>
+            <dl className="mt-1 flex flex-col gap-0.5 text-[11px]">
+              {PARTS.map((p) => (
+                <div key={p.key} className="flex items-center gap-1.5">
+                  <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-sm" style={{ background: p.color }} />
+                  <dt className="truncate text-muted">{p.label}</dt>
+                  <dd className="tnum ml-auto font-mono whitespace-nowrap text-fg">{fmtMs(e[p.key])}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
           {e.basis.length > 0 && (
             <details className="mt-1.5">
               <summary className="cursor-pointer text-[11px] text-muted hover:text-fg">

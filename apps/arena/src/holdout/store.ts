@@ -63,6 +63,12 @@ export class HoldoutStore {
     return this.db.prepare("SELECT * FROM specimens WHERE participant_code = ? ORDER BY stored_at DESC, accession").all(code) as unknown as Specimen[];
   }
 
+  /** Specimens per participant or per storage unit. */
+  specimenCounts(column: "participant_code" | "unit_id"): Map<string, number> {
+    const rows = this.db.prepare(`SELECT ${column} AS k, COUNT(*) AS n FROM specimens GROUP BY ${column}`).all() as unknown as { k: string; n: number }[];
+    return new Map(rows.map((r) => [r.k, r.n]));
+  }
+
   countInUnit(unitId: string): number {
     return (this.db.prepare("SELECT COUNT(*) AS n FROM specimens WHERE unit_id = ?").get(unitId) as { n: number }).n;
   }

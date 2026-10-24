@@ -14,7 +14,7 @@ const TOOLTIP = {
 
 const secLabel = (ms: number) => fmtMs(ms);
 
-/** Verified receipts per bin (as a per-minute rate) plus the cumulative count. */
+/** Verified receipts as a per-minute rate over a trailing 5 s window, plus the cumulative count. */
 export function ThroughputChart({ timeline, endT, version }: { timeline: number[]; endT: number; version: number }) {
   const data = useMemo(() => {
     if (timeline.length === 0) return [];
@@ -23,10 +23,14 @@ export function ThroughputChart({ timeline, endT, version }: { timeline: number[
     const bins = Math.ceil(span / binMs) + 1;
     const counts = new Array<number>(bins).fill(0);
     for (const t of timeline) counts[Math.min(bins - 1, Math.floor(t / binMs))]!++;
+    const window = Math.max(1, Math.round(5000 / binMs));
     let cum = 0;
+    let inWindow = 0;
     return counts.map((c, i) => {
       cum += c;
-      return { t: i * binMs, rate: (c / binMs) * 60_000, cumulative: cum };
+      inWindow += c - (i >= window ? counts[i - window]! : 0);
+      const span = Math.min(i + 1, window) * binMs;
+      return { t: i * binMs, rate: (inWindow / span) * 60_000, cumulative: cum };
     });
     // `version` changes when the (in-place mutated) timeline grows.
   }, [timeline, endT, version]);

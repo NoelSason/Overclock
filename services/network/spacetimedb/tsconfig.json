@@ -10,7 +10,6 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "noUncheckedIndexedAccess": true,
-    "verbatimModuleSyntax": true,
 
     /* Required by SpacetimeDB; do not modify. */
     "target": "ESNext",

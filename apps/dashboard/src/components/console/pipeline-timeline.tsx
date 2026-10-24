@@ -75,7 +75,7 @@ export function PipelineTimeline({ store }: { store: RunStore }) {
       actions={
         <div className="flex items-center gap-3 text-[11px]">
           <span className="text-muted">
-            discovery ∥ execution:{" "}
+            discovery <span className="font-mono">∥</span> execution:{" "}
             <span data-testid="timeline-overlap" data-value={hasExecution ? m.overlapMs : ""} className="tnum font-mono text-accent-soft">
               {hasExecution ? fmtMs(m.overlapMs) : "—"}
             </span>
@@ -111,7 +111,8 @@ export function PipelineTimeline({ store }: { store: RunStore }) {
                   </rect>
                   {i === 0 && (
                     <text x={x(o.start) + 6} y={TOP - 10} className="text-[10.5px] font-medium" fill="#8ab4ff">
-                      {`discovery ∥ execution: ${fmtMs(m.overlapMs)}`}
+                      discovery{" "}
+                      <tspan style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>∥</tspan> execution: {fmtMs(m.overlapMs)}
                     </text>
                   )}
                 </g>

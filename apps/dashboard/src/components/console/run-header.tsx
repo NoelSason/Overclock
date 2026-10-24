@@ -6,7 +6,7 @@ import { engine, errorMessage, type RunControl } from "@/lib/api";
 import { writeTaskCount } from "@/lib/derive";
 import { fmtClock, fmtInt, fmtMs, fmtNum, fmtPct, fmtTokens, fmtUsd } from "@/lib/format";
 import { useSlices, useSlicesThrottled } from "@/lib/hooks";
-import type { RunStore } from "@/lib/run-store";
+import { ALL_SLICES, type RunStore } from "@/lib/run-store";
 import { ACTIVE_STATUSES, STATUS_TONE } from "@/lib/states";
 import { Badge, Button, Stat, cx } from "../ui/primitives";
 
@@ -57,9 +57,7 @@ export function RunHeader({ store, onOpenInterference }: { store: RunStore; onOp
         <span className={cx("text-[11px]", conn.state === "error" ? "text-bad" : conn.state === "reconnecting" ? "text-warn" : "text-dim")} title={conn.error}>
           {CONNECTION_LABEL[conn.state]}
           {conn.state === "error" && conn.error ? `: ${conn.error}` : ""} ·{" "}
-          <span data-testid="event-count" data-value={view.lastSeq}>
-            {fmtInt(view.lastSeq)}
-          </span>{" "}
+          <EventCount store={store} />{" "}
           events
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -97,6 +95,15 @@ export function RunHeader({ store, onOpenInterference }: { store: RunStore; onOp
   );
 }
 
+function EventCount({ store }: { store: RunStore }) {
+  useSlicesThrottled(store, ALL_SLICES, 150);
+  return (
+    <span data-testid="event-count" data-value={store.view.lastSeq}>
+      {fmtInt(store.view.lastSeq)}
+    </span>
+  );
+}
+
 function KpiStrip({ store }: { store: RunStore }) {
   useSlicesThrottled(store, ["meta", "stages", "telemetry", "tasks", "workers", "program"], 120);
   const view = store.view;
@@ -113,7 +120,7 @@ function KpiStrip({ store }: { store: RunStore }) {
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
           <Stat label="First action" testId="stat-first-action" raw={m.firstActionMs} value={fmtMs(m.firstActionMs)} sub="first browser action" />
           <Stat label="First verified action" testId="stat-first-verified" raw={m.firstVerifiedMs} value={fmtMs(m.firstVerifiedMs)} sub="time to read-back" tone={m.firstVerifiedMs !== null ? "ok" : undefined} />
-          <Stat label="Discovery ∥ execution" testId="stat-overlap" raw={hasExecution ? m.overlapMs : null} value={hasExecution ? fmtMs(m.overlapMs) : "—"} sub="thinking during work" tone={hasExecution && m.overlapMs > 0 ? "accent" : undefined} />
+          <Stat label={<>Discovery <Par /> execution</>} testId="stat-overlap" raw={hasExecution ? m.overlapMs : null} value={hasExecution ? fmtMs(m.overlapMs) : "—"} sub="thinking during work" tone={hasExecution && m.overlapMs > 0 ? "accent" : undefined} />
           <Stat label="Total wall time" testId="stat-total-wall" raw={complete ? m.elapsedMs : null} value={complete ? fmtMs(m.elapsedMs) : "—"} sub={complete ? "complete" : `elapsed ${fmtClock(view.lastT)}`} />
           <Stat label="Verified" testId="stat-verified-share" raw={verifiedShare} value={fmtPct(verifiedShare, 1)} sub={writes === null ? "of write tasks" : `of ${fmtInt(writes.active)} writes${writes.skipped ? `, ${fmtInt(writes.skipped)} skipped` : ""}`} tone={verifiedShare !== null ? "ok" : undefined} />
         </div>
@@ -130,4 +137,9 @@ function KpiStrip({ store }: { store: RunStore }) {
       </div>
     </div>
   );
+}
+
+/** The "parallel" sign, set in the mono face so it reads as ∥ rather than a thin bar. */
+export function Par() {
+  return <span className="font-mono">∥</span>;
 }

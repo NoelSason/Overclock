@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
 import type { ActionNode, AppControl, EventPayload, ObservedControl, ObservedDialog, SemanticLocator } from "@overclock/contracts";
-import { HiddenTargetError, preludeKey, resolveLocator, UnexpectedDialogError, type ActionEnv, type RepairArgs, type RepairResult, type ReuseInfo, type RuntimeError } from "@overclock/browser-runtime";
+import { AmbiguousLocatorError, HiddenTargetError, preludeKey, resolveLocator, UnexpectedDialogError, type ActionEnv, type RepairArgs, type RepairResult, type ReuseInfo, type RuntimeError } from "@overclock/browser-runtime";
 import { BudgetExceededError } from "@overclock/models";
 import { observe, routePattern, type Observation } from "@overclock/perception";
 import { describeLocator, describeTarget, failingLocator, intentOf, isWriteNode, locatorKey, type TargetDescriptor } from "./describe";
@@ -78,6 +78,8 @@ interface Ctx {
   attempt: number;
   taskId: string;
   segmentKey: string;
+  /** Segment template id as given by the caller (reuse accounting is scoped to it). */
+  segmentId?: string | undefined;
   app: string;
   route: string;
   failure: FailureKind;
@@ -130,7 +132,7 @@ export class RecoveryEngine {
   private readonly inflight = new Map<string, Promise<Settled>>();
   /** `${taskId}|${key}|${failure}` -> rule last applied for it (so a failing rule is dropped, not re-applied). */
   private readonly lastApplied = new Map<string, string>();
-  /** `${segmentKey}|${overrideKey}` -> rule that produced the override (for reuse accounting). */
+  /** `${segmentId ?? "*"}|${overrideKey}` -> rule that produced the override (for reuse accounting). */
   private readonly overrideRule = new Map<string, string>();
   private readonly levels: Record<number, LevelStats> = Object.fromEntries(LEVELS.map((l) => [l, { attempts: 0, successes: 0, ms: 0 }]));
   private modelCalls = 0;
@@ -192,7 +194,7 @@ export class RecoveryEngine {
   noteReuse(info: ReuseInfo): void {
     const seen = new Set<string>();
     for (const k of info.keys) {
-      const id = this.overrideRule.get(`${info.segmentId ?? ""}|${k}`) ?? this.overrideRule.get(`*|${k}`);
+      const id = this.overrideRule.get(`${info.segmentId ?? "*"}|${k}`);
       if (!id || seen.has(id)) continue;
       seen.add(id);
       const rule = this.rules.get(id);
@@ -239,6 +241,7 @@ export class RecoveryEngine {
       attempt: a.attempt,
       taskId: a.taskId ?? "unknown",
       segmentKey: a.segmentId ?? `${app}:${route}`,
+      segmentId: a.segmentId,
       app,
       route,
       failure,
@@ -278,7 +281,7 @@ export class RecoveryEngine {
       case "hidden":
         return `${ctx.node.id}: target is on the page but hidden (${ctx.current ? describeLocator(ctx.current) : "no locator"})`;
       case "relocate":
-        return `${ctx.node.id}: ${ctx.error.constructor.name === "AmbiguousLocatorError" ? "target is ambiguous" : "target not found"} (${ctx.current ? describeLocator(ctx.current) : "no locator"})`;
+        return `${ctx.node.id}: ${ctx.error instanceof AmbiguousLocatorError ? "target is ambiguous" : "target not found"} (${ctx.current ? describeLocator(ctx.current) : "no locator"})`;
     }
   }
 
@@ -298,14 +301,9 @@ export class RecoveryEngine {
   }
 
   private mapOverrides(ctx: Ctx, ruleId: string, r: RepairResult): void {
-    if (r.locator) {
-      this.overrideRule.set(`${ctx.segmentKey}|${ctx.key}`, ruleId);
-      this.overrideRule.set(`*|${ctx.key}`, ruleId);
-    }
-    if (r.prelude?.length) {
-      this.overrideRule.set(`${ctx.segmentKey}|${preludeKey(ctx.node.id, 0)}`, ruleId);
-      this.overrideRule.set(`*|${preludeKey(ctx.node.id, 0)}`, ruleId);
-    }
+    const seg = ctx.segmentId ?? "*";
+    if (r.locator) this.overrideRule.set(`${seg}|${ctx.key}`, ruleId);
+    if (r.prelude?.length) this.overrideRule.set(`${seg}|${preludeKey(ctx.node.id, 0)}`, ruleId);
   }
 
   // L0 ------------------------------------------------------------------------------------------
@@ -585,7 +583,7 @@ export class RecoveryEngine {
     }
     const d = ctx.desc!;
     const name = d.label ?? d.names[0] ?? "the original control";
-    const broken = ctx.failure === "hidden" ? "is hidden" : ctx.error.constructor.name === "AmbiguousLocatorError" ? "now matches several controls" : "can no longer be found";
+    const broken = ctx.failure === "hidden" ? "is hidden" : ctx.error instanceof AmbiguousLocatorError ? "now matches several controls" : "can no longer be found";
     const noun = d.kind === "select" ? "dropdown" : d.kind === "field" ? "text field" : d.kind === "value" ? "field" : d.kind;
     const recorded = `It was recorded against a ${noun} labelled "${name}", which ${broken}.`;
     switch (d.kind) {

@@ -1,4 +1,5 @@
-import { DslPlanForModel, normalizeModelPlan, type AppModel, type DslPlan } from "@overclock/contracts";
+import { z } from "zod";
+import { DslPlan, normalizeModelPlan, type AppModel } from "@overclock/contracts";
 import type { ClaudeProvider, ParseResult } from "@overclock/models";
 import type { Issue } from "@overclock/compiler";
 import { renderAppModel } from "./render";
@@ -31,6 +32,7 @@ export const PLANNER_SYSTEM = `You are the Workflow Scout of Overclock, an execu
   - verify: {url: the record's detail page, fields: [{name, control: a FACT on that page, equals: expected value}]}. The runtime loads it fresh after the write and only reports success if every field matches. Facts usually show human labels ("On hold", "Yes"), so compare against what the detail page displays (use equalsIgnoreCase-compatible values; for a note, verify that the notes list contains the note text by using the full note text as the expected value).
 - Every step can have "when": the step runs only if the expression is true. Gate every step of an edit (its goto, fills, selects, and submit) with the same "when" so nothing is written when no change is needed. Keep each submit in its own short chain: goto edit page -> fills/selects -> submit.
 - Step ids are unique across the whole plan (snake_case). Phase ids are distinct from step ids.
+- Omit optional fields you don't need (for example "when", "after", "note").
 
 # Quality bar
 - Reference only control ids that appear in <observed_apps>, exactly as written. Use the right app for each control. Choose select values from the listed options.
@@ -74,9 +76,26 @@ export function plannerPrompt(req: PlannerRequest): string {
   return parts.join("\n\n");
 }
 
-export async function generatePlan(claude: ClaudeProvider, req: PlannerRequest, purpose = "planner.plan"): Promise<ParseResult<DslPlan>> {
-  const r = await claude.parse({ role: "planner", purpose, system: PLANNER_SYSTEM, user: plannerPrompt(req), schema: DslPlanForModel, maxTokens: 24_000, signal: req.signal });
-  return { ...r, data: normalizeModelPlan(r.data) };
+/** JSON Schema of the plan, embedded in the system prompt (the schema is too large for grammar-constrained decoding). */
+export const PLAN_JSON_SCHEMA = JSON.stringify(z.toJSONSchema(DslPlan));
+
+export const PLANNER_SYSTEM_WITH_SCHEMA = `${PLANNER_SYSTEM}
+
+# Output format
+Respond with one JSON object (no prose, no markdown fences) that validates against this JSON Schema:
+${PLAN_JSON_SCHEMA}`;
+
+export async function generatePlan(claude: ClaudeProvider, req: PlannerRequest & { onText?: (delta: string, snapshot: string) => void }, purpose = "planner.plan"): Promise<ParseResult<DslPlan> & { firstTextMs: number | null; repaired: boolean }> {
+  return claude.json({ role: "planner", purpose, system: PLANNER_SYSTEM_WITH_SCHEMA, user: plannerPrompt(req), schema: DslPlan, normalize: (raw) => normalizeModelPlanLoose(raw), maxTokens: 32_000, signal: req.signal, onText: req.onText });
+}
+
+/** Drop nulls/empty sentinels without failing (validation happens on the result). */
+function normalizeModelPlanLoose(raw: unknown): unknown {
+  try {
+    return normalizeModelPlan(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /** Strategy directives for competitive synthesis. Only offered when the observed apps support them. */

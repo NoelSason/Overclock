@@ -67,7 +67,7 @@ export function Panel({ title, subtitle, actions, children, className, bodyClass
 }
 
 /** A labelled metric. `value` is display text; `raw` is the machine-readable value for tests. */
-export function Stat({ label, value, sub, testId, raw, tone, className }: { label: string; value: ReactNode; sub?: ReactNode; testId?: string; raw?: number | string | null; tone?: "ok" | "accent" | "warn" | "bad"; className?: string }) {
+export function Stat({ label, value, sub, testId, raw, tone, className }: { label: ReactNode; value: ReactNode; sub?: ReactNode; testId?: string; raw?: number | string | null; tone?: "ok" | "accent" | "warn" | "bad"; className?: string }) {
   const toneClass = tone === "ok" ? "text-ok" : tone === "accent" ? "text-accent-soft" : tone === "warn" ? "text-warn" : tone === "bad" ? "text-bad" : "text-fg";
   return (
     <div className={cx("min-w-0", className)}>

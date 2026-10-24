@@ -33,19 +33,19 @@ export function RunConsole({ runId }: { runId: string }) {
     <div className="flex flex-col gap-3" data-testid="run-console">
       <RunHeader store={store} onOpenInterference={() => setInterference(true)} />
       <PipelineTimeline store={store} />
+      <ExecutionGraph store={store} onOpenProgram={() => setProgram(true)} />
       <div className="grid gap-3 xl:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(300px,360px)]">
         <div className="order-3 flex min-w-0 flex-col gap-3 xl:order-1">
           <SwarmMap store={store} onOpenArtifact={setArtifact} />
-          <StrategyPanel store={store} />
         </div>
         <div className="order-1 flex min-w-0 flex-col gap-3 xl:order-2">
-          <ExecutionGraph store={store} onOpenProgram={() => setProgram(true)} />
           <FragmentsPanel store={store} />
           <TaskHeatmap store={store} />
         </div>
         <div className="order-2 flex min-w-0 flex-col gap-3 xl:order-3">
           <ApprovalsPanel store={store} />
           <WorkerWall store={store} />
+          <StrategyPanel store={store} />
         </div>
       </div>
       <Telemetry store={store} />

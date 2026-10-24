@@ -64,11 +64,11 @@ export function Telemetry({ store }: { store: RunStore }) {
         <ActionMix view={view} />
       </Panel>
 
-      <Panel id="summary" title="Run summary" subtitle={view.summary ? "reported by the engine" : undefined}>
+      <GroundTruth />
+
+      <Panel id="summary" title="Run summary" subtitle={view.summary ? "reported by the engine" : undefined} className="lg:col-span-2 2xl:col-span-3">
         <RunSummaryBlock view={view} />
       </Panel>
-
-      <GroundTruth />
     </div>
   );
 }
@@ -115,8 +115,8 @@ function ModelUsage({ view }: { view: RunView }) {
                   <div className="h-1.5 rounded-sm bg-violet/70" style={{ width: `${(p.count / maxCount) * 100}%` }} />
                 </td>
                 <td className="tnum py-1 text-right font-mono text-fg">{fmtInt(p.count)}</td>
-                <td className="tnum py-1 pl-2 text-right font-mono text-muted">{fmtMs(p.ms)}</td>
-                <td className="tnum py-1 pl-2 text-right font-mono text-muted">{fmtUsd(p.costUsd)}</td>
+                <td className="tnum py-1 pl-2 text-right font-mono whitespace-nowrap text-muted">{fmtMs(p.ms)}</td>
+                <td className="tnum py-1 pl-2 text-right font-mono whitespace-nowrap text-muted">{fmtUsd(p.costUsd)}</td>
               </tr>
             ))}
           </tbody>

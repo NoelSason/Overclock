@@ -98,13 +98,13 @@ export function criticalPath(segments: SegmentTemplate[], edges: SegmentEdge[]):
 
 // --- Layout ---------------------------------------------------------------------------------
 
-export const NODE_W = 228;
+export const NODE_W = 212;
 export const NODE_H = 104;
-const COL_GAP = 48;
+const COL_GAP = 36;
 const ROW_GAP = 16;
 const PAD = 16;
 const HEADER = 30;
-const PHASE_GAP_X = 72;
+const PHASE_GAP_X = 44;
 const PHASE_GAP_Y = 32;
 
 export interface PhaseBox {
