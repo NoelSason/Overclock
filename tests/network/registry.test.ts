@@ -277,3 +277,90 @@ describe("concurrent subscribers", () => {
     await Promise.all(subscribers.map((s) => s.close()));
   });
 });
+
+describe("lookup sources and artifact cache", () => {
+  it("auto-watches unknown origins, dedupes in-flight lookups, and bounds them by lookupTimeoutMs", async () => {
+    const capabilityId = `src-${uid()}`;
+    const versionId = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 1, origin }));
+    await admin.promote(versionId);
+    const query = { origins: [origin], canonicalOperation: `op:${capabilityId}`, signatures: [] };
+
+    const fresh = await client("lookup-fresh", { publishEnabled: false });
+    const [a, b] = await Promise.all([fresh.lookup(query), fresh.lookup(query)]);
+    expect(a).toBe(b); // one in-flight lookup served both callers
+    expect(a.source).toBe("network");
+    expect(a.candidates[0]?.versionId).toBe(versionId);
+    expect((await fresh.lookup(query)).source).toBe("local-cache");
+    expect(fresh.stats()).toMatchObject({ lookups: 3, networkHits: 1, localHits: 1 });
+
+    const impatient = await client("lookup-timeout", { publishEnabled: false, lookupTimeoutMs: 1 });
+    const t = await impatient.lookup({ origins: [testOrigin()], signatures: [] });
+    expect(t.source).toBe("timeout");
+    expect(t.ms).toBeLessThan(50);
+    await Promise.all([fresh.close(), impatient.close()]);
+  });
+
+  it("drops a corrupted cache entry and re-fetches from the network", async () => {
+    const capabilityId = `cache-${uid()}`;
+    const versionId = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 1, origin }));
+    await admin.promote(versionId);
+    await waitFor(() => reader.activeVersion(capabilityId) !== null, 5000, "active version");
+    const first = await reader.fetchArtifact(versionId);
+    expect(first.source).toBe("network");
+    const hash = reader.activeVersion(capabilityId)!.contentHash;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(reader.config.dataDir, "capabilities", `${hash}.json`), '{"tampered":true}');
+    const again = await reader.fetchArtifact(versionId);
+    expect(again.source).toBe("network");
+    expect(sha256Hex(readFileSync(join(reader.config.dataDir, "capabilities", `${hash}.json`), "utf8"))).toBe(hash);
+    await expect(reader.fetchArtifact(`missing-${uid()}@1`)).rejects.toThrow(/does not exist/);
+  });
+
+  it("counts verified reuses per version", async () => {
+    const capabilityId = `reuse-${uid()}`;
+    const versionId = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 1, origin }));
+    await admin.promote(versionId);
+    await publisher.reportReuse(versionId, true);
+    await validator.reportReuse(versionId, true);
+    await publisher.reportReuse(versionId, false);
+    await waitFor(() => reader.activeVersion(capabilityId)?.successfulReuses === 2, 5000, "reuse counters");
+  });
+});
+
+describe("activity feed and admin rollbacks", () => {
+  it("writes sanitized activity rows", async () => {
+    const capabilityId = `act-${uid()}`;
+    const versionId = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 1, origin }));
+    const seen: string[] = [];
+    const off = reader.onActivity((a) => {
+      if (a.capabilityId === capabilityId) seen.push(`${a.kind}|${a.actor}|${a.detail}`);
+    });
+    await validator.quarantine(versionId, "mail ops@example.com, see https://evil.example/path?session=0123456789abcdef");
+    await waitFor(() => seen.some((s) => s.startsWith("capability.quarantined")), 5000, "quarantine activity");
+    off();
+    const line = seen.find((s) => s.startsWith("capability.quarantined"))!;
+    expect(line).toContain("validator-v");
+    expect(line).toContain("[email]");
+    expect(line).toContain("evil.example");
+    expect(line).not.toMatch(/ops@example\.com|path\?|0123456789abcdef/);
+  });
+
+  it("restores the previous version and treats REVOKED as terminal", async () => {
+    const capabilityId = `restore-${uid()}`;
+    const v1 = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 1, origin }));
+    await admin.promote(v1);
+    const v2 = await proposeVerified(publisher, validator, sampleCapability({ capabilityId, version: 2, origin }));
+    await admin.promote(v2);
+    await expect(validator.restorePreviousVersion(capabilityId, "regression")).rejects.toThrow(/not authorized/);
+    await admin.restorePreviousVersion(capabilityId, "regression in checkout");
+    await waitFor(() => reader.activeVersion(capabilityId)?.versionId === v1, 5000, "restored v1");
+    await waitFor(() => reader.versionInfo(v2)?.state === "QUARANTINED", 5000, "v2 quarantined");
+    await expect(admin.restorePreviousVersion(capabilityId, "again")).rejects.toThrow(/no previous known-good version/);
+
+    await admin.revoke(v2, "superseded");
+    await waitFor(() => reader.versionInfo(v2)?.state === "REVOKED", 5000, "v2 revoked");
+    await expect(validator.recordValidation(passValidation(v2))).rejects.toThrow(/version is revoked/);
+    await expect(validator.quarantine(v2, "x")).rejects.toThrow(/illegal publication transition REVOKED -> QUARANTINED/);
+    await expect(admin.promote(v2)).rejects.toThrow(/only VERIFIED or CANARY/);
+  });
+});
