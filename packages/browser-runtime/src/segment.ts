@@ -4,7 +4,7 @@ import { evaluateBool } from "@overclock/compiler";
 import { checkPostconditions, checkPreconditions, executeAction, exprScope, openDialogText, type ActionEnv, type ActionOutcome, type RecordScope } from "./actions";
 import { AmbiguousLocatorError, ApprovalRequiredError, CancelledError, HiddenTargetError, LocatorNotFoundError, RuntimeError, UnexpectedDialogError } from "./errors";
 import { resolveLocator } from "./locate";
-import { readBack, type ReadBackResult } from "./readback";
+import { readBack, writeTargetUrl, type ReadBackResult } from "./readback";
 import type { BrowserWorker } from "./worker";
 
 export interface ActionRecord {
@@ -333,7 +333,7 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
 
     if (node.verify && isWrite(node)) {
       hooks.onOp?.("verify", node);
-      const rb = await readBack(env, node.verify, { timeoutMs: node.timeoutMs });
+      const rb = await readBack(env, node.verify, { timeoutMs: node.timeoutMs, entityUrl: writeTargetUrl(input.nodes, node.id, input.scope, env.origin) });
       result.receipts.push({ nodeId: node.id, readBack: rb, writeStatus: outcome.writeStatus });
       hooks.onAction?.({ taskId: input.taskId, nodeId: node.id + ":verify", actionType: "verify", ms: rb.ms, ok: rb.ok, modelCalls: 0 });
       if (!rb.ok) {

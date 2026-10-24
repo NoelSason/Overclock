@@ -65,7 +65,7 @@ export interface RawDom {
   forms: RawForm[];
   tables: RawTable[];
   dialogs: RawDialog[];
-  facts: { label: string; value: string; cssPath: string; xpath: string }[];
+  facts: { label: string; value: string; cssPath: string; xpath: string; region?: boolean }[];
   text: string;
 }
 
@@ -280,6 +280,26 @@ export function extractDom(opts: { maxText: number; maxControls: number; scopeSe
     if (cells.length !== 2 || cells[0]!.tagName !== "TH" || cells[1]!.tagName !== "TD") continue;
     const label = clean(cells[0]!.textContent);
     if (label) facts.push({ label, value: clean((cells[1] as HTMLElement).innerText).slice(0, 200), cssPath: cssPath(cells[1]!), xpath: `//tr/th[normalize-space()=${JSON.stringify(label)}]/following-sibling::td[1]` });
+  }
+
+  // Titled content regions without fields or facts (a notes list, comments, a message): one fact
+  // whose value is the region's content. Present even when the region is empty ("No notes yet").
+  for (const region of Array.from(root.querySelectorAll("section,article,[role=region]"))) {
+    if (region.closest("[role=dialog],[role=alertdialog],dialog,nav") || region.querySelector("dl,table,section,article,[role=region]")) continue;
+    const label = clean(region.querySelector("h2,h3")?.textContent);
+    if (!label) continue;
+    const c = region.cloneNode(true) as HTMLElement;
+    for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
+    const parts: string[] = [];
+    const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const t = clean(walk.currentNode.textContent);
+      if (t) parts.push(t);
+    }
+    const value = parts.join(" ");
+    if (!value) continue;
+    const xpath = `//*[self::section or self::article or @role="region"][(.//h2|.//h3)[normalize-space()=${JSON.stringify(label)}]]`;
+    facts.push({ label, value: value.slice(0, 1000), cssPath: cssPath(region), xpath, region: true });
   }
 
   const headings = Array.from(root.querySelectorAll("h1,h2,h3")).map((h) => clean(h.textContent)).filter(Boolean).slice(0, 20);

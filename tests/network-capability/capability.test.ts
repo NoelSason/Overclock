@@ -5,6 +5,7 @@ import { publishCapability } from "../../services/engine/src/network";
 import {
   analyzeCapability,
   canonicalJson,
+  pathTemplateFor,
   canonicalOperation,
   CapabilityRejectedError,
   computeArtifactHash,
@@ -282,5 +283,13 @@ describe("engine publication", () => {
     expect(events.find((e) => e.type === "network.publish")).toMatchObject({ state: "PROPOSED" });
     expect(sent).toHaveLength(1);
     expect(verifyArtifactHash(sent[0]!)).toBe(true);
+  });
+});
+
+describe("path templates", () => {
+  it("names a path parameter after the record field, with or without URL encoding", () => {
+    expect(pathTemplateFor("/orders/:id/edit", ["/orders/{$rec.orderId}/edit"], ["orderId"])).toBe("/orders/{orderId}/edit");
+    expect(pathTemplateFor("/orders/:id", ["/orders/{encode($rec.orderId)}"], ["orderId"])).toBe("/orders/{orderId}");
+    expect(pathTemplateFor("/tickets/:id", ["/tickets/{encode($out.decide.ticketId)}"], ["orderId"])).toBe("/tickets/{id}");
   });
 });

@@ -235,7 +235,8 @@ export function toAppControls(app: string, obs: Observation): AppControl[] {
       id,
       app,
       page: obs.routePattern,
-      role: "definition",
+      // A titled region's fact is a collection (notes, comments); verification counts its entries.
+      role: f.region ? "region" : "definition",
       name: f.label,
       kind: "fact",
       locator: { controlId: id, strategies: [{ kind: "css", selector: `xpath=${f.xpath}` }, { kind: "css", selector: f.cssPath }], confidence: 0.85, evidence: ev(`fact:${f.label}`), regionFingerprint: obs.fingerprint.regions.facts },

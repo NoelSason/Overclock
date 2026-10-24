@@ -85,7 +85,11 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
   }
 }
 
-async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
+/**
+ * Read a control's value. The text of a titled region (section, article, role=region) is its
+ * content without headings and form chrome: the same value perception records as a region fact.
+ */
+export async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
   if (attr === "href") return (await locator.getAttribute("href")) ?? "";
   if (attr === "value") {
     return locator.evaluate((el) => {
@@ -98,6 +102,17 @@ async function readControl(locator: Locator, attr: "text" | "value" | "href"): P
   return locator.evaluate((el) => {
     if (el instanceof HTMLSelectElement) return el.selectedOptions[0]?.textContent?.trim() ?? el.value;
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
+    if (el.matches("section,article,[role=region]")) {
+      const c = el.cloneNode(true) as HTMLElement;
+      for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
+      const parts: string[] = [];
+      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) {
+        const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (t) parts.push(t);
+      }
+      return parts.join(" ");
+    }
     return ((el as HTMLElement).innerText ?? el.textContent ?? "").trim();
   });
 }

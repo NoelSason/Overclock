@@ -117,7 +117,17 @@ export const VerificationSpec = z.object({
   /** Where to read the authoritative state back from (fresh navigation). */
   url: ValueSpec,
   fields: z.array(
-    z.object({ target: SemanticLocator, equals: ValueSpec, attr: z.enum(["value", "text"]).default("text"), name: z.string() }),
+    z.object({
+      target: SemanticLocator,
+      equals: ValueSpec,
+      attr: z.enum(["value", "text"]).default("text"),
+      name: z.string(),
+      /**
+       * "entry": the target is a collection region (a list of notes, comments, log lines). Passes
+       * only when exactly one entry's text equals the expected value; two or more is a duplicate.
+       */
+      match: z.enum(["value", "entry"]).optional(),
+    }),
   ),
 });
 export type VerificationSpec = z.infer<typeof VerificationSpec>;

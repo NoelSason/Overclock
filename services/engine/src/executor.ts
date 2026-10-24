@@ -9,6 +9,7 @@ import {
   OriginBlockedError,
   PreconditionFailedError,
   readBack,
+  writeTargetUrl,
   RuntimeError,
   runSegment,
   VerificationFailedError,
@@ -481,6 +482,10 @@ export class Executor {
           return this.scheduler.fail(t.taskId, "FAILED", `canary verification failed twice; template blocked: ${msg}`);
         }
       }
+      if (err.readBack.duplicate || err.readBack.entityMismatch) {
+        this.receipt(t, err.nodeId ?? "", "FAILED", err.readBack.fields);
+        return this.scheduler.fail(t.taskId, "FAILED", `${err.readBack.duplicate ? "duplicate entries" : "wrong entity"}; retrying the write cannot fix this: ${msg}`);
+      }
       if (t.attempt < MAX_RETRIES.verification) return this.scheduler.retry(t.taskId, this.backoff(t.attempt), `verification mismatch, retrying: ${msg}`);
       this.receipt(t, err.nodeId ?? "", "FAILED", err.readBack.fields);
       return this.scheduler.fail(t.taskId, "FAILED", msg);
@@ -523,13 +528,18 @@ export class Executor {
       const rb = await readBack(
         { page, origin: aw.worker.originOf(t.segment.app!), allowedOrigins: new Set(this.o.apps.map((a) => new URL(a.origin).origin)), scope: t.record.scope, locatorOverrides: this.overrides.get(t.segment.id) ?? new Map(), defaultTimeoutMs: 10_000 },
         writeNode.verify,
-        { timeoutMs: 15_000 },
+        { timeoutMs: 15_000, entityUrl: writeTargetUrl(t.segment.nodes, writeNode.id, t.record.scope, aw.worker.originOf(t.segment.app!)) },
       );
       if (rb.ok) {
         this.receipt(t, writeNode.id, "VERIFIED", rb.fields);
         this.o.emit({ type: "log", level: "info", message: `${t.taskId}: write had committed despite "${reason.slice(0, 80)}"; reconciled without a second write` });
         this.scheduler.complete(t.taskId, "VERIFIED", t.segment.nodeIds);
         return;
+      }
+      // More than one matching entry, or the wrong entity: the state is wrong, and another write can only make it worse.
+      if (rb.duplicate || rb.entityMismatch) {
+        this.receipt(t, writeNode.id, "FAILED", rb.fields);
+        return this.scheduler.fail(t.taskId, "FAILED", rb.duplicate ? `duplicate entries after an uncertain write; not retrying: ${reason}` : `verification reads a different entity (${rb.entityMismatch}); not retrying`);
       }
       if (writeNode.retryPolicy === "verify-before-retry" && t.attempt < MAX_RETRIES.uncertain) return this.scheduler.retry(t.taskId, this.backoff(t.attempt), `write did not land (read-back mismatch); safe to retry: ${reason}`);
       this.receipt(t, writeNode.id, "UNCONFIRMED", rb.fields);

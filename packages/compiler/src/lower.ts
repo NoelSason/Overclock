@@ -171,7 +171,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
                 issues.push({ severity: "error", code: "unknown-control", message: `Step "${s.id}" verifies with unknown control "${f.control}"`, stepId: s.id });
                 return null;
               }
-              return { name: f.name, target: locatorOf(vc), equals: { expr: f.equals }, attr: attrFor(vc) };
+              return { name: f.name, target: locatorOf(vc), equals: { expr: f.equals }, attr: attrFor(vc), ...(vc.role === "region" ? { match: "entry" as const } : {}) };
             })
             .filter((x): x is NonNullable<typeof x> => x !== null);
           if (verifyFields.length === 0) issues.push({ severity: "error", code: "missing-verification", message: `Submit "${s.id}" has no read-back verification fields`, stepId: s.id });

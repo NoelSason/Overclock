@@ -72,8 +72,10 @@ export function pathTemplateFor(routeFamily: string, templates: string[], record
     if (tsegs.length !== segs.length) continue;
     tsegs.forEach((ts, i) => {
       if (segs[i] !== ":id") return;
-      const m = /^\{\s*\$rec\.([A-Za-z_][A-Za-z0-9_]*)\s*\}$/.exec(ts);
-      if (m && recordFields.includes(m[1]!)) names[i] ??= m[1];
+      // {$rec.f} or {encode($rec.f)}: URL-encoding doesn't change which record field fills the segment.
+      const m = /^\{\s*(?:\$rec\.([A-Za-z_][A-Za-z0-9_]*)|encode\(\s*\$rec\.([A-Za-z_][A-Za-z0-9_]*)\s*\))\s*\}$/.exec(ts);
+      const field = m?.[1] ?? m?.[2];
+      if (field && recordFields.includes(field)) names[i] ??= field;
     });
   }
   let n = 0;

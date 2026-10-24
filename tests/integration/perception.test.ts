@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BrowserManager, resolveLocator } from "@overclock/browser-runtime";
+import { BrowserManager, readControl, resolveLocator } from "@overclock/browser-runtime";
 import { observe, routePattern, toAppControls } from "@overclock/perception";
 import { startMiniApp, type MiniApp } from "../fixtures/mini-app";
 
@@ -60,6 +60,26 @@ describe("perception", () => {
     await page.goto(`${app.origin}/items/I-4`);
     const other = await observe(page);
     expect(other.fingerprint.page).toBe(detail.fingerprint.page);
+    await ctx.close();
+  });
+
+  it("records a titled region as one fact, including its empty state, and reads it the same way", async () => {
+    const ctx = await browser.newContext({ allowedOrigins: [app.origin] });
+    const page = await ctx.newPage();
+    const region = (inner: string) =>
+      `<main><section aria-labelledby="h"><h2 id="h">Internal notes</h2>${inner}<form><label for="n">Note</label><textarea id="n"></textarea><button>Add note</button></form></section>` +
+      `<section><h2>Details</h2><dl><dt>Status</dt><dd>Open</dd></dl></section></main>`;
+    await page.setContent(region(`<ul><li><p>Refund confirmed</p><time>Oct 1</time></li><li><p>Called the customer</p></li></ul>`));
+    const facts = toAppControls("mini", await observe(page)).filter((c) => c.kind === "fact");
+    // The region with a definition list keeps its per-field facts and gets no region fact.
+    expect(facts.map((f) => f.name)).toEqual(["Details › Status", "Internal notes"]);
+    const notes = facts.find((f) => f.name === "Internal notes")!;
+    expect(notes.sample).toBe("Refund confirmed Oct 1 Called the customer");
+    const r = await resolveLocator(page, notes.locator, { timeoutMs: 500 });
+    expect(await readControl(r.locator, "text")).toBe("Refund confirmed Oct 1 Called the customer");
+    await page.setContent(region(`<p class="muted">No internal notes yet.</p>`));
+    const empty = toAppControls("mini", await observe(page)).find((c) => c.name === "Internal notes")!;
+    expect(empty.sample).toBe("No internal notes yet.");
     await ctx.close();
   });
 });

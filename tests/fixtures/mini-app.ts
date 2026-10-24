@@ -9,6 +9,19 @@ export interface MiniApp {
   items: Map<string, { id: string; name: string; status: string; notes: string[] }>;
   failNextWrite: "none" | "before-commit-503" | "after-commit-500";
   writes: number;
+  /** Per-item activity log at /items/:id/activity (a titled list region with an add-entry form). */
+  activity: Map<string, string[]>;
+  /** Text shown in a separate "Elsewhere" region on the activity page (outside the Activity list). */
+  decoy: string | null;
+  /** Draft kept in the add-entry textarea (as apps do after a rejected submission). */
+  draft: string | null;
+  /**
+   * Failure mode of activity POSTs. "silent-reject" answers 200 with an error and keeps the draft,
+   * without committing; "-always" variants apply to every POST, the others only to the next one.
+   */
+  failActivity: "none" | "before-commit-503" | "after-commit-500" | "commit-twice" | "silent-reject" | "silent-reject-always";
+  /** Activity entries committed (a double commit counts twice). */
+  activityCommits: number;
   close(): Promise<void>;
 }
 
@@ -17,7 +30,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export async function startMiniApp(): Promise<MiniApp> {
   const items = new Map<string, { id: string; name: string; status: string; notes: string[] }>();
   for (let i = 1; i <= 23; i++) items.set(`I-${i}`, { id: `I-${i}`, name: `Item ${i}`, status: i % 3 === 0 ? "closed" : "open", notes: [] });
-  const app: MiniApp = { origin: "", items, failNextWrite: "none", writes: 0, close: async () => undefined };
+  const app: MiniApp = { origin: "", items, failNextWrite: "none", writes: 0, activity: new Map(), decoy: null, draft: null, failActivity: "none", activityCommits: 0, close: async () => undefined };
 
   const page = (title: string, body: string) => `<!doctype html><html><head><title>${esc(title)}</title></head><body><main><h1>${esc(title)}</h1>${body}</main></body></html>`;
 
@@ -41,6 +54,40 @@ export async function startMiniApp(): Promise<MiniApp> {
             .join("")}</tbody></table><nav>${p < pages ? `<a href="/items?page=${p + 1}">Next page</a>` : `<span aria-disabled="true">Next page</span>`}</nav>`,
         ),
       );
+      return;
+    }
+    const act = /^\/items\/([^/]+)\/activity$/.exec(url.pathname);
+    const actItem = act ? items.get(decodeURIComponent(act[1]!)) : undefined;
+    if (actItem) {
+      const entries = app.activity.get(actItem.id) ?? [];
+      const render = (status: number, error = "") =>
+        send(
+          status,
+          page(
+            `Activity ${actItem.id}`,
+            `<section aria-labelledby="h-act"><h2 id="h-act">Activity</h2>${entries.length ? `<ul>${entries.map((e, i) => `<li><p>${esc(e)}</p><time>day ${i + 1}</time></li>`).join("")}</ul>` : `<p>No activity yet.</p>`}` +
+              `${error ? `<p role="alert">${esc(error)}</p>` : ""}<form method="post" action="/items/${actItem.id}/activity"><label for="entry">Entry</label><textarea id="entry" name="body">${esc(app.draft ?? "")}</textarea><button type="submit">Add entry</button></form></section>` +
+              (app.decoy ? `<section><h2>Elsewhere</h2><ul><li><p>${esc(app.decoy)}</p></li></ul></section>` : ""),
+          ),
+        );
+      if (req.method === "GET") return render(200);
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const text = new URLSearchParams(body).get("body") ?? "";
+        const mode = app.failActivity;
+        if (!mode.endsWith("-always")) app.failActivity = "none";
+        if (mode === "before-commit-503") return send(503, page("Unavailable", "<p>Try again</p>"));
+        if (mode === "silent-reject" || mode === "silent-reject-always") {
+          app.draft = text;
+          return render(200, "Could not add the entry. Please try again.");
+        }
+        app.activity.set(actItem.id, [...entries, ...(mode === "commit-twice" ? [text, text] : [text])]);
+        app.activityCommits += mode === "commit-twice" ? 2 : 1;
+        if (mode === "after-commit-500") return send(500, page("Error", "<p>Internal error</p>"));
+        res.writeHead(303, { location: `/items/${actItem.id}/activity` });
+        res.end();
+      });
       return;
     }
     const m = /^\/items\/([^/]+)(\/edit)?$/.exec(url.pathname);
