@@ -98,6 +98,8 @@ unless noted.
 | Warm 500 records, earlier code vs new code, trials alternated on two engines under the same machine load | Medians 16.2 s and 16.1 s, all 500/500, no model calls: no regression (the 14.8 s baseline ran with less background load on the machine) |
 | Same alternating trials, earlier code vs single-page table reads (plus one-call entry counts and checkbox detection) | Medians 14.8 s and 13.3 s (first verified write 8.2 s and 6.6 s), all 500/500, no model calls; an earlier pair under heavier load: 16.0 s and 14.1 s |
 | Same alternating trials, that code (an isolated copy) vs one selector-engine setup per page and the faster cost simulation | Two series: medians 13.78 s and 13.32 s (new faster in 3 of 3 pairs), then 14.00 s and 13.75 s (2 of 3, one tie); first verified write 7.3–7.6 s and about 6.9 s; all 500/500 |
+| Scheduling order on one engine, alternating: bottom level across records vs record order | Wall medians 13.18 s and 12.96 s; first verified write 6.4–6.6 s and 0.83–0.91 s; all 500/500 |
+| Final code vs the earlier code, alternating, heavier machine load | Medians 15.86 s and 13.78 s; first verified write 8.6 s and 0.89 s; all 500/500, 0 duplicate, 0 collateral |
 | Worker and browser counts on the current code, alternating | 4 browsers with 16 workers fastest (13.1 s, 14.6 s); 24 workers 13.5 s, 14.8 s; 8 browsers 14.5–15.4 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 

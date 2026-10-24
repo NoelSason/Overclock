@@ -194,7 +194,11 @@ minutes), makes `NEEDS_APPROVAL` final and skips its dependents.
 ### Leases and the watchdog
 
 A worker leases the highest-priority ready task whose app is under its concurrency cap and
-whose locks are free. The lease lasts `max(30 s, 8 × estimated segment time)`. Every 2 s a
+whose locks are free. Priority is records in input order, and within a record the segment with
+the longest remaining path (bottom level) first (`recordFirstPriority`), so records complete
+progressively. Ordering by bottom level across all records ran every record's first read before
+any record wrote: on warm 500-record runs the first verified write came at 6.4–6.6 s instead of
+0.8–0.9 s, with the same wall time. `ablation.criticalPathPriority: false` orders by record only. The lease lasts `max(30 s, 8 × estimated segment time)`. Every 2 s a
 watchdog finds expired leases and crashes the stalled worker's pages, so the task's own error
 path runs, then extends the lease to avoid double handling.
 
@@ -361,7 +365,10 @@ Measured and not done:
   exact URL.
 - **Not waiting for the write's redirect to commit** (Playwright's `noWaitAfter`), since the
   verification replaces that page anyway. Chromium lets the pending form navigation commit over
-  a later page load, so the verification load was interrupted, twice in a row in tests.
+  a later page load, so the verification load was interrupted, twice in a row in tests. Stopping
+  the redirect first with the DevTools protocol's `Page.stopLoading` failed differently: the
+  DevTools session detached when the submission moved to a new page target. The click therefore
+  still waits for the redirect, which rules out both races.
 - **Skipping the route guard for plain GETs.** Interception costs about 1 ms per page load, and
   route patterns match URLs, not methods, so excluding GETs would also let a read-only page's
   POST through.
@@ -372,6 +379,9 @@ Measured and not done:
   both 1280×860 and 1280×400, so drawing area isn't the cost. That rate is also the ceiling: a
   warm 500-record run needs about 3,700 page loads and already sustains about 300 a second across
   4 browsers, so only fewer page loads would make it much faster.
+- **Dropping the page-lifetime network listeners** that `settle()` counts requests with: 16
+  routed pages loaded 293–311 pages a second with them and 296–301 without, so they cost nothing
+  measurable.
 - **More workers or browsers.** Alternating trials on the current code: 4 browsers with 16 workers
   (the defaults) ran 13.1 s and 14.6 s; 24 workers 13.5 s and 14.8 s; 8 browsers 14.5–15.4 s.
 - **Starting the holds phase before the order writes finish.** Holds reads only the orders'
@@ -463,8 +473,8 @@ seeded by page loads the scouts and dry-run probes measured. During execution it
 every action (exponentially weighted averages per app, per action type, and per segment).
 
 The **simulator** runs an event-driven list schedule of the expanded task DAG: W identical
-workers, per-app caps, phase barriers, critical-path priority, and serialized per-run constant
-locks.
+workers, per-app caps, phase barriers, the executor's task priority, and serialized per-run
+constant locks.
 
 **Worker choice.** `recommendWorkers` simulates 1, 2, 4, 6, 8, 12, 16, 24, and 32 workers (up
 to `maxWorkers`) and picks the smallest count within 6% of the best makespan.

@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-24T22:24:09.641Z",
+  "label": "round4-new",
+  "records": 500,
+  "workers": 16,
+  "trials": 1,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 13752,
+  "results": [
+    {
+      "runId": "run_20261024222355_da442b",
+      "status": "completed",
+      "wallMs": 13752,
+      "firstVerifiedMs": 1024,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.969,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

@@ -16,7 +16,8 @@ verified execution programs instead of reasoning about every action.
 > ([`docs/NETWORK.md`](docs/NETWORK.md#results)). A request that differs in any value, threshold,
 > or condition never reuses another operation's plan: in a live run it found no capability and
 > made zero writes. Warm, the engine reconciles 500 records across three apps in a median 13.3 s
-> with every write verified by a fresh read (500/500). See [Benchmark
+> with every write verified by a fresh read (500/500), and the first verified write lands in
+> under a second. See [Benchmark
 > results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
@@ -269,7 +270,9 @@ trials; results in `benchmarks/results/warm/`.
 
 | Engine | Median wall (range) | Correct |
 | --- | --- | --- |
-| Final: single-page tables read in one round of calls | **13.3 s** (13.2–13.6) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
+| Final: records complete in order, one selector-engine setup per page | **13.8 s** (13.8–14.1), first verified write **0.89 s** | 500/500 in every trial, 0 duplicate, 0 collateral writes |
+| Before this evening's changes, in the same alternating trials (heavier machine load) | 15.9 s (15.8–16.3), first verified write 8.6 s | 500/500 |
+| Single-page tables read in one round of calls | 13.3 s (13.2–13.6) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
 | Before that, in the same alternating trials (same machine load) | 14.8 s (14.8–15.8) | 500/500 |
 | 4 browsers, each behind its own server process; XPath-anchored fields read in one page call | 14.8 s (14.7–15.5) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
 | Before the batched reads | 17.2 s (17.0–17.3) | 500/500 |
