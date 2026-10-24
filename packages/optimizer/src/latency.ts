@@ -23,6 +23,8 @@ export class LatencyModel {
   private readonly segment = new Map<string, Ewma>();
   private readonly action = new Map<string, Ewma>();
   readonly defaults = { navMs: 250, writeMs: 450, actionMs: 30, fieldMs: 15, tableRowMs: 2 };
+  /** Observed page counts of paginated tables, keyed by table control id. */
+  readonly tablePages = new Map<string, number>();
 
   private ewma(m: Map<string, Ewma>, k: string): Ewma {
     let e = m.get(k);
@@ -71,7 +73,8 @@ export class LatencyModel {
         return a(n.type, this.defaults.actionMs);
       case "extract":
         if (n.table) {
-          const pages = n.table.pagination ? Math.min(n.table.pagination.maxPages, 4) : 1;
+          const observed = n.table.target.controlId ? this.tablePages.get(n.table.target.controlId) : undefined;
+          const pages = n.table.pagination ? Math.min(n.table.pagination.maxPages, observed ?? 4) : 1;
           return pages * (this.navMs(n.app).ms + 60);
         }
         return (n.fields?.length ?? 1) * this.defaults.fieldMs;

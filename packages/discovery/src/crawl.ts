@@ -147,7 +147,9 @@ export function buildAppModel(app: AppBinding, observations: Observation[], load
       .map((t) => {
         const ctrl = p.controlIds.map((id) => controls[id]!).find((c) => c.kind === "table" && c.detail === t.headers.join(" | "));
         const paginated = p.controlIds.some((id) => controls[id]?.kind === "pagination");
-        return { page: p.routePattern, controlId: ctrl?.id ?? "", headers: t.headers, rowsPerPage: t.rowCount, paginated };
+        const text = byPattern.get(p.routePattern)?.[0]?.text ?? "";
+        const m = /page\s+\d+\s+of\s+(\d+)/i.exec(text);
+        return { page: p.routePattern, controlId: ctrl?.id ?? "", headers: t.headers, rowsPerPage: t.rowCount, paginated, pages: m ? Number(m[1]) : undefined };
       }),
   );
   const bulkOperations = pages

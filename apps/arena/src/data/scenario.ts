@@ -15,6 +15,8 @@ export interface ScenarioState {
   recordKeys: string[];
   /** Snapshot the scenario starts from; judge edits to unprocessed records are applied here too. */
   base: Dataset;
+  /** Pristine generated dataset (reset restores this and discards judge edits). */
+  initial?: Dataset;
   createdAt: number;
   judgeEdits: { at: number; entity: string; patch: Record<string, unknown> }[];
 }
@@ -64,6 +66,7 @@ export class ScenarioManager {
       records: req.records,
       recordKeys,
       base: cloneDataset(dataset),
+      initial: cloneDataset(dataset),
       createdAt: Date.now(),
       judgeEdits: [],
     };
@@ -75,7 +78,10 @@ export class ScenarioManager {
   /** Restore the starting snapshot (every benchmark mode starts from identical state). */
   reset(): PublicScenario | null {
     if (!this.state) return null;
+    if (this.state.initial) this.state.base = cloneDataset(this.state.initial);
+    this.state.judgeEdits = [];
     this.store.load(cloneDataset(this.state.base));
+    this.persist();
     return this.publicScenario();
   }
 

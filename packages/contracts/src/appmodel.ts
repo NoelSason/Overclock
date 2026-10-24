@@ -137,7 +137,7 @@ export const AppOperation = z.object({
 export type AppOperation = z.infer<typeof AppOperation>;
 
 export const AppFeatures = z.object({
-  listTables: z.array(z.object({ page: z.string(), controlId: z.string(), headers: z.array(z.string()), rowsPerPage: z.number(), paginated: z.boolean() })),
+  listTables: z.array(z.object({ page: z.string(), controlId: z.string(), headers: z.array(z.string()), rowsPerPage: z.number(), paginated: z.boolean(), pages: z.number().optional() })),
   bulkOperations: z.array(z.object({ page: z.string(), description: z.string(), controlIds: z.array(z.string()) })),
   search: z.array(z.object({ page: z.string(), controlId: z.string() })),
 });

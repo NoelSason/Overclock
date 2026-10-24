@@ -6,3 +6,4 @@ export * from "./events";
 export * from "./reducer";
 export * from "./scenario";
 export * from "./api";
+export * from "./benchmark";

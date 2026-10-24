@@ -9,7 +9,7 @@ export interface RecordScope {
   rec: Record<string, unknown>;
   input: Record<string, unknown>;
   out: Record<string, unknown>;
-  phase: Record<string, unknown[]>;
+  phase: Record<string, unknown>;
 }
 
 export function exprScope(s: RecordScope): Scope {
