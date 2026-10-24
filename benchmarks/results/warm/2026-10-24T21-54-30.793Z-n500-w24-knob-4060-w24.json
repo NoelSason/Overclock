@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-24T21:54:30.793Z",
+  "label": "knob-4060-w24",
+  "records": 500,
+  "workers": 24,
+  "trials": 1,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 15394,
+  "results": [
+    {
+      "runId": "run_20261024215415_a633ff",
+      "status": "completed",
+      "wallMs": 15394,
+      "firstVerifiedMs": 7680,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.975,
+      "maxConcurrency": 24,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

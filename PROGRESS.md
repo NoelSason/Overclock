@@ -84,7 +84,7 @@ unless noted.
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
 | `npx vitest run --project unit` | 159 passed |
-| `npx vitest run --project integration` | 128 passed, 2 skipped (live) |
+| `npx vitest run --project integration` | 129 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `pnpm test:network-capability` | 34 passed |
 | `pnpm test:network` | 26 passed |
