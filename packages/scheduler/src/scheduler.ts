@@ -87,6 +87,9 @@ export class Scheduler {
   private readonly canaryPassed = new Set<string>();
   /** Tasks per segment in an active state (leased, running, verifying, repairing, reconciling). */
   private readonly activeBySegment = new Map<string, number>();
+  /** Active non-inline tasks per app and in total (see activeCount). */
+  private readonly activeByApp = new Map<string, number>();
+  private activeTotal = 0;
   private readonly sealed = new Set<string>();
   private programSealed = false;
   private recordSeq = 0;
@@ -299,7 +302,15 @@ export class Scheduler {
   private assignState(t: TaskInstance, state: TaskState): void {
     const was = ACTIVE.has(t.state);
     const now = ACTIVE.has(state);
-    if (was !== now) this.activeBySegment.set(t.segmentId, (this.activeBySegment.get(t.segmentId) ?? 0) + (now ? 1 : -1));
+    if (was !== now) {
+      const d = now ? 1 : -1;
+      this.activeBySegment.set(t.segmentId, (this.activeBySegment.get(t.segmentId) ?? 0) + d);
+      if (!t.inline) {
+        const app = t.segment.app ?? "";
+        this.activeByApp.set(app, (this.activeByApp.get(app) ?? 0) + d);
+        this.activeTotal += d;
+      }
+    }
     t.state = state;
   }
 
@@ -641,14 +652,20 @@ export class Scheduler {
     return w;
   }
 
+  /** Non-inline tasks in an active state, overall or for one app (O(1): kept by assignState). */
   activeCount(app?: string): number {
-    let n = 0;
-    for (const t of this.tasks.values()) if (ACTIVE.has(t.state) && !t.inline && (!app || t.segment.app === app)) n++;
-    return n;
+    return app === undefined ? this.activeTotal : (this.activeByApp.get(app) ?? 0);
   }
 
   readyCount(app?: string): number {
     return this.ready.filter((t) => !t.inline && (!app || t.segment.app === app)).length;
+  }
+
+  /** Ready, non-inline tasks per app, in one pass over the ready queue. */
+  readyCountsByApp(): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const t of this.ready) if (!t.inline) m.set(t.segment.app ?? "", (m.get(t.segment.app ?? "") ?? 0) + 1);
+    return m;
   }
 
   /** Unfinished work per segment template (for re-estimation). */

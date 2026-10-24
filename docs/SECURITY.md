@@ -288,6 +288,20 @@ observation in a mutation-blocked context, and dry-runs the rebound plan's read 
 one record. It never executes writes: write validation relies on static analysis plus the
 publisher's verified-receipt evidence. Full sandbox write validation is not implemented.
 
+### Operation identity
+
+**Status: Working (tested).** `tests/unit/operation-identity.test.ts`,
+`tests/network-capability/operation-identity.test.ts`, and the `--conflict-arm` of
+`pnpm network:demo`.
+
+Reuse is authorized only by an exact, deterministic identity: a hash of the instructions (only
+presentation normalized) and the record schema. A different literal, number, threshold, or
+condition is a different operation, and the runtime plans cold instead. No model judges whether
+two requests are "similar enough" to share writes. This applies to network imports (lookup, a
+second check on the fetched artifact, and static analysis, which rejects identities from the
+earlier lossy scheme) and to the local plan cache (an entry is served only under the exact key it
+was written with). The sanitized description that travels with a capability is for people only.
+
 ### Importing runtime
 
 An importing runtime accepts only versions the registry marks ACTIVE, which requires a passing

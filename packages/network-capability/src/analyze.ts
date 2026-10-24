@@ -1,6 +1,7 @@
 import type { DslStep, Effect } from "@overclock/contracts";
 import { parseExpr, parseTemplate, stepExprs } from "@overclock/compiler";
 import { MAX_CAPABILITY_BYTES, PortableCapability, type PortableControl } from "@overclock/network-contracts";
+import { isExactOperationIdentity } from "./export";
 import { canonicalJson, verifyArtifactHash } from "./hash";
 import { controlRefs, submitContexts, templateRoute } from "./plan";
 
@@ -123,6 +124,9 @@ export function analyzeCapability(input: unknown): AnalysisResult {
 
   // ---- integrity
   if (!verifyArtifactHash(cap)) err("hash-mismatch", "provenance.artifactHash does not match the canonical content");
+  // An identity from the superseded scheme hashed a lossy goal (literals and numbers replaced by
+  // placeholders), so it can't prove the importer asked for the same operation. Never reuse it.
+  if (!isExactOperationIdentity(cap.intent.canonicalOperation)) err("operation-identity", "intent.canonicalOperation uses the superseded lossy scheme (literals and numbers erased); republish under the exact operation identity");
 
   // ---- origins
   const appOrigin = new Map<string, string>();

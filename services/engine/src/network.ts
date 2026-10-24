@@ -97,7 +97,9 @@ export async function importCapability(o: Emitter & { client: INetworkClient; co
   const origins = o.config.applications.map((a) => new URL(a.origin).origin);
   const op = canonicalOperation(o.config.goal, recordFieldsOf(o.config.records));
   const look = await o.client.lookup({ origins, canonicalOperation: op, signatures: [] });
-  const best = look.candidates[0];
+  // Only a capability for exactly this operation may run here. Lookup ranks by operation, but a
+  // registry may also return interface-only matches, so the identity is checked, not assumed.
+  const best = look.candidates.find((c) => c.canonicalOperation === op);
   o.emit({ type: "network.lookup", origins, outcome: best ? "FOUND" : "NO_CAPABILITY", source: look.source, candidates: look.candidates.length, ms: Math.round(look.ms), ...(best ? { capabilityId: best.capabilityId, version: best.version } : {}), ...(o.client.identity ? { identity: o.client.identity.slice(0, 16) } : {}) });
   if (!best) return null;
 
@@ -108,11 +110,18 @@ export async function importCapability(o: Emitter & { client: INetworkClient; co
     o.emit({ type: "log", level: "warn", message: `network: could not fetch ${best.versionId} (${message(err)}); discovering cold` });
     return null;
   }
-  // Defense in depth: the registry and the validator are not trusted blindly either.
+  // Defense in depth: the registry and the validator are not trusted blindly either. The fetched
+  // artifact must carry this task's exact operation identity (checked again after the hash check
+  // the client ran), and pass static analysis, which also rejects superseded lossy identities.
+  if (fetched.capability.intent.canonicalOperation !== op) {
+    o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome: "INCOMPATIBLE", bound: 0, unbound: 0, rebindMs: 0, fetchMs: Math.round(fetched.ms), source: fetched.source, refused: ["the capability was written for a different operation (its exact instructions or record fields differ from this task's)"] });
+    o.emit({ type: "log", level: "warn", message: `network: ${best.versionId} is for a different operation; not reusing it, discovering cold` });
+    return null;
+  }
   const analysis = analyzeCapability(fetched.capability);
   if (!analysis.ok) {
     const errs = analysis.issues.filter((i) => i.severity === "error").slice(0, 3).map((i) => i.message);
-    o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome: "INCOMPATIBLE", bound: 0, unbound: 0, rebindMs: 0, fetchMs: Math.round(fetched.ms), source: fetched.source });
+    o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome: "INCOMPATIBLE", bound: 0, unbound: 0, rebindMs: 0, fetchMs: Math.round(fetched.ms), source: fetched.source, refused: errs });
     o.emit({ type: "log", level: "warn", message: `network: ${best.versionId} failed static analysis here (${errs.join("; ")}); discovering cold` });
     return null;
   }

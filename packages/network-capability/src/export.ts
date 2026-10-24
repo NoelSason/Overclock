@@ -1,4 +1,4 @@
-import type { AppBinding, AppControl, AppModel, DslPlan } from "@overclock/contracts";
+import { canonicalGoalText, canonicalRecordFields, type AppBinding, type AppControl, type AppModel, type DslPlan } from "@overclock/contracts";
 import { CAPABILITY_SCHEMA_VERSION, type PortableApplication, type PortableCapability, type PortableControl, type PortablePage } from "@overclock/network-contracts";
 import { routePattern } from "@overclock/perception";
 import { baseKey, describeControl, pageOf, qualifiers, regionMap, type ControlDescriptor } from "./describe";
@@ -44,7 +44,11 @@ export interface ExportResult {
   report: ExportReport;
 }
 
-/** Lowercase, quoted literals and numbers replaced with placeholders, whitespace collapsed. */
+/**
+ * Lowercase, quoted literals and numbers replaced with placeholders, whitespace collapsed. For
+ * the human-readable description only (it keeps record values out of the artifact). It is lossy
+ * by design: "approved" and "rejected" normalize alike, so it must never identify an operation.
+ */
 export function normalizeGoal(goal: string): string {
   return goal
     .toLowerCase()
@@ -54,9 +58,26 @@ export function normalizeGoal(goal: string): string {
     .trim();
 }
 
-/** Stable operation signature: hash of the normalized goal plus the record schema. */
+/**
+ * Scheme of operation identities. "op2" hashes the exact goal text (canonicalGoalText) and the
+ * record schema. Capabilities published before it carry a bare 64-hex hash of the lossy
+ * normalized goal; analysis rejects those, so no runtime imports them.
+ */
+export const OPERATION_SCHEME = "op2";
+
+/**
+ * Operation identity: two tasks share it only when their instructions are the same text
+ * (presentation aside) over the same record fields. Different record ids and values don't change
+ * it; any different literal, number, or condition does. A hash, so the goal itself (which may
+ * contain business values) never leaves the runtime.
+ */
 export function canonicalOperation(goal: string, recordFields: string[]): string {
-  return sha256(`${normalizeGoal(goal)}\n${[...recordFields].sort().join(",")}`);
+  return `${OPERATION_SCHEME}:${sha256(JSON.stringify({ goal: canonicalGoalText(goal), recordFields: canonicalRecordFields(recordFields) }))}`;
+}
+
+/** True when an operation identity uses the current, exact scheme. */
+export function isExactOperationIdentity(op: string): boolean {
+  return new RegExp(`^${OPERATION_SCHEME}:[0-9a-f]{64}$`).test(op);
 }
 
 export function normalizeOrigin(o: string): string {

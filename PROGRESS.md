@@ -71,23 +71,30 @@ is implemented with a known gap. **Proposed** means design only.
 | Every fast-mode run needed a repair round, and some failed closed | Plans matched CRM emails against a lowercased order email; the language couldn't normalize the list side | `filterBy(list, 'field', '~=', value)`; `tests/unit/expr.test.ts`. The critique then passed the same recorded plan 3/3 (0/3 before). |
 | The critique truncated and retried (about 14 s lost) | A 3,000-token budget for thinking plus the coverage list | 8,000 first, 16,000 on retry |
 | Seed 2222's first demo attempt: A's capability failed the validator's static analysis | Not recorded | The engine now runs the same analysis before publishing and records the reason; the rerun passed |
+| (Found by review, not seen in a recorded run) A request for "rejected" could reuse a plan or capability learned for "approved" | The operation identity hashed a lossy goal (quoted values and numbers replaced by placeholders), for network lookup and the local plan cache; the importer took the top candidate without checking | The identity hashes the exact instructions and record schema (`op2:`); lookups return exact matches only; the importer re-checks the fetched artifact; static analysis rejects old identities; cache entries must match their key. `tests/unit/operation-identity.test.ts`, `tests/network-capability/operation-identity.test.ts`, and the demo's `--conflict-arm` (zero writes) |
 
 ## Test runs for this round
 
-Run on 2026-10-24, with `OVERCLOCK_LIVE` unset (no model calls) unless noted.
+Run on 2026-10-24 (afternoon) on the final source, with `OVERCLOCK_LIVE` unset (no model calls)
+unless noted.
 
 | Command | Result |
 | --- | --- |
-| `npx tsc -p tsconfig.json` and the dashboard typecheck | Passed |
-| `npx vitest run --project unit` | 127 passed |
-| `npx vitest run --project integration` | 110 passed, 2 skipped (live) |
+| `pnpm typecheck` (workspace and dashboard) | Passed |
+| `npx vitest run --project unit` | 151 passed |
+| `npx vitest run --project integration` | 123 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
-| `pnpm test:network-capability` | 26 passed |
-| `pnpm test:network` | 26 passed (3 consecutive runs after the token fix; 1 of 3 failed before it) |
-| `pnpm network:demo --records 10` (live, spends money) | Every acceptance check passed, twice (the second run on the code benchmarked below) |
-| Benchmark `--suite all --only overclock,overclock-staged,compiled-parallel,compiled-single` (live) | 34 runs, 0 failed, $12.24; see `docs/BENCHMARKS.md` |
-| Holdout `--suite holdout` (live, after the freeze) | 12 runs, $1.37: t3 passed 6/6; t4 failed 6/6 at sign-in |
-| `pnpm test:e2e` | Not run: a dashboard dev server was already running from `apps/dashboard`, and Next.js allows one per app directory |
+| `pnpm test:network-capability` | 28 passed |
+| `pnpm test:network` | 26 passed |
+| `pnpm test:e2e` | 1 passed, with a developer's dashboard dev server still running on :3000 (the e2e server now uses its own build directory) |
+| `pnpm network:demo --records 10 --variation rename-save --warm-arm` (live, spends money) | Every acceptance check passed on seeds 4242, 1111, 2222 (rerun), 3333, 7777; seed 2222's first attempt failed at validation |
+| `pnpm network:demo --records 10 --seed 5151 --variation fields-in-tab --expect-refusal --no-cold-arm` (live) | Every check passed: B refused, planned cold, 10/10 |
+| `pnpm network:demo --records 10 --seed 4242 --no-cold-arm` (live, final source) | Every check passed: A 22.5 s, B 3.1 s (`EXACT_COMPATIBLE`, 25 bound, 0 planner calls), both 10/10 |
+| Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
+
+Model spend on 2026-10-24 afternoon: about $15 (benchmarks $7.1, network demos about $6.3,
+offline critique evaluations $1.8, smoke tests $0.1), for a running total of about $47 against
+the $50 budget. The Stagehand baseline was not run.
 
 ## Known gaps
 

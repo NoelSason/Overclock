@@ -85,6 +85,24 @@ describe("browser runtime (hand-written IR)", () => {
     await w.close();
   });
 
+  it("waits for a client-rendered table that fills after load, but not for an empty server-rendered one", async () => {
+    const scan = (id: string, url: string) => [
+      node({ id: `${id}_open`, type: "navigate", app: "mini", url: { value: url } }),
+      node({ id, type: "extract", app: "mini", table: { target: loc({ kind: "role", role: "table" }), columns: { id: "ID", status: "Status" }, key: "id", linkColumns: [] } }),
+    ];
+    const w = await worker();
+    const t0 = performance.now();
+    const live = await runSegment(w, { taskId: "t-js", app: "mini", nodes: scan("live", "/items-js?delay=400"), scope: scope({}), allowedOrigins: new Set([app.origin]), locatorOverrides: new Map() });
+    expect((live.outputs.live as { rows: unknown[] }).rows).toHaveLength(5);
+    expect(performance.now() - t0).toBeGreaterThan(400);
+    const t1 = performance.now();
+    const empty = await runSegment(w, { taskId: "t-empty", app: "mini", nodes: scan("none", "/items?page=99"), scope: scope({}), allowedOrigins: new Set([app.origin]), locatorOverrides: new Map() });
+    expect((empty.outputs.none as { rows: unknown[] }).rows).toEqual([]);
+    // An empty table on a settled server-rendered page is final at once (it used to wait 1.5 s).
+    expect(performance.now() - t1).toBeLessThan(800);
+    await w.close();
+  });
+
   it("reports an after-commit 500 as uncertain, and read-back shows it committed", async () => {
     const w = await worker();
     app.failNextWrite = "after-commit-500";

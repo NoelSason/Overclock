@@ -62,17 +62,23 @@ export class FileProgramCache implements ProgramCache {
   private path(key: string): string {
     return join(this.dir, `${key.replace(/[^a-z0-9|.,:-]/gi, "_").replace(/[|:,]/g, "_").slice(0, 180)}.json`);
   }
+  /**
+   * The entry stored under exactly this key. File names are truncated, and entries written before
+   * operation identities were exact have no key, so an entry whose stored key differs is ignored:
+   * a plan is never served for an operation it wasn't written for.
+   */
   get(key: string): CachedProgram | undefined {
     const p = this.path(key);
     if (!existsSync(p)) return undefined;
     try {
-      return JSON.parse(readFileSync(p, "utf8")) as CachedProgram;
+      const entry = JSON.parse(readFileSync(p, "utf8")) as CachedProgram;
+      return entry.key === key ? entry : undefined;
     } catch {
       return undefined;
     }
   }
   put(key: string, value: CachedProgram): void {
-    writeFileSync(this.path(key), JSON.stringify(value));
+    writeFileSync(this.path(key), JSON.stringify({ ...value, key }));
   }
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentRole, AppBinding, AppModel, ArtifactSummary, CostEstimate, DslPlan, EventPayload, RunConfig, StageName } from "@overclock/contracts";
+import { canonicalGoalText, canonicalRecordFields, type AgentRole, type AppBinding, type AppModel, type ArtifactSummary, type CostEstimate, type DslPlan, type EventPayload, type RunConfig, type StageName } from "@overclock/contracts";
 import type { BrowserManager, StorageState } from "@overclock/browser-runtime";
 import { compileProgram, hasErrors, lowerPlan, validateProgram, type CompiledProgram, type Issue } from "@overclock/compiler";
 import { buildCatalog, classifyEffects, crawlApp, critiquePlan, dryRunCandidate, generatePlan, renderCatalog, repairPlan, strategyDirectives, type CritiqueResult, type DryRunResult } from "@overclock/discovery";
@@ -32,6 +32,8 @@ export interface CachedProgram {
   plan: DslPlan;
   models: AppModel[];
   review?: PlanReview | undefined;
+  /** The cache key it was stored under; a read must match it exactly (entries without it are ignored). */
+  key?: string | undefined;
 }
 
 export interface ProgramCache {
@@ -67,15 +69,15 @@ export interface SwarmResult {
   review: PlanReview;
 }
 
-/** Stable signature of a task, independent of record counts and concrete values. */
+/**
+ * Operation identity of a task for the local plan cache: a hash of the exact instructions
+ * (canonicalGoalText) and the record schema. Record ids and values don't change it; any different
+ * literal, number, or condition does, so a plan is never reused for an operation it wasn't
+ * written for. (It used to replace literals and numbers with placeholders, which let a plan for
+ * "approved" serve a request for "rejected".)
+ */
 export function canonicalOperation(goal: string, recordFields: string[]): string {
-  const norm = goal
-    .toLowerCase()
-    .replace(/"[^"]*"|'[^']*'/g, "<lit>")
-    .replace(/\d+/g, "#")
-    .replace(/\s+/g, " ")
-    .trim();
-  return createHash("sha256").update(`${norm}|${[...recordFields].sort().join(",")}`).digest("hex").slice(0, 24);
+  return `op2:${createHash("sha256").update(JSON.stringify({ goal: canonicalGoalText(goal), recordFields: canonicalRecordFields(recordFields) })).digest("hex")}`;
 }
 
 export function cacheKey(config: RunConfig): string {

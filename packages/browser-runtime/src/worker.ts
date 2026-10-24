@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from "playwright";
 import type { WorkerState } from "@overclock/contracts";
+import { trackActivity } from "./browser";
 
 export interface WorkerStateInfo {
   taskId?: string | undefined;
@@ -42,6 +43,7 @@ export class BrowserWorker {
       return page;
     }
     page = await this.context.newPage();
+    trackActivity(page);
     page.setDefaultTimeout(10_000);
     // Native confirm/alert dialogs are dismissed (the safe default) and counted as interference.
     page.on("dialog", (d) => {

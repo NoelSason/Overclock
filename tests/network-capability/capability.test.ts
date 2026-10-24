@@ -108,8 +108,11 @@ describe("export", () => {
     expect(cap.requirements.expectedEffects).toEqual([{ effect: "remote-write", resource: "app:orders:order:{$rec.orderId}", stepId: "save" }]);
     expect(cap.verification.rules).toEqual([{ stepId: "save", url: "/orders/{$rec.orderId}", fields: [{ name: "reason", control: "Orders:/orders/:id:fact:review_review_reason", equals: "concat('Checked by Overclock for ', $rec.orderId)" }] }]);
     expect(cap.intent.inputSchema.recordFields).toEqual(["orderId"]);
-    // Stable across numbers and quoted literals; different for a different record schema.
-    expect(cap.intent.canonicalOperation).toBe(canonicalOperation(GOAL.replace("5 orders", "40 orders").replace("Checked by Overclock", "Checked"), ["orderId"]));
+    // The exact instructions and record schema: the same text matches; a different literal,
+    // number, or record schema doesn't (this used to normalize them away, which was unsafe).
+    expect(cap.intent.canonicalOperation).toBe(canonicalOperation(GOAL, ["orderId"]));
+    expect(cap.intent.canonicalOperation).not.toBe(canonicalOperation(GOAL.replace("Checked by Overclock", "Checked"), ["orderId"]));
+    expect(cap.intent.canonicalOperation).not.toBe(canonicalOperation(GOAL.replace("5 orders", "40 orders"), ["orderId"]));
     expect(cap.intent.canonicalOperation).not.toBe(canonicalOperation(GOAL, ["ticketId"]));
     expect(cap.intent.description).not.toMatch(/\d/);
     // Free text from the planner never leaves: notes, rationale, assumptions, risks.

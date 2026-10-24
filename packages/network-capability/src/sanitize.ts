@@ -489,7 +489,9 @@ export function sanitizeCapability(input: PortableCapability, opts: SanitizeOpti
     if (!/^[0-9a-f]+$/.test(v) || !lens.includes(v.length)) reject(path, "format", `expected a ${lens.join("/")}-hex hash`);
   };
   hex("provenance.artifactHash", cap.provenance.artifactHash || undefined, [64]);
-  hex("intent.canonicalOperation", cap.intent.canonicalOperation, [64]);
+  // Current identities are "op2:<64 hex>"; a bare 64-hex value is the superseded lossy scheme,
+  // which still parses here so static analysis can reject it with a clear reason.
+  if (!/^(op2:)?[0-9a-f]{64}$/.test(cap.intent.canonicalOperation)) reject("intent.canonicalOperation", "format", "expected op2:<64 hex> (or a superseded 64-hex identity)");
   cap.applications.forEach((a, i) => hex(`applications.${i}.interfaceFingerprint`, a.interfaceFingerprint, [16]));
   cap.pages.forEach((pg, i) => {
     hex(`pages.${i}.pageFingerprint`, pg.pageFingerprint, [12]);

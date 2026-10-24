@@ -1,7 +1,8 @@
-import type { Locator, Page, Response } from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import type { ActionNode, Condition, ExtractField, ExtractTable, SemanticLocator } from "@overclock/contracts";
 import { evaluate, evaluateBool, looseEquals, resolveValue, toStr, type Scope } from "@overclock/compiler";
 import { AssertionFailedError, HiddenTargetError, LocatorNotFoundError, NavigationError, OriginBlockedError, PreconditionFailedError, RuntimeError, UnexpectedDialogError, WriteRejectedError, WriteUncertainError } from "./errors";
+import { settle } from "./browser";
 import { resolveLocator } from "./locate";
 
 export interface RecordScope {
@@ -190,27 +191,44 @@ type WriteSignal = { kind: "response"; status: number } | { kind: "error"; messa
 async function waitForWrite(env: ActionEnv, node: ActionNode, act: () => Promise<void>): Promise<number> {
   const origin = env.origin.replace(/\/$/, "");
   let settled = false;
-  const respP: Promise<WriteSignal> = env.page
-    .waitForResponse((r) => r.request().method() !== "GET" && r.url().startsWith(origin), { timeout: node.timeoutMs })
-    .then((r): WriteSignal => ({ kind: "response", status: r.status() }))
-    .catch((e: Error): WriteSignal => ({ kind: "error", message: e.message }));
-  // A request that fails at the network layer (including our own mutation guard) never yields a response.
-  const failedP: Promise<WriteSignal> = env.page
-    .waitForEvent("requestfailed", { predicate: (r) => r.method() !== "GET" && r.url().startsWith(origin), timeout: node.timeoutMs })
-    .then((r): WriteSignal => ({ kind: "failed", reason: r.failure()?.errorText ?? "request failed" }))
-    .catch(() => new Promise<WriteSignal>(() => undefined));
-  await act();
-  const dialogP: Promise<WriteSignal> = (async () => {
-    while (!settled) {
-      await new Promise((r) => setTimeout(r, 120));
-      if (settled) break;
-      const text = await openDialogText(env.page);
-      if (text) return { kind: "dialog", text } as WriteSignal;
-    }
-    return respP;
-  })();
-  const first = await Promise.race([respP, dialogP, failedP]);
-  settled = true;
+  let stopListening = () => undefined as void;
+  // Page listeners and one timer, removed as soon as the write settles. (Playwright waiters
+  // lingered until their timeout after every write, and each timeout built an error with a stack
+  // trace on the engine's main thread.) A request that fails at the network layer, including one
+  // our own mutation guard blocks, never yields a response.
+  const signalP = new Promise<WriteSignal>((resolve) => {
+    const onResponse = (r: Response) => {
+      if (r.request().method() !== "GET" && r.url().startsWith(origin)) resolve({ kind: "response", status: r.status() });
+    };
+    const onFailed = (r: Request) => {
+      if (r.method() !== "GET" && r.url().startsWith(origin)) resolve({ kind: "failed", reason: r.failure()?.errorText ?? "request failed" });
+    };
+    const timer = setTimeout(() => resolve({ kind: "error", message: `Timeout ${node.timeoutMs}ms exceeded while waiting for the write response` }), node.timeoutMs);
+    env.page.on("response", onResponse);
+    env.page.on("requestfailed", onFailed);
+    stopListening = () => {
+      clearTimeout(timer);
+      env.page.off("response", onResponse);
+      env.page.off("requestfailed", onFailed);
+    };
+  });
+  let first: WriteSignal;
+  try {
+    await act();
+    const dialogP: Promise<WriteSignal> = (async () => {
+      while (!settled) {
+        await new Promise((r) => setTimeout(r, 120));
+        if (settled) break;
+        const text = await openDialogText(env.page);
+        if (text) return { kind: "dialog", text } as WriteSignal;
+      }
+      return signalP;
+    })();
+    first = await Promise.race([signalP, dialogP]);
+  } finally {
+    settled = true;
+    stopListening();
+  }
   if (first.kind === "failed") {
     if (/BLOCKED_BY_CLIENT/i.test(first.reason)) throw new WriteRejectedError("Write blocked by the execution guard; not sent", node.id, 0);
     throw new WriteUncertainError(`Write request failed at the network layer (${first.reason}); commit state unknown`, node.id, null);
@@ -307,16 +325,11 @@ async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable
   for (;;) {
     let page = await readTablePage(table, spec);
     if (page.rows.length === 0) {
-      // Client-rendered tables may populate after load: poll for rows, then confirm the count is stable.
-      const until = performance.now() + 1500;
-      while (page.rows.length === 0 && performance.now() < until) {
-        await env.page.waitForTimeout(60);
-        page = await readTablePage(table, spec);
-      }
-      if (page.rows.length > 0) {
-        await env.page.waitForTimeout(80);
-        page = await readTablePage(table, spec);
-      }
+      // A client-rendered table may still be filling. Wait while the page is busy (requests in
+      // flight or the DOM changing), at most 1.5 s; an empty table on a settled page is final.
+      // Server-rendered pages settle in about the quiet period, so "no rows" costs ~60 ms, not 1.5 s.
+      await settle(env.page, { maxMs: 1500, quietMs: 60 });
+      page = await readTablePage(table, spec);
     }
     if (page.missing.length) throw new LocatorNotFoundError(`Table columns not found: ${page.missing.join(", ")}`, node.id, spec.target.controlId);
     for (const row of page.rows) {

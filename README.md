@@ -328,8 +328,8 @@ Each run spends model money. `OVERCLOCK_BENCH_BUDGET_USD` caps benchmark spend (
 
 | Command | What it covers | Model spend |
 | --- | --- | --- |
-| `pnpm test` | Unit: expressions, compiler (guards, page re-opening), incremental compiler, a recorded live plan stream, scheduler (invalidation, approvals), optimizer, redaction, arena oracle, benchmark harness, SDK, CLI, the engine's network service, and the model-stream stall watchdog. | none |
-| `pnpm test:integration` | Arena apps, browser runtime, perception (including region facts), engine API and store, SDK against real servers, scripted mode A, and the executor end to end on a fixture app (entry verification, duplicate, rejected, and ambiguous submissions, and the invalidation regression). | none unless `OVERCLOCK_LIVE=1` |
+| `pnpm test` | Unit: expressions, compiler (guards, page re-opening), incremental compiler, a recorded live plan stream, scheduler (invalidation, approvals, saturation-aware concurrency), optimizer, redaction, arena oracle, benchmark harness, SDK, CLI, the engine's network service, the model-stream stall watchdog, fast mode against a fake Messages API, the review gate, and input-record accounting. | none |
+| `pnpm test:integration` | Arena apps, browser runtime (including risky GETs on read-only pages), perception (including region facts), engine API and store, SDK against real servers, scripted mode A, the executor end to end on a fixture app (entry verification, duplicate, rejected, and ambiguous submissions, the invalidation regression, derived-record outcomes), and the mode D and mode E review gates with a scripted model. | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:adversarial` | Recovery L0/L1 against a fixture app with every UI surprise; refusal to guess; repair dedupe. | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:e2e` | Dashboard against a synthetic, test-only replay server (Playwright). | none |
 | `pnpm typecheck` | TypeScript across the workspace and the dashboard. | none |
@@ -348,6 +348,9 @@ Setting `OVERCLOCK_LIVE=1` enables tests that call Claude and Jev, so they spend
 - **Read-only fragments.** While a worker runs a read segment, its page is read-only at the
   network layer: non-GET requests and risky GETs (such as `/logout`) are blocked, and an
   unexpected write fails the task.
+- **No reuse across different operations.** A cached plan or network capability runs only for
+  the exact instructions it was learned for: a different value, threshold, or condition plans
+  cold. No model decides that two requests are similar enough to share writes.
 - **No unreviewed writes.** When the policy requires a critique (modes D and E, more than five
   records), every write waits for a passed critique of that exact plan; a repaired plan is
   critiqued again, and an unavailable critique rejects the plan (fail-closed). Only reviewed
@@ -371,6 +374,9 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
 - The review gate is only as precise as its critic. A false-positive finding costs a repair
   round, and one that survives the repair rejects the run (recorded once with the Haiku
   critic). The default Opus fast critic costs about $0.13–0.15 per critique.
+- Reuse requires the exact same instructions (any different value, number, or condition is a
+  different operation), so instructions that state the batch size ("these 25 orders") don't share
+  a plan with the same instructions for another size.
 - Fast mode is a Claude API research preview at twice the standard price; a cold 25-record
   mode E run costs about $0.43 instead of $0.15. A refused fast request falls back to standard
   speed automatically.

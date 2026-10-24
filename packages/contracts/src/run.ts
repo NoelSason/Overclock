@@ -237,3 +237,26 @@ export function countInputRecordsVerified(outcomes: readonly RecordOutcome[]): n
   for (const o of outcomes) if (o.scope !== "derived" && (o.status === "VERIFIED" || o.status === "SKIPPED")) keys.add(o.recordKey);
   return keys.size;
 }
+
+/**
+ * The text that defines a task's operation identity. Only presentation is normalized: Unicode
+ * form (NFC), line endings, trailing whitespace on each line, and leading/trailing blank space.
+ * Every literal, number, threshold, and word is kept, so "approved" and "rejected", or "2 or more"
+ * and "3 or more", are different operations. Never use a sanitized or placeholder form of the goal
+ * (as shown in published capability descriptions) to decide whether a plan may be reused.
+ */
+export function canonicalGoalText(goal: string): string {
+  return goal
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+$/u, ""))
+    .join("\n")
+    .trim();
+}
+
+/** Record field names as they enter an operation identity: unique and sorted. */
+export function canonicalRecordFields(fields: readonly string[]): string[] {
+  return [...new Set(fields)].sort();
+}
+

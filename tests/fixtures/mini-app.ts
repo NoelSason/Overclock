@@ -47,6 +47,27 @@ export async function startMiniApp(): Promise<MiniApp> {
       send(200, page("Mini", `<nav><a href="/items">Items</a> <a href="/items/I-1/activity">Recent activity</a></nav>`));
       return;
     }
+    if (req.method === "GET" && url.pathname === "/api/items") {
+      // Data for the client-rendered list, answered after `delay` ms.
+      const delay = Number(url.searchParams.get("delay") ?? "0");
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify([...items.values()].slice(0, 5).map((r) => ({ id: r.id, status: r.status }))));
+      }, delay);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/items-js") {
+      // A client-rendered list: the table is empty at DOMContentLoaded and filled by a fetch.
+      const delay = Number(url.searchParams.get("delay") ?? "300");
+      send(
+        200,
+        page(
+          "Items (live)",
+          `<table><thead><tr><th>ID</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table><script>fetch("/api/items?delay=${delay}").then((r) => r.json()).then((xs) => { document.getElementById("rows").innerHTML = xs.map((x) => "<tr><td>" + x.id + "</td><td>" + x.status + "</td></tr>").join(""); });</script>`,
+        ),
+      );
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/logout") {
       app.logouts++;
       send(200, page("Signed out", "<p>You have been signed out.</p>"));

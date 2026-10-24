@@ -1,7 +1,7 @@
 /**
  * Overclock Network: runtime A discovers and publishes, runtime B imports, rebinds, and executes.
  *
- *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--expect-refusal] [--warm-arm] [--mode overclock] [--no-cold-arm] [--keep]
+ *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--expect-refusal] [--warm-arm] [--conflict-arm] [--mode overclock] [--no-cold-arm] [--keep]
  *
  * Needs the arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev` starts one). The
  * script publishes the module to a separate `overclock-demo` database and wipes it first, so
@@ -33,6 +33,11 @@
  *
  * With --expect-refusal (for a variation rebinding can't prove safe, e.g. fields-in-tab), the
  * checks invert: B must refuse the capability with reasons, plan cold instead, and still pass.
+ *
+ * With --conflict-arm, before B runs, a fourth runtime X (own identity, own data dir, no model
+ * access) asks for the same task with one value changed ("Tier 2" becomes "Tier 1"). Its
+ * operation differs, so it must find no capability to reuse and, with no planner, make zero
+ * writes: the arena's own write counters must not move.
  *
  * Every number printed comes from the engines' run summaries and the arena's checker. Tokens
  * stay in each runtime's data dir and are never printed.
@@ -73,9 +78,10 @@ async function enroll(admin: NetworkClient, label: string, role: PublisherRole, 
   return c;
 }
 
-function startEngine(label: string, port: number, network = true): ChildProcess {
+function startEngine(label: string, port: number, network = true, extraEnv: Record<string, string> = {}): ChildProcess {
   const env = {
     ...process.env,
+    ...extraEnv,
     OVERCLOCK_ENGINE_PORT: String(port),
     OVERCLOCK_DATA_DIR: join(DEMO_DIR, label),
     OVERCLOCK_RUNTIME_LABEL: label,
@@ -162,6 +168,7 @@ async function main(): Promise<void> {
   const coldArm = !argv.includes("--no-cold-arm");
   const expectRefusal = argv.includes("--expect-refusal");
   const warmArm = argv.includes("--warm-arm");
+  const conflictArm = argv.includes("--conflict-arm");
   const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
@@ -180,18 +187,22 @@ async function main(): Promise<void> {
   await authorizeAsOwner({ database: DATABASE, server, identityHex: admin.identity!, role: "admin" });
   await waitFor(() => admin.myPublisher()?.status === "authorized", 10_000, "admin authorization");
   const validator = await enroll(admin, "validator", "validator");
-  for (const label of ["runtime-a", "runtime-b"]) await (await enroll(admin, label, "publisher", true)).close();
-  console.log("identities: admin, validator, runtime-a, runtime-b (separate tokens, all authorized)");
+  const runtimes = conflictArm ? ["runtime-a", "runtime-b", "runtime-x"] : ["runtime-a", "runtime-b"];
+  for (const label of runtimes) await (await enroll(admin, label, "publisher", true)).close();
+  console.log(`identities: admin, validator, ${runtimes.join(", ")} (separate tokens, all authorized)`);
 
   const a = startEngine("runtime-a", 4010);
   const b = startEngine("runtime-b", 4020);
   const c = coldArm ? startEngine("runtime-c", 4030, false) : null;
+  // X has no model access: if it can't reuse a capability, it can't plan, so it writes nothing.
+  const x = conflictArm ? startEngine("runtime-x", 4040, true, { ANTHROPIC_API_KEY: "" }) : null;
+  const engineX = new Overclock({ endpoint: "http://127.0.0.1:4040", timeoutMs: 60_000 });
   const engineA = new Overclock({ endpoint: "http://127.0.0.1:4010", timeoutMs: 60_000 });
   const engineB = new Overclock({ endpoint: "http://127.0.0.1:4020", timeoutMs: 60_000 });
   const engineC = new Overclock({ endpoint: "http://127.0.0.1:4030", timeoutMs: 60_000 });
   const browser = new BrowserManager({ headless: true });
   try {
-    await Promise.all([engineReady(engineA), engineReady(engineB), ...(coldArm ? [engineReady(engineC)] : [])]);
+    await Promise.all([engineReady(engineA), engineReady(engineB), ...(coldArm ? [engineReady(engineC)] : []), ...(conflictArm ? [engineReady(engineX)] : [])]);
 
     // The validator runs as a service: it picks up every PROPOSED version for the arena's apps.
     const health = (await arena.health()) as { origins: Record<string, string> };
@@ -236,6 +247,37 @@ async function main(): Promise<void> {
     await waitFor(() => admin.versionInfo(versionId)?.state === "ACTIVE", 10_000, "ACTIVE state");
     const promoteMs = Math.round(performance.now() - tPromote);
     console.log(`admin promoted ${versionId} to ACTIVE in ${promoteMs} ms`);
+
+    // 2b. Runtime X: the same task with one value changed must not reuse A's capability.
+    let conflict: { goal: string; lookup: string; importOutcome: string | null; refused: string[]; writes: number; receipts: number; plannerCalls: number; status: string; error: string | null } | null = null;
+    if (conflictArm) {
+      const scenarioX = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
+      if (!scenarioX.goal.includes("Tier 2")) throw new Error("the task text has no \"Tier 2\" to change for the conflict arm");
+      const goalX = scenarioX.goal.replace("Tier 2", "Tier 1");
+      // Committed writes, counted by the arena itself across every app.
+      const writes = async () => Object.values(((await arena.stats()) as { apps: Record<string, { writes: number }> }).apps).reduce((n, a) => n + a.writes, 0);
+      const before = await writes();
+      console.log(`\nX: same records as B, instructions with one value changed ("Tier 2" -> "Tier 1"), network-read, no model access`);
+      const resX: { runId: string | null; status: string; error?: string } = await engineX.execute({ ...configFromScenario(scenarioX, { mode, knowledge: "network-read", thumbnails: false }), goal: goalX }).catch((e: unknown) => ({ runId: null, status: "failed", error: (e as Error).message }));
+      const after = await writes();
+      const eventsX = resX.runId ? (await engineX.events(resX.runId, 0, 10_000)).events : [];
+      const look = eventsX.find((e) => e.type === "network.lookup");
+      const impX = eventsX.find((e) => e.type === "network.import");
+      const failure = eventsX.find((e) => e.type === "log" && e.level === "error");
+      conflict = {
+        goal: "t1 with the damage-ticket owner changed from Tier 2 to Tier 1",
+        lookup: look?.type === "network.lookup" ? `${look.outcome} (${look.candidates} candidate(s) for this operation)` : "no lookup event",
+        importOutcome: impX?.type === "network.import" ? impX.outcome : null,
+        refused: impX?.type === "network.import" ? (impX.refused ?? []) : [],
+        writes: after - before,
+        receipts: eventsX.filter((e) => e.type === "receipt").length,
+        // Planner requests that reached the model (X has no key, so an attempt fails before sending).
+        plannerCalls: eventsX.filter((e) => e.type === "model.call" && e.purpose.startsWith("planner.") && e.ok).length,
+        status: resX.status,
+        error: failure?.type === "log" ? failure.message : (resX.error ?? null),
+      };
+      console.log(`X: ${JSON.stringify(conflict)}`);
+    }
 
     // 3. Runtime B: new records (and optionally a UI change), import + rebind + execute.
     const scenarioB = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
@@ -300,7 +342,10 @@ async function main(): Promise<void> {
       { check: "B planned cold instead and passes the independent ground-truth check", ok: plannerB > 0 && groundTruthOk(outB), detail: `B planner calls ${plannerB}; ${JSON.stringify(outB.checker)}` },
       distinct,
     ];
-    const checks = expectRefusal ? refusalChecks : [
+    const conflictChecks = conflict
+      ? [{ check: "X, asking for the task with one value changed, reused nothing and made zero writes", ok: !conflict.lookup.startsWith("FOUND") && conflict.importOutcome === null && conflict.writes === 0 && conflict.receipts === 0 && conflict.plannerCalls === 0, detail: `lookup ${conflict.lookup}; import ${conflict.importOutcome ?? "none"}; arena writes during X ${conflict.writes}; receipts ${conflict.receipts}; status ${conflict.status}${conflict.error ? ` (${conflict.error.slice(0, 120)})` : ""}` }]
+      : [];
+    const checks = [...conflictChecks, ...(expectRefusal ? refusalChecks : [
       { check: "A passes the independent ground-truth check", ok: groundTruthOk(outA), detail: JSON.stringify(outA.checker) },
       { check: "B passes the independent ground-truth check", ok: groundTruthOk(outB), detail: JSON.stringify(outB.checker) },
       distinct,
@@ -322,7 +367,7 @@ async function main(): Promise<void> {
       { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
       ...(outC ? [{ check: "C (strict-cold comparison arm) passes the independent ground-truth check", ok: groundTruthOk(outC), detail: JSON.stringify(outC.checker) }] : []),
       ...(outW ? [{ check: "C's local warm replay passes the independent ground-truth check", ok: groundTruthOk(outW), detail: JSON.stringify(outW.checker) }] : []),
-    ];
+    ])];
     console.log("\nacceptance checks");
     for (const c of checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${c.check}: ${c.detail}`);
     const passed = checks.every((c) => c.ok);
@@ -346,7 +391,7 @@ async function main(): Promise<void> {
     for (const [k, d] of [["A", diagA], ["B", diagB], ["C", diagC]] as const) if (d) console.log(`${k} model calls: ${JSON.stringify(d.modelCallsByPurpose)}; fallbacks ${d.fallbacks.length}; recoveries ${d.recoveries}`);
     const transfer = { identities: { a: idA ?? null, b: idB ?? null, publisher: imp?.publisher?.slice(0, 16) ?? null }, bCacheBefore, variations: variation ? variationsB : null, relabeled: imp?.relabeled ?? [], writeCanary: imp?.writeCanary ?? false, canaryPassed: canaryB, refused: imp?.refused ?? [], importOutcome: imp?.outcome ?? null, actionsB, verifiedB };
     console.log(`transfer: ${JSON.stringify(transfer)}`);
-    const report = { at: new Date().toISOString(), passed, expectRefusal, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
+    const report = { at: new Date().toISOString(), passed, expectRefusal, conflict, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     // A copy beside the benchmark results, for the dashboard's Transfer page and for review.
     const recordDir = join(REPO_ROOT, "benchmarks", "results", "network");
@@ -363,6 +408,7 @@ async function main(): Promise<void> {
     a.kill("SIGTERM");
     b.kill("SIGTERM");
     c?.kill("SIGTERM");
+    x?.kill("SIGTERM");
     await browser.close();
     await validator.close();
     await admin.close();

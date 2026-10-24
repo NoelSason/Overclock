@@ -84,9 +84,36 @@ payload whose `publisherId` is not the caller.
 
 ## How a capability moves
 
+### Operation identity
+
+A capability may run only for the operation it was learned for. Its operation identity
+(`intent.canonicalOperation`) is `op2:` plus a SHA-256 of the exact instructions and the sorted
+record field names. Only presentation is normalized before hashing (Unicode form, line endings,
+trailing whitespace): every quoted value, number, threshold, and condition is part of the
+identity. "Set the status to \"approved\"" and "…\"rejected\"", or "2 or more" and "3 or more",
+are different operations and never share a capability. Different record ids and values don't
+change the identity, so the same instructions over new records reuse it.
+
+The identity is a hash, so the instructions themselves (which may contain business values) never
+leave the runtime. The human-readable `intent.description` is a separate, sanitized string, with
+values and numbers replaced by placeholders, and is never used for matching.
+
+Until 2026-10-24 the identity hashed that lossy description instead, so a request for
+"rejected" could look up and execute a capability learned for "approved". Capabilities from that
+scheme carry a bare 64-hex identity; static analysis rejects them (`operation-identity`), so the
+validator fails them and every importer refuses them. They must be republished. The same exact
+identity keys the local plan cache, and a cached entry is served only under the exact key it was
+stored with.
+
+A consequence: instructions that state the batch size ("these 25 orders") are a different
+operation from the same instructions with another size. Reuse across batch sizes needs
+instructions that don't state the size.
+
 ### Lookup
 
-1. The engine looks up by canonical operation and the run's origins. (The client also ranks by
+1. The engine looks up by exact operation identity and the run's origins, and considers only
+   candidates with that identity; it checks the identity again on the fetched artifact, so a
+   registry that mislabels an artifact can't make another operation's writes run. (The client also ranks by
    non-sensitive **interface signatures**: origin, route family, page fingerprint, region
    fingerprints, and role class. The engine doesn't send signatures yet, because it looks up
    before observing anything.)

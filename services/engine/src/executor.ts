@@ -231,9 +231,8 @@ export class Executor {
   /** Grow the pool when adaptive caps allow more concurrency than there are workers. */
   private maybeGrow(): void {
     if (!this.o.workers.adaptive) return;
-    const apps = new Set([...this.scheduler.tasks.values()].filter((t) => t.state === "READY" && !t.inline).map((t) => t.segment.app!));
     let want = 0;
-    for (const a of apps) want += Math.min(this.capFor(a), this.scheduler.readyCount(a) + this.scheduler.activeCount(a));
+    for (const [a, ready] of this.scheduler.readyCountsByApp()) want += Math.min(this.capFor(a), ready + this.scheduler.activeCount(a));
     want = Math.min(this.o.workers.max, want);
     for (let have = this.pool.length + this.spawning; have < want; have++) void this.spawnWorker();
   }

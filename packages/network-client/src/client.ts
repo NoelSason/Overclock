@@ -539,6 +539,10 @@ export class NetworkClient implements INetworkClient {
       if (!v || v.state !== "ACTIVE") continue;
       if (!v.origins.every((o) => originSet.has(o))) continue;
       const op = query.canonicalOperation !== undefined && v.canonicalOperation === query.canonicalOperation ? 1 : 0;
+      // A caller that names its operation gets capabilities for exactly that operation: a shared
+      // interface never makes another operation's writes eligible. Interface-only matching is
+      // for callers that name no operation (discovery and repair tooling).
+      if (query.canonicalOperation !== undefined && op === 0) continue;
       const fp = v.interfaceFingerprints.reduce((n, f) => n + (fps.has(f) ? 1 : 0), 0);
       if (op === 0 && fp === 0) continue;
       scored.push({ c: toCandidate(v, this.successfulReuses(v.versionId)), op, fp });

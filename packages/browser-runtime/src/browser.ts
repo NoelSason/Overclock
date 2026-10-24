@@ -33,21 +33,35 @@ export const RISKY_GET = /(\/|\b)(log-?out|sign-?out|logoff|delete|destroy|remov
  * if a click unexpectedly triggers a state-changing request (non-GET, or a GET matching RISKY_GET).
  */
 export class BrowserManager {
-  private browser: Browser | null = null;
-  private launching: Promise<Browser> | null = null;
+  /**
+   * Chromium processes. Every context's protocol traffic, and every request the route guard
+   * pauses, passes through its browser's main process, which saturates one core at about 16
+   * busy contexts. Contexts are therefore spread over several browsers (OVERCLOCK_BROWSERS,
+   * default 4), each launched on first use.
+   */
+  private readonly browsers: (Browser | null)[];
+  private readonly launching: (Promise<Browser> | null)[];
+  private readonly contextsOn: number[];
   readonly guardStats = new WeakMap<BrowserContext, GuardStats>();
   private readonly readOnlyPages = new WeakSet<Page>();
 
-  constructor(private readonly opts: { headless?: boolean } = {}) {}
+  constructor(private readonly opts: { headless?: boolean; browsers?: number } = {}) {
+    const n = Math.max(1, Math.floor(opts.browsers ?? (Number(process.env.OVERCLOCK_BROWSERS) || 4)));
+    this.browsers = Array.from({ length: n }, () => null);
+    this.launching = Array.from({ length: n }, () => null);
+    this.contextsOn = Array.from({ length: n }, () => 0);
+  }
 
-  async get(): Promise<Browser> {
-    if (this.browser?.isConnected()) return this.browser;
-    this.launching ??= chromium.launch({ headless: this.opts.headless ?? process.env.OVERCLOCK_HEADLESS !== "0" }).then((b) => {
-      this.browser = b;
-      this.launching = null;
-      return b;
+  /** The first browser (launching it if needed); contexts come from newContext. */
+  async get(i = 0): Promise<Browser> {
+    const b = this.browsers[i];
+    if (b?.isConnected()) return b;
+    this.launching[i] ??= chromium.launch({ headless: this.opts.headless ?? process.env.OVERCLOCK_HEADLESS !== "0" }).then((launched) => {
+      this.browsers[i] = launched;
+      this.launching[i] = null;
+      return launched;
     });
-    return this.launching;
+    return this.launching[i]!;
   }
 
   /** Mark a page read-only (true) or allow it to write (false). */
@@ -57,7 +71,17 @@ export class BrowserManager {
   }
 
   async newContext(opts: ContextOptions): Promise<BrowserContext> {
-    const browser = await this.get();
+    // The browser with the fewest open contexts (ties: the lowest index).
+    let i = 0;
+    for (let k = 1; k < this.contextsOn.length; k++) if (this.contextsOn[k]! < this.contextsOn[i]!) i = k;
+    this.contextsOn[i]!++;
+    let browser: Browser;
+    try {
+      browser = await this.get(i);
+    } catch (err) {
+      this.contextsOn[i]!--;
+      throw err;
+    }
     const context = await browser.newContext({
       viewport: opts.viewport ?? { width: 1280, height: 860 },
       storageState: opts.storageState,
@@ -67,6 +91,7 @@ export class BrowserManager {
     // esbuild (via tsx) may wrap nested functions in __name(...) when serializing page.evaluate
     // callbacks; define it in every document so evaluated code runs unchanged.
     await context.addInitScript({ content: "globalThis.__name = globalThis.__name || ((fn) => fn);" });
+    context.once("close", () => this.contextsOn[i]!--);
     const stats: GuardStats = { blockedOrigins: 0, blockedMutations: 0, blockedRiskyGets: 0, blockedWebSockets: 0, requests: 0 };
     this.guardStats.set(context, stats);
     const allowed = new Set(opts.allowedOrigins.map((o) => new URL(o).origin));
@@ -116,10 +141,26 @@ export class BrowserManager {
   }
 
   async close(): Promise<void> {
-    const b = this.browser;
-    this.browser = null;
-    if (b) await b.close().catch(() => undefined);
+    const open = this.browsers.filter((b): b is Browser => b !== null);
+    this.browsers.fill(null);
+    await Promise.all(open.map((b) => b.close().catch(() => undefined)));
   }
+}
+
+/** Requests in flight per tracked page, counted for the page's whole life (see trackActivity). */
+const activity = new WeakMap<Page, { inflight: number }>();
+
+/**
+ * Count a page's requests for its whole life, so settle() also sees requests that started before
+ * it was called (a client-rendered page's data fetch issued during load). Idempotent.
+ */
+export function trackActivity(page: Page): void {
+  if (activity.has(page)) return;
+  const a = { inflight: 0 };
+  activity.set(page, a);
+  page.on("request", () => a.inflight++);
+  page.on("requestfinished", () => (a.inflight = Math.max(0, a.inflight - 1)));
+  page.on("requestfailed", () => (a.inflight = Math.max(0, a.inflight - 1)));
 }
 
 /**
@@ -131,9 +172,11 @@ export async function settle(page: Page, opts: { maxMs?: number; quietMs?: numbe
   const start = performance.now();
   const maxMs = opts.maxMs ?? 2000;
   const quietMs = opts.quietMs ?? 100;
-  let inflight = 0;
-  const onReq = () => inflight++;
-  const onDone = () => (inflight = Math.max(0, inflight - 1));
+  const tracked = activity.get(page);
+  let local = 0;
+  const inflightNow = () => (tracked ? tracked.inflight : local);
+  const onReq = () => local++;
+  const onDone = () => (local = Math.max(0, local - 1));
   page.on("request", onReq);
   page.on("requestfinished", onDone);
   page.on("requestfailed", onDone);
@@ -151,7 +194,7 @@ export async function settle(page: Page, opts: { maxMs?: number; quietMs?: numbe
     let quietSince = performance.now();
     while (performance.now() - start < maxMs) {
       const m = await page.evaluate(() => (window as unknown as { __ocMut?: number }).__ocMut ?? 0).catch(() => -2);
-      if (m !== lastMut || inflight > 0) {
+      if (m !== lastMut || inflightNow() > 0) {
         lastMut = m;
         quietSince = performance.now();
       } else if (performance.now() - quietSince >= quietMs) break;
