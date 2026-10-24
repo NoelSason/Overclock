@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { DslStep } from "@overclock/contracts";
-import { PortableCapability } from "@overclock/network-contracts";
+import { RunConfigSchema, type DslStep, type EventPayload } from "@overclock/contracts";
+import { PortableCapability, type INetworkClient } from "@overclock/network-contracts";
+import { publishCapability } from "../../services/engine/src/network";
 import {
   analyzeCapability,
   canonicalJson,
@@ -256,5 +257,30 @@ describe("static analysis", () => {
     expect(a.issues.some((i) => i.code === "irreversible-effect" && i.severity === "warning")).toBe(true);
     const mismatch = tamper((c) => (c.controls.find((x) => x.key === "Orders:/orders/:id/edit:button:update_order")!.effect = "irreversible"));
     expect(codes(mismatch)).toContain("irreversible-mismatch");
+  });
+});
+
+describe("engine publication", () => {
+  it("proposes an artifact whose hash still matches after the client stamps its identity", async () => {
+    const identity = "ab".repeat(32);
+    const sent: PortableCapability[] = [];
+    const events: EventPayload[] = [];
+    // Partial fake: publishCapability uses only these members. It sends the capability the way
+    // NetworkClient does, with publisherId replaced by the authenticated identity.
+    const client = {
+      identity,
+      config: { publishEnabled: true },
+      versionInfo: () => null,
+      registerApplication: async () => undefined,
+      proposeCapability: async (c: PortableCapability) => {
+        sent.push(PortableCapability.parse({ ...c, publisherId: identity }));
+        return { versionId: `${c.capabilityId}@${c.version}`, state: "PROPOSED" as const };
+      },
+    } as unknown as INetworkClient;
+    const config = RunConfigSchema.parse({ goal: GOAL, applications: env.apps, records: env.records });
+    await publishCapability({ client, config, plan: buildPlan(env.models), models: env.models, verifiedReceipts: 5, emit: (e) => events.push(e) });
+    expect(events.find((e) => e.type === "network.publish")).toMatchObject({ state: "PROPOSED" });
+    expect(sent).toHaveLength(1);
+    expect(verifyArtifactHash(sent[0]!)).toBe(true);
   });
 });

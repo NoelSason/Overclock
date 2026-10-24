@@ -133,7 +133,9 @@ export async function publishCapability(o: Emitter & { client: INetworkClient; c
   const rejected = (capabilityId: string, version: number, reason: string, redactions = 0) =>
     o.emit({ type: "network.publish", capabilityId, version, state: "REJECTED", ms: Math.round(performance.now() - t0), redactions, bytes: 0, rejected: reason.slice(0, 300) });
   if (!o.client.config.publishEnabled) return rejected("-", 0, "publishing is disabled for this runtime (OVERCLOCK_NETWORK_PUBLISH_ENABLED=false)");
-  const base = { plan: o.plan, models: o.models, apps: o.config.applications, goal: o.config.goal, recordFields: recordFieldsOf(o.config.records), verifiedReceipts: o.verifiedReceipts, compilerVersion: COMPILER_VERSION, records: o.config.records };
+  // The artifact hash covers publisherId, and the client sends its own identity, so export with it.
+  const publisherId = o.client.identity ?? undefined;
+  const base = { plan: o.plan, models: o.models, apps: o.config.applications, goal: o.config.goal, recordFields: recordFieldsOf(o.config.records), verifiedReceipts: o.verifiedReceipts, compilerVersion: COMPILER_VERSION, records: o.config.records, publisherId };
   let exported: ReturnType<typeof exportCapability>;
   try {
     exported = exportCapability(base);
