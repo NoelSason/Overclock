@@ -11,6 +11,7 @@ import {
   passValidation,
   proposeVerified,
   rawConnection,
+  recordMetrics,
   sampleCapability,
   summarize,
   testOrigin,
@@ -40,15 +41,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  console.log(
-    `[network-metrics] registry ${JSON.stringify({
-      propagationServerMs: summarize(metrics.propagationServerMs),
-      propagationE2eMs: summarize(metrics.propagationE2eMs),
-      lookupMs: summarize(metrics.lookupMs),
-      fetchNetworkMs: summarize(metrics.fetchNetworkMs),
-      fetchLocalMs: summarize(metrics.fetchLocalMs),
-    })}`,
-  );
+  recordMetrics("registry", {
+    propagationServerMs: summarize(metrics.propagationServerMs),
+    propagationE2eMs: summarize(metrics.propagationE2eMs),
+    lookupMs: summarize(metrics.lookupMs),
+    fetchNetworkMs: summarize(metrics.fetchNetworkMs),
+    fetchLocalMs: summarize(metrics.fetchLocalMs),
+  });
   await Promise.all([admin, publisher, validator, reader].map((c) => c?.close()));
 });
 
@@ -196,7 +195,7 @@ describe("promotion rules", () => {
     // (b) Self-validation by the publisher (the admin publishes and validates its own version).
     const v2 = (await admin.proposeCapability(sampleCapability({ capabilityId, version: 2, origin }))).versionId;
     await admin.recordValidation(passValidation(v2));
-    await expect(admin.promote(v2)).rejects.toThrow(/only VERIFIED or CANARY \(state is VALIDATING\)/);
+    await expect(admin.promote(v2)).rejects.toThrow(/only VERIFIED or CANARY versions can be promoted \(state is VALIDATING\)/);
 
     // (c) Verified by a validator who is then suspended: the pass no longer counts.
     const v3validator = await authorizedClient(admin, "validator-temp", "validator");

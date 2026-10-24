@@ -1,0 +1,488 @@
+# Overclock architecture
+
+This document describes how Overclock turns a natural-language browser task into a verified,
+parallel execution program, and what the code does today. Each section carries a status label:
+
+- **Working (tested):** automated tests cover it.
+- **Partial:** implemented, but untested end to end or with a known gap.
+- **In progress:** code is being written or is not wired in yet.
+- **Proposed:** design only.
+
+Statuses reflect the repository on 2026-10-24. [`PROGRESS.md`](../PROGRESS.md) tracks changes.
+
+## Components
+
+| Package | Role | Status |
+| --- | --- | --- |
+| `packages/contracts` | Zod schemas and types for the IR, Procedure DSL, app model, events, reducer, run config, scenarios, and benchmark files. | Working (tested) |
+| `packages/perception` | One `page.evaluate` round trip per page: controls, forms, tables, facts, dialogs, route patterns, structural fingerprints, ranked locators. | Working (tested) |
+| `packages/discovery` | UI scout crawl, app-model rendering, planner prompt, operation catalogs, effect classification, critique, dry-run probes, plan stream watcher. | Partial |
+| `packages/compiler` | Expression language, lowering, validation, optimizer passes, segment formation, incremental compiler. | Working (tested) |
+| `packages/optimizer` | Latency model, list-scheduling simulator, cost model, worker recommendation, access-path detection. | Working (tested); access paths In progress |
+| `packages/scheduler` | Per-record task expansion, dependencies, locks, release gates, invalidation, AIMD concurrency. | Working (tested); gates Partial |
+| `packages/browser-runtime` | Shared Chromium, guarded contexts, sessions, locator resolution, actions, read-back, segment runner. | Working (tested) |
+| `packages/recovery` | Localized repair ladder L0–L4 with learned rules. | L0/L1/L4 Working (tested); L2/L3 Partial |
+| `packages/models` | Claude and Jev providers with a cost ledger and budget guard. | Partial (live only) |
+| `packages/swarm` | Intelligence policy and the stage-gated pipeline (modes B, C, D). | Partial |
+| `services/engine` | Run controller, executor, streaming pipeline (mode E), SQLite store, HTTP and SSE server, restart recovery. | Store and API Working (tested); executor Partial; mode E In progress |
+| `packages/sdk`, `apps/cli` | TypeScript client and `pnpm cli`. | Working (tested) |
+| `apps/dashboard` | Next.js run console and benchmark pages. | Working (tested against a replay server) |
+| `apps/arena` | Three web apps, a judge console, variations, ground-truth checker, and a holdout app. | Working (tested) |
+| `packages/benchmarks` | Mode A baseline, suites, harness, statistics, report generator. | Working (tested) |
+| `packages/external-baselines` | Optional Stagehand baseline judged by the same checker. | Partial |
+| `packages/network-*`, `services/network/*` | Overclock Network. See [`NETWORK.md`](NETWORK.md). | In progress |
+
+## Data flow
+
+A run starts when a client posts a `RunConfig` to `POST /api/runs`. The config holds the goal,
+the application bindings (`name` and `origin`), the input records, the mode, and ablation
+switches. It never holds credentials.
+
+1. The engine signs in to each app twice: once with the execution account and once with a
+   read-only explorer account when the app has one.
+2. Discovery crawls each app in a mutation-blocked context and builds an `AppModel`.
+3. The planner writes a `DslPlan`. The compiler lowers it to an `ExecutionProgram` (the IR),
+   validates it, optimizes it, and forms segments.
+4. The scheduler expands every segment into one task per record and hands tasks to browser
+   workers. A worker runs a segment with deterministic Playwright actions and no model calls.
+5. Every write is followed by a read-back on a freshly loaded page. Receipts decide each
+   record's outcome.
+6. The run ends with a `RunSummary` and per-record `RecordOutcome`s from
+   `GET /api/runs/:id/result`.
+
+Mode A (`sequential-agent`) skips steps 2–4: one worker asks the helper model for every next
+action. Its completions are model claims, so it never reports `VERIFIED`.
+
+## Event model
+
+**Status: Working (tested).** `tests/integration/engine-api.test.ts` covers persistence,
+replay, restart recovery, paging, SSE resume, and backpressure.
+
+Every state change is an event. `EventBus` redacts the payload, assigns a sequence number
+(`seq`), a wall-clock time (`ts`), and a monotonic time since run start (`t`), persists the
+event, and only then notifies subscribers. The engine and the dashboard build their view of a
+run by applying the same events through the same reducer (`applyEvent` in
+`packages/contracts/src/reducer.ts`), so the dashboard shows exactly what the engine recorded.
+Replay is idempotent: events with `seq` at or below the last applied one are ignored.
+
+| Group | Event types |
+| --- | --- |
+| Run | `run.created`, `run.status`, `run.completed`, `log` |
+| Pipeline | `stage` (start and end of `discovery`, `planning`, `compilation`, `critique`, `probe`, `execution`, `optimization`), `scout.page`, `fragment` |
+| Discovery and planning | `policy.decision`, `agent.started`, `agent.artifact`, `agent.finished`, `candidate.proposed`, `candidate.evaluated`, `candidate.selected`, `program.compiled`, `program.patched` |
+| Execution | `tasks.created`, `task.state`, `worker.state`, `worker.thumb`, `action`, `receipt`, `lock.conflict`, `invalidation`, `concurrency`, `reopt.decision` |
+| Recovery and approvals | `recovery`, `approval.requested`, `approval.resolved` |
+| Models | `model.call` (provider, model, purpose, latency, tokens, cost, success) |
+| Network | `network.lookup`, `network.import`, `network.publish`, `network.repair`, `network.update` |
+
+Two event types exist in the contract but no engine code emits them yet: `reopt.decision` and
+the `network.*` family. Stage intervals may overlap. That overlap is what mode E produces and
+what `overlapMs` measures.
+
+**Storage.** `EngineStore` keeps one SQLite file per runtime (`node:sqlite`, WAL mode,
+`synchronous=NORMAL`). The append-only `events` table is the source of truth. `appendEvent`
+writes each event and every projection derived from it (runs, tasks, task transitions,
+receipts, recoveries, model invocations, lock conflicts, stage intervals, scout pages,
+fragments) in one transaction, so projections can't disagree with the log.
+
+**Restart.** Runs that exist in the store but not in the live process are served read-only
+by rebuilding their view from the event log. A run with no `run.completed` event is reported
+`failed` with the reason "engine restarted during the run", and tasks that may have been
+mid-write are reported `UNCONFIRMED`, because the engine can't know whether those writes
+committed.
+
+**API.** The engine serves `GET /api/health`, `POST /api/runs`, `GET /api/runs`,
+`GET /api/runs/:id`, `GET /api/runs/:id/events?after=&limit=`, `GET /api/runs/:id/stream`
+(server-sent events with `Last-Event-ID` resume and a 15 s heartbeat),
+`POST /api/runs/:id/{cancel,pause,resume,approvals}`, `GET /api/runs/:id/{result,metrics,trace,program}`,
+`GET /api/runs/:id/artifacts/:artifactId`, `GET /api/runs/:id/workers/:workerId/thumb.jpg`,
+and `GET /api/benchmarks[/:name]`.
+
+## IR and segments
+
+**Status: Working (tested).** [`ACTION_IR.md`](ACTION_IR.md) is the full reference.
+
+The planner produces the Procedure DSL: phases (`once` or `foreach` over a list) of typed steps
+(`goto`, `fill`, `select`, `click`, `submit`, `extract`, `extractTable`, `compute`, `assert`,
+`waitFor`). The compiler lowers it into IR `ActionNode`s with resolved semantic locators,
+effects (`read`, `local-write`, `remote-write`, `irreversible`), retry policies, declared read
+and write resources, preconditions, and read-back verification specs.
+
+`compileProgram` then runs eight passes per scope:
+
+| # | Pass | What it does |
+| --- | --- | --- |
+| 1 | `dependency-analysis` | Adds ordering edges for read-after-write, write-after-read, and write-after-write conflicts on declared resources. Only ever adds edges. |
+| 2 | `redundant-observation-elimination` | Drops a navigate to the URL the page already shows when nothing changed the page, and aliases duplicate extractions. |
+| 3 | `locator-reuse` | Counts target references that share a control. Reporting only: the runtime has no locator cache yet. |
+| 4 | `common-subexpression-reuse` | Collapses identical pure computations. |
+| 5 | `navigation-grouping` | Forms segments (see the following list). |
+| 6 | `concurrency-extraction` | Reports intra-record parallelism (total work divided by critical path). |
+| 7 | `resource-aware-scheduling` | Computes critical-path priorities (bottom levels) and flags write locks that don't vary per record, because those serialize every record. |
+| 8 | `verification-placement` | Forces `verify-before-retry` on writes and warns when a write verifies on the page it edited or has no compare-and-swap guard. |
+
+A **segment** is a maximal page chain on one app that one worker runs back to back. Segment
+formation keeps three invariants:
+
+- A segment contains at most one remote write, and the write is its last node. A retry after
+  reconciliation therefore never repeats an earlier, already-committed write.
+- A node joins its app's open chain only if it continues that page and the segment graph stays
+  acyclic.
+- Pure computations at join points become browser-free `compute` segments.
+
+Segments are templates. The scheduler instantiates one task per record when a phase becomes
+ready ("late foreach expansion"), so a phase can iterate over the outputs of an earlier phase.
+
+## Safety gates
+
+Overclock never trades a gate for speed. The gates fall into three layers.
+
+**Compile time (Working, tested).** The compiler refuses to produce a program when any of
+these hold: a step references a control nobody observed, a click targets a control classified
+as a write, a write lacks declared resources or read-back verification, a write has retry
+policy `safe`, an irreversible node lacks required approval, an app origin is not
+allowlisted, an expression is outside the closed language, a `foreach` has no key or no
+iteration bound, `$rec` appears outside a `foreach`, a phase reads `$phase.<id>` without
+depending on it, or the dependency graph has a cycle. The full list is in
+[`ACTION_IR.md`](ACTION_IR.md#validation-rules).
+
+**Run time (Working, tested for guards; Partial for read-only fragments).** Every browser
+context enforces the origin allowlist. Exploration contexts block every mutation. Execution
+pages are read-only while they run a read segment. Locator resolution refuses ambiguous
+targets. Irreversible nodes stop at `NEEDS_APPROVAL`. See [`SECURITY.md`](SECURITY.md).
+
+**Release gates (Partial).** In mode E, each segment template has a gate in the scheduler:
+
+- `open`: every record's task may run.
+- `canary`: one task at a time runs until one succeeds, then the gate opens.
+- `deferred`: nothing runs until a safety condition clears.
+
+The exact rules mode E applies are in [Cold-start pipelines](#cold-start-pipelines).
+
+## Execution correctness
+
+**Status: Partial.** The scheduler, locks, AIMD, read-back, and uncertain-write detection are
+tested in isolation (`tests/unit/scheduler.test.ts`, `tests/integration/runtime.test.ts`).
+The executor that combines them has no automated test; it runs only in live runs.
+
+### Task states
+
+A task moves through `PENDING → READY → LEASED → RUNNING → VERIFYING → VERIFIED` (or
+`COMPLETED` for reads). Side states are `REPAIRING`, `RECONCILING`, and `SUSPENDED`. Terminal
+states are `VERIFIED`, `COMPLETED`, `FAILED`, `UNCONFIRMED`, `SKIPPED`, `NEEDS_APPROVAL`, and
+`CANCELLED`. When a task fails terminally, its dependents are `SKIPPED`.
+
+### Leases and the watchdog
+
+A worker leases the highest-priority ready task whose app is under its concurrency cap and
+whose locks are free. The lease lasts `max(30 s, 8 × estimated segment time)`. Every 2 s a
+watchdog finds expired leases and crashes the stalled worker's pages, so the task's own error
+path runs, then extends the lease to avoid double handling.
+
+### Locks
+
+Each write segment declares resource keys such as `app:support:ticket:{$out.find.ticketId}`.
+At lease time the scheduler renders the keys with the record's scope and acquires all of them
+atomically, or none. A key it can't render becomes a prefix lock (`app:support:ticket:*`),
+which is conservative. Two tasks holding the same key never run at the same time. Conflicts
+emit `lock.conflict`.
+
+The compiler also adds `page:<app>:<path>` resources for pages a write changes and pages a read
+loads, so dependency analysis orders a record's read-after-write correctly.
+
+### Compare-and-swap guards
+
+A `submit` step lists guards: for each field it changes whose earlier value it read, the edit
+form's current value must still equal the value read earlier. The compiler attaches guards to
+the first interaction after the edit page loads, so they see the form before any fill changes
+it. A failed guard raises `PreconditionFailedError`, which triggers invalidation.
+
+### Read-back verification
+
+After a write, the worker navigates fresh to the verification URL (never the form it just
+submitted) and compares each expected field. Values are whitespace-normalized. A field matches
+when it is loosely equal (numbers and numeric strings compare equal), equal ignoring case, or,
+for expected text of 12 characters or more, contained in the actual text (for example a note
+in a notes list). A mismatch raises `VerificationFailedError`.
+
+### Uncertain writes and reconciliation
+
+A write whose request returned 5xx, failed at the network layer, or got no response is
+**uncertain**: it may or may not have committed. A worker crash after the write click is
+treated the same way. The executor never retries an uncertain write blindly. It reconciles:
+
+1. Load the verification page and compare.
+2. If the state matches, record `VERIFIED` without a second write.
+3. If it doesn't match and the node's policy is `verify-before-retry`, retry with backoff (up
+   to 3 attempts).
+4. Otherwise report `UNCONFIRMED`.
+
+A 429 or a 4xx response means the write was rejected before commit, so it is safe to handle
+as a rejection.
+
+### Invalidation
+
+When a compare-and-swap guard fails or the app answers 409 (stale version), the data the write
+was computed from has changed. The scheduler resets the write task and every upstream task of
+the same record that is not a write and not already verified, discards their outputs, and
+re-queues them so they read fresh state. Verified writes are never re-executed. A write task
+that is still stale on its third attempt fails.
+
+### Failure handling
+
+| Error | Executor response |
+| --- | --- |
+| Throttled (429 on a page or a write) | Report to AIMD; retry with backoff (base 800 ms), up to 6 attempts. |
+| Navigation error or timeout | Retry with backoff (base 400 ms), up to 3 attempts. |
+| Guard failure or 409 | Invalidate and re-read. |
+| Uncertain write, or a crash after the write point | Reconcile by read-back. |
+| Read-back mismatch | Retry up to 2 attempts, then `FAILED` with a receipt. Under a canary gate, two failures block the template. |
+| Write blocked by the read-only guard | `FAILED`: a read fragment attempted a write. |
+| Other 4xx on a write | `FAILED` (rejected). |
+| Unrepaired locator or dialog failure | `NEEDS_APPROVAL` (escalated after recovery). |
+| Irreversible node not approved | `approval.requested`, then `NEEDS_APPROVAL`. |
+| Crash before any write | Retry after 200 ms. |
+
+Backoff is `min(8 s, base × 2^(attempt − 1))` with ±25% jitter.
+
+### Adaptive concurrency (AIMD)
+
+Each app gets its own additive-increase, multiplicative-decrease controller. Every 2.5 s
+window it compares throughput and median latency with the previous window:
+
+- After a healthy window (error rate at most 25%), it adds one slot.
+- When median latency rose more than 25% without at least 3% more throughput, it holds,
+  because the extra load is queueing at the server rather than doing work.
+- After two throttles (429s or timeouts) in a window, or an error rate above 25%, it halves the
+  limit and cools down for two windows.
+
+The worker pool grows to match the caps, up to `maxWorkers`.
+
+### Record outcomes
+
+A record's outcome is its worst task state: `UNCONFIRMED` dominates `FAILED`, which dominates
+`NEEDS_APPROVAL`. A record whose write segments were all correctly skipped (no change needed)
+is `SKIPPED`. `VERIFIED` means every write for the record was read back and matched.
+
+## Recovery levels
+
+**Status:** L0, L1, and L4 Working (tested) in `tests/adversarial/recovery.test.ts`; L2 and L3
+Partial (live tests exist behind `OVERCLOCK_LIVE=1`).
+
+Recovery runs inside `runSegment` when a node can't find its target, finds it hidden, finds it
+ambiguous, or is blocked by a dialog (including one already open after a navigation). It is
+localized: it repairs one node of one segment template, and every other worker keeps running.
+
+| Level | What it does | Model calls |
+| --- | --- | --- |
+| L0 | Apply a rule learned earlier in this run: a replacement locator, a tab to click first, or a dialog button. | 0, no observation |
+| L1 | Observe the page once and match deterministically: renamed buttons, relabeled fields, controls moved behind a tab, informational dialogs, confirmation dialogs after a submit. | 0 |
+| L2 | Ask Jev to choose among the observed candidates. Confidence must reach 0.7 for reads and 0.85 for anything that writes, with a margin of 0.5 for writes. | Jev |
+| L3 | Ask Claude (the planner model) to recompile the failing node against the observation. Its answer must name a control in the observation and pass the same corroboration checks as L1. | Claude |
+| L4 | Escalate to a person. The task ends in `NEEDS_APPROVAL`. | 0 |
+
+Rules that keep recovery safe:
+
+- An irreversible node is never repaired by a model. If its control was renamed, a person
+  must confirm the new one.
+- A dialog that describes an irreversible action is never confirmed, and a dialog whose only
+  action is destructive is never clicked.
+- A dialog that asks for input escalates.
+- When two candidates are equally plausible and no model is available, recovery escalates
+  instead of guessing.
+- Concurrent workers hitting the same failure share one repair. While a model-assisted repair
+  (L2 or L3) runs, the scheduler suspends leasing of that one segment template; other
+  templates keep running.
+- Each accepted repair becomes an L0 rule keyed by app, route pattern, and control (or dialog
+  title). Later records reuse it with no observation and no model call.
+- A run may spend at most 40 model calls on repair; beyond that, repairs escalate.
+
+Rules live in memory for one run; they are not persisted. The vision fallback (Jev with a
+screenshot) exists in the recovery engine but the engine does not enable it.
+
+## Cost model and online optimization
+
+**Status:** cost model and selection Working (tested) in `tests/unit/optimizer.test.ts`;
+online latency updates and AIMD Partial (wired in the executor, untested there); access-path
+substitution In progress; strategy re-optimization Proposed.
+
+### Expected cost
+
+```text
+ExpectedCost = remaining model time
+             + browser critical path      (list-scheduling simulation)
+             + expected recovery time     (tasks × failure rate × repair cost / workers)
+             + coordination overhead      (tasks × 1 ms; the coordinator is one event loop)
+```
+
+Verification time is part of the browser critical path; it is reported separately and not
+counted twice. Each estimate lists which inputs were measured, estimated, or defaulted.
+
+The **latency model** starts from defaults (250 ms per navigation, 450 ms per write) and is
+seeded by page loads the scouts and dry-run probes measured. During execution it updates from
+every action (exponentially weighted averages per app, per action type, and per segment).
+
+The **simulator** runs an event-driven list schedule of the expanded task DAG: W identical
+workers, per-app caps, phase barriers, critical-path priority, and serialized per-run constant
+locks.
+
+**Worker choice.** `recommendWorkers` simulates 1, 2, 4, 6, 8, 12, 16, 24, and 32 workers (up
+to `maxWorkers`) and picks the smallest count within 6% of the best makespan.
+
+**Candidate selection.** The optimization scout ranks valid candidates by expected total time
+and records the reason, for example "X is 41% faster than Y". A candidate whose dry run failed
+is invalid.
+
+### Online optimization
+
+- **Latency updates and AIMD** run during every execution today.
+- **Access-path substitution (In progress).** `findAccessPathCandidates` finds per-record
+  detail-read segments (navigate to `/entity/{key}`, then extract facts) that a paginated
+  list table could serve, when the table's rows link to the same detail route and its
+  columns carry the same facts. The executor has a `substitute` hook that completes a ready
+  read task from scanned rows without a browser. By design the switch happens only when
+  measured costs favor the scan and scanned values match detail reads that already ran. The
+  engine does not pass a `substitute` provider yet.
+- **Strategy re-optimization (Proposed).** The `reopt.decision` event and the
+  `onlineReoptimization` ablation flag exist; nothing implements them.
+
+## Cold-start pipelines
+
+### Intelligence policy
+
+`decidePolicy` decides how much discovery a staged run gets:
+
+- Warm cache hit: reuse the cached plan and app models; no discovery or planning.
+- Modes B and C: one planner, no catalogs, no critique, no dry run.
+- 5 records or fewer: one planner plus a dry-run probe.
+- Only one strategy available (or competitive synthesis disabled): one candidate with
+  critique and probes.
+- Otherwise: up to 3 competing candidates, one per strategy directive, plus operation catalogs
+  when there is more than one app.
+
+Two strategy directives exist today: `per-record` (always) and `list-scan` (when an app has a
+paginated or long list table). So a run compares at most two candidates.
+
+### Mode D: stage-gated (Partial)
+
+`runStagedSwarm` runs each stage to completion before the next one starts:
+
+1. **Discovery.** UI scouts crawl every app in parallel, breadth first, up to 14 pages and 2
+   samples per route pattern, in mutation-blocked contexts. They dismiss informational dialogs
+   and measure real page-load latency.
+2. **Policy decision.**
+3. **Effect classification** (Jev batched choices, more severe of model and heuristic wins) in
+   parallel with **operation catalogs** (Claude Haiku), when the policy asks for them.
+4. **Planning.** K candidates in parallel. Each one is generated, lowered, validated, and
+   compiled, with one repair round on errors.
+5. **Critique and dry run.** For each valid candidate, in parallel: an adversarial critique
+   (Claude Haiku) and a dry run of its read segments for the first record in a
+   mutation-blocked context. High-severity risks or a failed dry run trigger one repair round.
+6. **Selection.** The optimization scout estimates each candidate's cost and selects the
+   fastest valid one.
+7. **Execution.** The executor starts only after selection, with the recommended worker count.
+
+The first browser action of execution happens after every earlier stage has finished, so
+`overlapMs` is 0.
+
+### Mode E: streaming (In progress)
+
+`runStreamingPipeline` (`services/engine/src/streaming.ts`) is implemented but has not been
+run end to end. It works as follows:
+
+1. **First-pass discovery.** One sample per route pattern, up to 12 pages per app: enough to
+   start planning.
+2. **Background work.** Effect classification and a second, deeper discovery pass start in the
+   background. The second pass reports locator stability; it doesn't change the plan.
+3. **Empty executor.** The executor starts with no segments and up to 4 workers, in
+   incremental mode.
+4. **Streaming plan.** The planner's JSON streams through `PlanStreamWatcher`, which reports
+   each phase header, each completed step, and each completed phase. Phase headers register
+   phases with the incremental compiler and the scheduler. Each step is schema-validated,
+   added to the incremental compiler, and the phase is re-lowered and re-segmented.
+5. **Fragment release.** The incremental compiler releases a segment as a fragment only when
+   all of the following hold:
+   - The segment is closed: the stream has moved past its last step, it ends in a write, or its
+     phase is sealed.
+   - Every step in it lowered without errors (known controls, valid expressions, consistent
+     effects).
+   - Every segment it depends on was already released.
+
+   Released fragments are immutable. A later step that continues a page an earlier read
+   fragment loaded gets its own re-navigation; if that earlier fragment was not pure, the step
+   is held back. Only safe passes run incrementally (dependency analysis and verification
+   placement).
+6. **Read fragments.** A read fragment enters the scheduler with a `canary` gate: one record
+   runs first, and when it succeeds the fragment fans out to every record. While it runs, its
+   page is read-only at the network layer.
+7. **Write fragments.** A write fragment enters with a `deferred` gate.
+8. **Whole-plan validation.** When the stream ends, the full plan is lowered and validated with
+   the same checks the staged path runs.
+9. **Write gates.** Writes stay deferred until every one of these holds:
+   - every phase is sealed and the whole plan validated;
+   - every step arrived as a valid fragment, and the planner's output needed no repair round;
+   - side-effect classification finished, and nodes on controls classified irreversible were
+     marked as requiring approval;
+   - the critique passed with no high-severity risk (critique runs when there are more than 5
+     records and Claude is available).
+10. **Write canary.** Each write template then gets a `canary` gate: one record writes and is
+    verified by read-back before the template fans out. Two canary verification failures
+    block the template and reject the fragment. The `writeCanary` ablation opens the gate
+    directly.
+11. **Fallback.** If any write gate fails, the pipeline rejects every write fragment, cancels
+    queued tasks, waits for running ones, asks the planner for a repaired plan, and runs it
+    stage-gated. Reads that already ran had no side effects.
+
+Phases that depend on other phases (cross-record aggregates) expand only after those phases
+finish, in both modes. Every stage emits `stage` events, scouts emit `scout.page`, and every
+fragment transition emits `fragment` (`compiled`, `validated`, `canary`, `deferred`,
+`released`, `rejected`). The dashboard's **Pipeline** panel draws the stages against wall time
+so the overlap is visible, and the **Fragments** panel shows each fragment's gate.
+
+## Network layer
+
+**Status: In progress.** [`NETWORK.md`](NETWORK.md) has the design, status, and setup.
+
+The Overclock Network shares **portable capabilities**: a Procedure DSL plan whose control
+references are semantic, data-free control descriptors instead of observation-local ids. A
+runtime looks up candidates by non-sensitive interface signatures, fetches one, verifies its
+content hash, rebinds every control against its own live observation, and compiles it locally.
+A capability reaches other runtimes only after sanitization, independent validation by a
+different identity, and promotion through a state machine enforced by the SpacetimeDB module.
+
+The engine doesn't call the network yet. Runs with `knowledge: "network-read"` or
+`"network-read-and-contribute"` behave like cold runs that also write the local program cache.
+
+## Limitations
+
+- **Mode E is unproven.** The streaming pipeline has no automated test and no recorded run.
+- **No executor tests.** The executor, staged swarm, crawler, effect classification, critique,
+  and dry run run only in live runs.
+- **Access paths and re-optimization** are not wired in. Their ablation rungs measure nothing
+  until they are.
+- **Approvals don't resume.** Approving an irreversible step calls `scheduler.retry`, which
+  ignores tasks already in a terminal state, so the approved step never runs.
+- **Competition is narrow.** Only two strategy directives exist. Bulk-import operations are
+  detected but not offered, because read-back verification covers one entity per write.
+- **No nested loops.** A `foreach` inside a `foreach` is rejected.
+- **Per-run learning.** Recovery rules and the latency model are not persisted between runs.
+  The local program cache is.
+- **Generic login.** Sign-in looks for a password field and a username-like field; apps with
+  other login flows need `OVERCLOCK_APP_CREDENTIALS` and may still fail.
+- **Pattern-based redaction.** Event and config redaction matches key names and token shapes;
+  it can miss secrets in unusual formats.
+
+## Acceptance tests
+
+| Check | Command or test | Status |
+| --- | --- | --- |
+| Mode E records discovery/execution overlap | `stageOverlapMs` computes `overlapMs` from `stage` events; `tests/integration/engine-api.test.ts` rebuilds it from replayed scripted events. A live check is `pnpm cli run --scenario --mode overclock` (the progress line and summary show overlap). | Metric tested; a real mode E run is not yet automated |
+| Time to first verified action is measured | `firstVerifiedMs` comes from the first `VERIFIED` receipt. `tests/integration/engine-api.test.ts` ("rebuilds a completed run's view identical to the live reducer state") and `tests/unit/benchmark.test.ts` (harness records it). | Working (tested) |
+| Holdout evaluated after a code freeze | The harness refuses holdout scenarios unless `OVERCLOCK_HOLDOUT_FROZEN` names a freeze identifier, and records it. `tests/unit/benchmark.test.ts` ("refuses holdout runs without a code-freeze identifier and records it when given"). Run with `OVERCLOCK_HOLDOUT_FROZEN=<freeze-id> pnpm exec tsx packages/benchmarks/src/cli.ts --suite holdout` (spends money). | Gate tested; holdout not yet evaluated |
+| Judge-induced UI change triggers recovery without duplicate writes | `pnpm test:adversarial`: for a renamed save button, reordered fields, a confirmation modal, an announcement modal, a field in a hidden tab, a renamed label, and all at once, record 1 is repaired at L0/L1 with 0 model calls, record 2 reuses the repair with no observation, and the app sees exactly 2 writes. The arena checker counts duplicate writes (`tests/unit/arena-oracle.test.ts`). | Tested on a fixture app; engine + arena + live surprise not yet automated |
+| Two independent runtimes transfer a capability via SpacetimeDB | No test yet (`tests/network/` is empty). | Not yet automated |
+| Network-disabled operation | The engine has no network dependency today, and every test runs without SpacetimeDB. `DisabledNetworkClient` answers every lookup with "no capability". A test that a network-enabled engine falls back when SpacetimeDB is unreachable doesn't exist. | Holds today by construction; fallback not yet automated |
+| A–E produce comparable records | Every mode writes the same `BenchmarkRunRecord`. The harness checks seed, template, record count, and dataset hash before each run. `tests/unit/benchmark.test.ts` ("separates cold, warm, holdout, record-count, and condition groups", "computes speedups only between matched groups", "fails a run when the arena serves a different dataset for the same key"). | Harness tested; no records yet |
+| The compiler rejects unsafe programs | `tests/unit/compiler.test.ts` | Working (tested) |
+| Uncertain writes are reconciled, not repeated | `tests/integration/runtime.test.ts` ("reports an after-commit 500 as uncertain, and read-back shows it committed"). Executor reconciliation itself has no test. | Runtime tested; executor not yet automated |
+| Read fragments can't write | Exploration-context blocking is tested in `tests/integration/runtime.test.ts`. Per-page read-only mode in execution contexts has no test. | Not yet automated |

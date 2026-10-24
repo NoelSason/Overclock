@@ -5,8 +5,10 @@ import { OPERATING_RULES, recordInstruction, wrapUpInstruction } from "./prompt"
 import { FRAMEWORK, openStagehandSession, type Framework, type StagehandSession } from "./session";
 
 /**
- * Stagehand v3 baseline: the framework's own multi-step agent (`stagehand.agent().execute()`,
- * DOM tool mode: ariaTree, act, fillForm, extract, goto, ...) drives a locally launched Chromium.
+ * Stagehand v3 baseline: the framework's own multi-step agent (`stagehand.agent().execute()`)
+ * drives a locally launched Chromium. Default tool mode is "dom" (ariaTree, act, fillForm,
+ * extract, goto, ...); "hybrid" (Stagehand's own default for Claude) adds screenshots and
+ * coordinate clicks.
  *
  * Records run in input order, one `execute()` per record, then one wrap-up `execute()` for the
  * batch-level rules. Each record run sees the task text, the apps, the record, and the earlier
@@ -97,7 +99,7 @@ export async function runStagehand(o: StagehandRunOptions): Promise<ExternalRunR
   const records = keyedRecords(o.records);
   try {
     session = await openStagehandSession({ framework: o.framework, applications: o.applications, credentials: o.credentials, model: o.model, apiKey: o.apiKey, middleware: meter.middleware });
-    const agent = session.stagehand.agent({ systemPrompt: OPERATING_RULES });
+    const agent = session.stagehand.agent({ systemPrompt: OPERATING_RULES, mode: o.mode });
     const notes: string[] = [];
     for (const [index, r] of records.entries()) {
       error = stopReason();
@@ -127,11 +129,14 @@ export async function runStagehand(o: StagehandRunOptions): Promise<ExternalRunR
     framework: FRAMEWORK,
     frameworkVersion: o.framework.version,
     model: o.model,
+    agentMode: o.mode,
     wallMs: Math.round(performance.now() - t0),
     firstActionMs: firstActionAt === null ? null : Math.max(0, firstActionAt - epoch0),
     modelCalls: meter.calls,
     inputTokens: meter.inputTokens,
     outputTokens: meter.outputTokens,
+    cachedInputTokens: meter.cachedInputTokens,
+    cacheWriteTokens: meter.cacheWriteTokens,
     costUsd: Math.round(meter.spentUsd * 1e6) / 1e6,
     recordsAttempted: recordEpisodes.length,
     recordsClaimedDone: recordEpisodes.filter((e) => e.claimedDone).length,

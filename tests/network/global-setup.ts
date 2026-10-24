@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestProject } from "vitest/node";
 import { NetworkClient } from "../../packages/network-client/src/index";
 import {
   LOCAL_ENDPOINT,
+  NETWORK_STATE_DIR,
   authorizeAsOwner,
   cliServerFor,
   deleteDatabase,
@@ -61,6 +62,15 @@ export default async function setup(project: TestProject): Promise<() => Promise
   console.log(`[network-test] database ${database} on ${endpoint}`);
 
   return async () => {
+    const metrics: Record<string, unknown> = {};
+    for (const f of readdirSync(scratchDir).filter((n) => n.startsWith("metrics-") && n.endsWith(".json"))) {
+      metrics[f.slice("metrics-".length, -".json".length)] = JSON.parse(readFileSync(join(scratchDir, f), "utf8"));
+    }
+    if (Object.keys(metrics).length > 0) {
+      for (const [name, m] of Object.entries(metrics)) console.log(`[network-metrics] ${name} ${JSON.stringify(m)}`);
+      mkdirSync(NETWORK_STATE_DIR, { recursive: true });
+      writeFileSync(join(NETWORK_STATE_DIR, "last-test-metrics.json"), `${JSON.stringify({ endpoint, database, at: new Date().toISOString(), metrics }, null, 2)}\n`);
+    }
     const deleted = await deleteDatabase({ database, server });
     rmSync(scratchDir, { recursive: true, force: true });
     console.log(`[network-test] ${deleted ? "deleted" : "could not delete"} database ${database}`);

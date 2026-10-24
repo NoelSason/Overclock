@@ -36,7 +36,9 @@ export class UsageMeter {
   lastError: string | undefined;
   inputTokens = 0;
   outputTokens = 0;
+  /** Prompt-cache reads and writes (both also included in inputTokens). */
   cachedInputTokens = 0;
+  cacheWriteTokens = 0;
   spentUsd = 0;
   /** Set once a call was refused for budget. */
   budgetExceeded: ExternalBudgetExceededError | null = null;
@@ -62,11 +64,13 @@ export class UsageMeter {
   record(usage: Usage | undefined, providerMetadata: unknown): void {
     const uncached = usage?.inputTokens ?? 0;
     const cached = usage?.cachedInputTokens ?? 0;
-    const input = uncached + cached + cacheCreationTokens(providerMetadata);
+    const written = cacheCreationTokens(providerMetadata);
+    const input = uncached + cached + written;
     const output = usage?.outputTokens ?? 0;
     this.inputTokens += input;
     this.outputTokens += output;
     this.cachedInputTokens += cached;
+    this.cacheWriteTokens += written;
     this.spentUsd += costUsd(this.model, input, output);
   }
 

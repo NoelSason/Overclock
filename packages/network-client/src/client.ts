@@ -137,7 +137,10 @@ export class NetworkClient implements INetworkClient {
 
   /** Origin -> applied waiter. Present once watchOrigins was requested for the origin. */
   private readonly watched = new Map<string, Deferred<void>>();
+  /** Origins whose subscription is applied on the current connection (lookup readiness). */
   private readonly appliedOrigins = new Set<string>();
+  /** Origins that were applied at least once on any connection (replay detection). */
+  private readonly everAppliedOrigins = new Set<string>();
   private readonly watchHandles: SubscriptionHandle[] = [];
   private baseApplied: Deferred<void> = deferred<void>();
 
@@ -362,17 +365,28 @@ export class NetworkClient implements INetworkClient {
   // Subscription events
   // ------------------------------------------------------------------------------------------
 
+  /**
+   * Live transactions are changes. Subscription (re)application is a change only when it shows a
+   * different state than we last saw, or a new row for an origin we had already synced (a row
+   * committed while we were disconnected); the very first sync of an origin is not.
+   */
+  private isReplayedChange(ctx: EventContext, seenBefore: boolean, origins: readonly string[]): boolean {
+    if (isLiveEvent(ctx)) return true;
+    if (seenBefore) return true;
+    return origins.some((o) => this.everAppliedOrigins.has(o));
+  }
+
   private handleVersion(ctx: EventContext, row: CapabilityVersions): void {
     const prev = this.seenVersionState.get(row.versionId);
     this.seenVersionState.set(row.versionId, row.state);
     if (prev === row.state) return;
-    // Initial sync of a new subscription is not a change; a replay after reconnect that shows a
-    // different state than we last saw is.
-    if (!isLiveEvent(ctx) && prev === undefined) return;
+    if (!this.isReplayedChange(ctx, prev !== undefined, row.origins)) return;
     this.negative.clear();
     const state = PublicationState.safeParse(row.state);
-    const previous = PublicationState.safeParse(prev);
     if (!state.success) return;
+    // The server records the previous state of the last transition (several transitions can
+    // commit in one transaction, e.g. VERIFIED -> CANARY -> ACTIVE on promotion).
+    const previous = PublicationState.safeParse(row.previousState);
     const change: CapabilityChange = {
       capabilityId: row.capabilityId,
       versionId: row.versionId,
@@ -390,7 +404,8 @@ export class NetworkClient implements INetworkClient {
     const stamp = row.updatedAt.microsSinceUnixEpoch;
     this.seenJobUpdate.set(row.jobId, stamp);
     if (prev === stamp) return;
-    if (!isLiveEvent(ctx) && prev === undefined) return;
+    const origins = this.conn?.db.capabilities.capabilityId.find(row.capabilityId)?.origins ?? [];
+    if (!this.isReplayedChange(ctx, prev !== undefined, origins)) return;
     const view = toRepairJobView(row);
     for (const cb of this.repairListeners) this.safeCall(() => cb(view));
   }
@@ -417,10 +432,15 @@ export class NetworkClient implements INetworkClient {
     const handle = conn
       .subscriptionBuilder()
       .onApplied(() => {
-        for (const o of origins) {
-          this.appliedOrigins.add(o);
-          this.watched.get(o)?.resolve();
-        }
+        // Defer past the row callbacks of the same message (the SDK gives no ordering between
+        // them), so initial rows are never mistaken for replayed changes.
+        setTimeout(() => {
+          for (const o of origins) {
+            this.appliedOrigins.add(o);
+            this.everAppliedOrigins.add(o);
+            this.watched.get(o)?.resolve();
+          }
+        }, 0);
       })
       .onError((ctx) => {
         for (const o of origins) this.watched.get(o)?.reject(ctx.event);

@@ -41,7 +41,7 @@ export async function runExternal(input: ExternalRunInput): Promise<ExternalRunR
   return runStagehand({ ...o, framework, apiKey });
 }
 
-export type ExternalRunnerOptions = Pick<ExternalRunInput, "model" | "maxStepsPerRecord" | "budgetUsd" | "effort" | "signal"> & { credentials?: ExternalRunInput["credentials"] };
+export type ExternalRunnerOptions = Pick<ExternalRunInput, "model" | "maxStepsPerRecord" | "budgetUsd" | "effort" | "mode" | "signal"> & { credentials?: ExternalRunInput["credentials"] };
 
 /**
  * Adapter for the benchmark harness's `ExternalRunner` signature: same task text, records, and
@@ -58,6 +58,7 @@ export function createExternalRunner(opts: ExternalRunnerOptions = {}): (config:
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.maxStepsPerRecord ? { maxStepsPerRecord: opts.maxStepsPerRecord } : {}),
       ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
+      ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
       ...(budgetUsd !== undefined ? { budgetUsd } : {}),
     });

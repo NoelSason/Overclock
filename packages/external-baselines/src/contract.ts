@@ -24,6 +24,12 @@ export interface ExternalRunInput {
    * calls use (OVERCLOCK_HELPER_EFFORT default); null sends none (API default).
    */
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  /**
+   * Stagehand agent tool mode. Default "dom" (accessibility tree + act/fillForm), which Stagehand's
+   * docs recommend for structured page interactions. Stagehand's own default for Claude models is
+   * "hybrid" (screenshots + coordinate clicks).
+   */
+  mode?: "dom" | "hybrid";
 }
 
 export interface ExternalEpisode {
@@ -44,6 +50,8 @@ export interface ExternalRunResult {
   framework: string;
   frameworkVersion: string;
   model: string;
+  /** Agent tool mode used ("dom" or "hybrid"). */
+  agentMode?: string;
   wallMs: number;
   /** Time from the start of the run to the first browser-acting tool call of the agent (login excluded). */
   firstActionMs: number | null;
@@ -51,7 +59,11 @@ export interface ExternalRunResult {
   /** Every input token sent, cached or not. */
   inputTokens: number;
   outputTokens: number;
+  /** All tokens priced at BASELINE_PRICES; prompt-cache reads and writes count as ordinary input. */
   costUsd: number;
+  /** Of inputTokens: prompt-cache reads and cache writes (Stagehand caches its agent system prompt). */
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
   recordsAttempted: number;
   /** Records the agent claimed to have finished. A claim only: the harness checks the arena independently. */
   recordsClaimedDone: number;
@@ -112,6 +124,7 @@ export interface ResolvedRunInput {
   signal: AbortSignal | undefined;
   budgetUsd: number | undefined;
   effort: NonNullable<ExternalRunInput["effort"]> | null;
+  mode: NonNullable<ExternalRunInput["mode"]>;
 }
 
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
@@ -148,7 +161,9 @@ export function resolveRunInput(input: ExternalRunInput): ResolvedRunInput {
   if (budgetUsd !== undefined && (typeof budgetUsd !== "number" || !Number.isFinite(budgetUsd) || budgetUsd <= 0)) throw new TypeError("budgetUsd must be a positive number");
   const effort = input.effort === undefined ? "low" : input.effort;
   if (effort !== null && !EFFORTS.has(effort)) throw new TypeError(`effort must be one of ${[...EFFORTS].join(", ")} or null`);
-  return { goal: input.goal, records: input.records, applications, credentials: { username: c.username, password: c.password }, model, maxStepsPerRecord, signal: input.signal, budgetUsd, effort };
+  const mode = input.mode ?? "dom";
+  if (mode !== "dom" && mode !== "hybrid") throw new TypeError('mode must be "dom" or "hybrid"');
+  return { goal: input.goal, records: input.records, applications, credentials: { username: c.username, password: c.password }, model, maxStepsPerRecord, signal: input.signal, budgetUsd, effort, mode };
 }
 
 /** Stable display key for a record: an id-like field, else the first primitive value, else its position. Same rule as the sequential baseline. */

@@ -386,34 +386,19 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
             continue;
           }
           const name = m[1]!;
-          let v: string | undefined;
+          // A param proven on a visited page whose template agrees on every segment up to it wins;
+          // otherwise a record field of the same name supplies it.
+          let v: string | undefined = visited.find((x) => templateSegs(x.page.pathTemplate).slice(0, i + 1).join("/") === segs.slice(0, i + 1).join("/"))?.params[name];
           const rv = record?.[name];
-          if (recordFields.includes(name) && (typeof rv === "string" || typeof rv === "number")) v = String(rv);
-          // Share a param only with a visited page whose template agrees on every segment up to it.
-          v ??= visited.find((x) => templateSegs(x.page.pathTemplate).slice(0, i + 1).join("/") === segs.slice(0, i + 1).join("/"))?.params[name];
+          if (v === undefined && recordFields.includes(name) && (typeof rv === "string" || typeof rv === "number")) v = String(rv);
           if (v === undefined) return null;
           out.push(encodeURIComponent(v));
         }
         return origin + out.join("/");
       };
 
-      const visit = async (pg: PortablePage, depth: number): Promise<void> => {
-        args.signal?.throwIfAborted();
-        if (visited.some((v) => v.page.routeFamily === pg.routeFamily) || missing.has(pg.routeFamily)) return;
-        let url = resolve(pg);
-        if (!url && pg.reachVia && depth < 4) {
-          const viaRoute = pg.reachVia.routeFamily;
-          const via = pages.find((q) => q.routeFamily === viaRoute) ?? (viaRoute.includes(":id") ? undefined : { app: app.name, routeFamily: viaRoute, pathTemplate: viaRoute, pageFingerprint: "", regionFingerprints: {} });
-          if (via) await visit(via, depth + 1);
-          const vo = visited.find((v) => v.page.routeFamily === viaRoute);
-          if (vo) url = linkTo(vo.obs, pg.routeFamily, origin, tableHeadersOf(pg.reachVia.tableKey));
-        }
-        if (!url) for (const v of visited) if ((url = linkTo(v.obs, pg.routeFamily, origin))) break;
-        if (!url) {
-          missing.add(pg.routeFamily);
-          missingRoutes.push({ app: app.name, routeFamily: pg.routeFamily, reason: "no concrete instance found (no record value for its params and no observed link to it)" });
-          return;
-        }
+      /** Navigate and check where we landed. Login redirects and 401/403 are permission signals. */
+      const tryNavigate = async (pg: PortablePage, url: string): Promise<{ ok: true; finalUrl: string; navMs: number; tNav: number } | { ok: false; reason: string; permission: boolean }> => {
         const tNav = performance.now();
         const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: navTimeout }).catch(() => null);
         const navMs = performance.now() - tNav;
@@ -428,13 +413,47 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
           finalRoute = "";
         }
         const status = resp?.status() ?? 0;
-        if (!resp || status >= 400 || finalRoute !== pg.routeFamily) {
+        if (resp && status < 400 && finalRoute === pg.routeFamily) return { ok: true, finalUrl, navMs, tNav };
+        const permission = status === 401 || status === 403 || finalRoute === "/login";
+        const reason = !resp ? "navigation failed" : status >= 400 ? `HTTP ${status}${permission ? " (session lacks permission)" : ""}` : finalRoute === "/login" ? "redirected to /login (session lacks access)" : `landed on ${finalRoute || "another origin"}`;
+        return { ok: false, reason, permission };
+      };
+
+      const visit = async (pg: PortablePage, depth: number): Promise<void> => {
+        args.signal?.throwIfAborted();
+        if (visited.some((v) => v.page.routeFamily === pg.routeFamily) || missing.has(pg.routeFamily)) return;
+        const fail = (reason: string, permission = false) => {
           missing.add(pg.routeFamily);
-          const reason = !resp ? "navigation failed" : status >= 400 ? `HTTP ${status}${status === 401 || status === 403 ? " (session lacks permission)" : ""}` : finalRoute === "/login" ? "redirected to /login (session lacks access)" : `landed on ${finalRoute || "another origin"}`;
           missingRoutes.push({ app: app.name, routeFamily: pg.routeFamily, reason });
-          if (status === 401 || status === 403 || finalRoute === "/login") flags.push(`permission:${app.name}:${pg.routeFamily}`);
-          return;
+          if (permission) flags.push(`permission:${app.name}:${pg.routeFamily}`);
+        };
+        /** A concrete instance found by browsing: the reach-via page's list table, then any observed link. */
+        const discover = async (): Promise<string | null> => {
+          if (pg.reachVia && depth < 4) {
+            const viaRoute = pg.reachVia.routeFamily;
+            const via = pages.find((q) => q.routeFamily === viaRoute) ?? (viaRoute.includes(":id") ? undefined : { app: app.name, routeFamily: viaRoute, pathTemplate: viaRoute, pageFingerprint: "", regionFingerprints: {} });
+            if (via) await visit(via, depth + 1);
+            const vo = visited.find((v) => v.page.routeFamily === viaRoute);
+            const l = vo ? linkTo(vo.obs, pg.routeFamily, origin, tableHeadersOf(pg.reachVia.tableKey)) : null;
+            if (l) return l;
+          }
+          for (const v of visited) {
+            const l = linkTo(v.obs, pg.routeFamily, origin);
+            if (l) return l;
+          }
+          return null;
+        };
+        // Record values / shared params first; if that instance does not exist here, browse for one.
+        const first = resolve(pg);
+        let nav = first ? await tryNavigate(pg, first) : null;
+        if (nav && !nav.ok && nav.permission) return fail(nav.reason, true);
+        if (!nav?.ok) {
+          const found = await discover();
+          if (found && found !== first) nav = await tryNavigate(pg, found);
         }
+        if (!nav) return fail("no concrete instance found (no record value for its params and no observed link to it)");
+        if (!nav.ok) return fail(nav.reason, nav.permission);
+        const { finalUrl, navMs, tNav } = nav;
         const tObs = performance.now();
         let obs = await observe(page);
         if (await clearDialogs(page, obs)) {

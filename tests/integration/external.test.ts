@@ -51,12 +51,13 @@ describe("external baseline: input and result plumbing", () => {
     expect(r.model).toBe("claude-haiku-5-5");
     expect(r.maxStepsPerRecord).toBe(30);
     expect(r.effort).toBe("low");
+    expect(r.mode).toBe("dom");
     expect(r.budgetUsd).toBeUndefined();
     expect(r.applications).toEqual([
       { name: "CRM", origin: "http://127.0.0.1:4101" },
       { name: "Orders", origin: "http://127.0.0.1:4102" },
     ]);
-    expect(resolveRunInput(base({ model: "claude-opus-5-5", maxStepsPerRecord: 5, budgetUsd: 0.5, effort: null }))).toMatchObject({ model: "claude-opus-5-5", maxStepsPerRecord: 5, budgetUsd: 0.5, effort: null });
+    expect(resolveRunInput(base({ model: "claude-opus-5-5", maxStepsPerRecord: 5, budgetUsd: 0.5, effort: null, mode: "hybrid" }))).toMatchObject({ model: "claude-opus-5-5", maxStepsPerRecord: 5, budgetUsd: 0.5, effort: null, mode: "hybrid" });
   });
 
   it("rejects input it cannot run", () => {
@@ -68,6 +69,7 @@ describe("external baseline: input and result plumbing", () => {
     expect(() => resolveRunInput(base({ records: [null as unknown as Record<string, unknown>] }))).toThrow(/records\[0\]/);
     expect(() => resolveRunInput(base({ maxStepsPerRecord: 0 }))).toThrow(/maxStepsPerRecord/);
     expect(() => resolveRunInput(base({ budgetUsd: -1 }))).toThrow(/budgetUsd/);
+    expect(() => resolveRunInput(base({ mode: "cua" as "dom" }))).toThrow(/mode/);
   });
 
   it("prices tokens with the benchmark's fixed prices", () => {
@@ -85,6 +87,7 @@ describe("external baseline: input and result plumbing", () => {
     expect(meter.failures).toBe(1);
     expect(meter.inputTokens).toBe(1350);
     expect(meter.cachedInputTokens).toBe(300);
+    expect(meter.cacheWriteTokens).toBe(50);
     expect(meter.outputTokens).toBe(200);
     expect(meter.spentUsd).toBeCloseTo(costUsd("claude-haiku-5-5", 1350, 200), 12);
   });
@@ -222,7 +225,8 @@ describe.skipIf(!LIVE)("external baseline (live Stagehand + Claude)", () => {
     const arena = await startArena({ adminPort: 0, ports: { CRM: 0, Orders: 0, Support: 0 }, dataDir: dir, defaultScenario: { seed: 101, template: "t1-order-reconcile", records: 3 } });
     try {
       const s = arena.manager.publicScenario()!;
-      const result = await runExternal({ goal: s.goal, records: s.records, applications: s.applications, credentials: arenaCredentialsFromEnv(), budgetUsd: 1.5 });
+      const mode = process.env.OVERCLOCK_EXTERNAL_MODE === "hybrid" ? "hybrid" : "dom";
+      const result = await runExternal({ goal: s.goal, records: s.records, applications: s.applications, credentials: arenaCredentialsFromEnv(), budgetUsd: 1.5, mode });
       const check = arena.manager.check()!;
       const report = {
         ...result,
@@ -234,6 +238,7 @@ describe.skipIf(!LIVE)("external baseline (live Stagehand + Claude)", () => {
       };
       console.log(`[external live] ${JSON.stringify(report, null, 2)}`);
       expect(result.recordsAttempted).toBe(3);
+      expect(result.agentMode).toBe(mode);
       expect(result.modelCalls).toBeGreaterThan(0);
       expect(result.inputTokens).toBeGreaterThan(0);
       expect(result.outputTokens).toBeGreaterThan(0);

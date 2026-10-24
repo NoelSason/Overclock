@@ -78,6 +78,22 @@ describe("rebinding", () => {
     expect(r.details.paramValues.Orders?.orderId).toBe(String(env.records[0]!.orderId));
   });
 
+  it("falls back to a list link when the caller's record does not exist in this app", async () => {
+    const r = track("unknown record id", await rebind({ records: [{ orderId: "ORD-1" }] }));
+    expect(r.report.outcome).toBe("EXACT_COMPATIBLE");
+    expect(r.details.paramValues.Orders?.orderId).not.toBe("ORD-1");
+    expect(r.details.missingRoutes).toEqual([]);
+  });
+
+  it("reordered form fields: same labels, different region structure -> STRUCTURALLY_COMPATIBLE, writes safe", async () => {
+    await patchVariations(env, { shuffleFields: { Orders: 4242 } });
+    const r = track("shuffled form fields", await rebind());
+    expect(r.report.outcome).toBe("STRUCTURALLY_COMPATIBLE");
+    expect(r.report.fingerprintMismatches).toBeGreaterThan(0);
+    expect(r.details.bindings.every((b) => b.evidence === "label")).toBe(true);
+    expect(r.report.writesSafe).toBe(true);
+  });
+
   it("renamed save button: binds structurally, REQUIRES_REBINDING, writes not safe", async () => {
     await patchVariations(env, { renameButtons: { Orders: { "Update order": "Apply changes" } } });
     const r = track("renamed save button", await rebind());

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, connect as tcpConnect, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import type { NetworkConfig, PortableCapability, PublisherRole } from "@overclock/network-contracts";
@@ -9,6 +9,11 @@ import { DbConnection } from "../../packages/network-client/src/generated/index"
 
 export function env() {
   return inject("networkTest");
+}
+
+/** Save measurements; the global teardown prints every file's metrics after the run. */
+export function recordMetrics(name: string, data: unknown): void {
+  writeFileSync(join(env().scratchDir, `metrics-${name}.json`), JSON.stringify(data));
 }
 
 export function uid(n = 4): string {
