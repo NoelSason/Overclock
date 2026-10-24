@@ -15,8 +15,8 @@ export function TransferStory() {
   const { data, error, loading } = usePolling((signal) => engine.transfers(signal), 0, []);
   const [picked, setPicked] = useState<string | null>(null);
   const reports = data ?? [];
-  // Default: the newest passing changed-UI recording in which A learned cold (not a regression run).
-  const r = reports.find((x) => x.name === picked) ?? reports.find((x) => x.passed && !x.expectRefusal && x.variation && !x.aWarmCache) ?? reports[0];
+  // Default: the newest passing changed-UI recording (reports arrive newest first).
+  const r = reports.find((x) => x.name === picked) ?? reports.find((x) => x.passed && !x.expectRefusal && x.variation) ?? reports[0];
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-3 p-3">
       {loading && !data ? (
@@ -78,9 +78,17 @@ function Steps({ r }: { r: TransferReport }) {
   const tabs = Object.entries(t?.variations?.editInTab ?? {}).filter(([, on]) => on).map(([app]) => `${app}: edit fields moved into a tab`);
   const clicks = t?.actionsB.click ?? 0;
   return (
-    <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+    <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-7">
       <Step n={1} title="Agent A learned" big={correct(r.a)} ok={r.a.checker.accuracy === 1 && cleanWrites(r.a)}>
-        Runtime A <Mono>{t?.identities.a ?? "?"}</Mono> started cold, planned the workflow ({r.plannerCalls.a} planning call{r.plannerCalls.a === 1 ? "" : "s"}), and wrote through the browser in {fmtMs(r.a.wallMs)}.
+        {r.aWarmCache ? (
+          <>
+            Runtime A <Mono>{t?.identities.a ?? "?"}</Mono> ran the workflow it had learned and passed through adversarial review in an earlier run ({r.plannerCalls.a} planning calls in this recording), and wrote through the browser in {fmtMs(r.a.wallMs)}.
+          </>
+        ) : (
+          <>
+            Runtime A <Mono>{t?.identities.a ?? "?"}</Mono> started cold, planned the workflow ({r.plannerCalls.a} planning call{r.plannerCalls.a === 1 ? "" : "s"}), and wrote through the browser in {fmtMs(r.a.wallMs)}.
+          </>
+        )}
       </Step>
       <Step n={2} title="SpacetimeDB accepted" big={r.validation?.outcome === "pass" ? "ACTIVE" : (r.validation?.outcome ?? "?")} ok={r.validation?.outcome === "pass"}>
         A published <Mono>{r.versionId}</Mono>. An independent validator re-checked it in read-only browsers ({fmtMs(r.validation?.ms ?? null)}, no writes), then it was promoted.
@@ -117,8 +125,13 @@ function Steps({ r }: { r: TransferReport }) {
         {r.expectRefusal ? "Nothing was guessed: B discovered and planned the workflow itself." : `B ran A's workflow without writing a new one: ${r.plannerCalls.b} planning calls (A made ${r.plannerCalls.a}), model cost ${fmtUsd(r.b.modelCostUsd)}.`}
       </Step>
       <Step n={6} title="Verified success" big={correct(r.b)} ok={r.b.checker.accuracy === 1 && cleanWrites(r.b)}>
-        {clicks} browser clicks and {t?.verifiedB ?? 0} writes, each confirmed by a fresh read. The arena&apos;s own checker, which the agents never see, found {correct(r.b)} records correct, {r.b.checker.duplicateWrites} duplicate and {r.b.checker.collateralWrites} collateral writes.
+        {clicks} browser clicks and {t?.verifiedB ?? 0} writes, each confirmed by a fresh read{t?.arenaWritesB !== undefined ? `; the arena's own counters recorded ${t.arenaWritesB} committed writes while B ran` : ""}. The arena&apos;s own checker, which the agents never see, found {correct(r.b)} records correct, {r.b.checker.duplicateWrites} duplicate and {r.b.checker.collateralWrites} collateral writes.
       </Step>
+      {r.conflict && (
+        <Step n={7} title="Conflicting request refused" big={r.conflict.writes === 0 ? "0 writes" : `${r.conflict.writes ?? "?"} writes`} ok={r.conflict.writes === 0 && r.conflict.receipts === 0}>
+          A fourth runtime asked for the same task with one value changed (“{r.conflict.goal}”). Lookup: <Mono>{r.conflict.lookup}</Mono>. It reused nothing, and the arena&apos;s write counters didn&apos;t move.
+        </Step>
+      )}
     </ol>
   );
 }

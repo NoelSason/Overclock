@@ -39,6 +39,10 @@
  * planning, so the run spends no model money; the report says so. A and B start without model
  * access, so a cache or import miss fails the run instead of planning cold.
  *
+ * With --record-video <dir>, runtime B's browser pages are recorded to <dir> (one video per page,
+ * written when B's run closes its browser contexts), as evidence of the browser execution. B's
+ * browsers then run inside its engine process instead of behind server processes.
+ *
  * With --conflict-arm, before B runs, a fourth runtime X (own identity, own data dir, no model
  * access) asks for the same task with one value changed ("Tier 2" becomes "Tier 1"). Its
  * operation differs, so it must find no capability to reuse and, with no planner, make zero
@@ -175,6 +179,7 @@ async function main(): Promise<void> {
   const warmArm = argv.includes("--warm-arm");
   const conflictArm = argv.includes("--conflict-arm");
   const aWarmCache = argValue(argv, "--a-warm-cache");
+  const recordVideo = argValue(argv, "--record-video");
   const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
@@ -206,8 +211,12 @@ async function main(): Promise<void> {
   // A regression run needs no model: A replays its cached plan and B imports. Without model access
   // a cache or import miss fails the run instead of planning cold and spending.
   const noModel: Record<string, string> = aWarmCache ? { ANTHROPIC_API_KEY: "" } : {};
+  // --record-video <dir>: runtime B's browser pages are recorded (saved when its run's contexts
+  // close). B's browsers then run in its own process: behind a server process, Playwright keeps
+  // each video on the server side.
+  const video: Record<string, string> = recordVideo ? { OVERCLOCK_RECORD_VIDEO_DIR: recordVideo, OVERCLOCK_BROWSER_SERVERS: "0" } : {};
   const a = startEngine("runtime-a", 4010, true, noModel);
-  const b = startEngine("runtime-b", 4020, true, noModel);
+  const b = startEngine("runtime-b", 4020, true, { ...noModel, ...video });
   const c = coldArm ? startEngine("runtime-c", 4030, false) : null;
   // X has no model access: if it can't reuse a capability, it can't plan, so it writes nothing.
   const x = conflictArm ? startEngine("runtime-x", 4040, true, { ANTHROPIC_API_KEY: "" }) : null;
@@ -263,18 +272,20 @@ async function main(): Promise<void> {
     const promoteMs = Math.round(performance.now() - tPromote);
     console.log(`admin promoted ${versionId} to ACTIVE in ${promoteMs} ms`);
 
+    // Committed writes, counted by the arena itself across every app (the arena's admin API, which
+    // only this harness uses): evidence of what reached the applications, independent of the engine.
+    const arenaWrites = async () => Object.values(((await arena.stats()) as { apps: Record<string, { writes: number }> }).apps).reduce((n, a) => n + a.writes, 0);
+
     // 2b. Runtime X: the same task with one value changed must not reuse A's capability.
     let conflict: { goal: string; lookup: string; importOutcome: string | null; refused: string[]; writes: number; receipts: number; plannerCalls: number; status: string; error: string | null } | null = null;
     if (conflictArm) {
       const scenarioX = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
       if (!scenarioX.goal.includes("Tier 2")) throw new Error("the task text has no \"Tier 2\" to change for the conflict arm");
       const goalX = scenarioX.goal.replace("Tier 2", "Tier 1");
-      // Committed writes, counted by the arena itself across every app.
-      const writes = async () => Object.values(((await arena.stats()) as { apps: Record<string, { writes: number }> }).apps).reduce((n, a) => n + a.writes, 0);
-      const before = await writes();
+      const before = await arenaWrites();
       console.log(`\nX: same records as B, instructions with one value changed ("Tier 2" -> "Tier 1"), network-read, no model access`);
       const resX: { runId: string | null; status: string; error?: string } = await engineX.execute({ ...configFromScenario(scenarioX, { mode, knowledge: "network-read", thumbnails: false }), goal: goalX }).catch((e: unknown) => ({ runId: null, status: "failed", error: (e as Error).message }));
-      const after = await writes();
+      const after = await arenaWrites();
       const eventsX = resX.runId ? (await engineX.events(resX.runId, 0, 10_000)).events : [];
       const look = eventsX.find((e) => e.type === "network.lookup");
       const impX = eventsX.find((e) => e.type === "network.import");
@@ -305,7 +316,9 @@ async function main(): Promise<void> {
     const bCacheDir = join(DEMO_DIR, "runtime-b", "program-cache");
     const bCacheBefore = existsSync(bCacheDir) ? readdirSync(bCacheDir).length : 0;
     console.log(`\nB: ${scenarioB.title} (${scenarioB.records.length} records)${variation ? `, UI variation ${variation}` : ""}, network-read`);
+    const writesBeforeB = await arenaWrites();
     const resB = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "network-read", thumbnails: false }));
+    const arenaWritesB = (await arenaWrites()) - writesBeforeB;
     const outB = brief("runtime-b", resB, await arena.check());
     console.log(JSON.stringify(outB, null, 2));
     const eventsB = (await engineB.events(resB.runId, 0, 10_000)).events;
@@ -366,6 +379,7 @@ async function main(): Promise<void> {
       distinct,
       { check: "B bound every control the capability needs (0 unbound)", ok: !!imp && imp.unbound === 0 && !imp.refused, detail: imp ? `${imp.bound} bound, ${imp.unbound} unbound` : "no network.import event" },
       { check: "B wrote through browser controls and verified each write by a fresh read", ok: (actionsB.click ?? 0) > 0 && verifiedB > 0, detail: `actions ${JSON.stringify(actionsB)}; ${verifiedB} VERIFIED receipts` },
+      { check: "The arena's own counters saw exactly B's verified writes arrive during B's run (live execution, not replayed events)", ok: verifiedB > 0 && arenaWritesB === verifiedB, detail: `arena committed ${arenaWritesB} write(s) while B ran; B holds ${verifiedB} VERIFIED receipts` },
       ...(variation
         ? [{ check: "B saw the UI change and rebound it: changed labels reported, writes behind a passed write canary", ok: !!imp && (imp.relabeled?.length ?? 0) > 0 && imp.writeCanary === true && canaryB > 0, detail: `${(imp?.relabeled ?? []).map((r) => `"${r.from}" -> "${r.to}" (${r.evidence})`).join(", ") || "nothing relabeled"}; write canary ${imp?.writeCanary ? `on, passed ${canaryB}x` : "off"}` }]
         : []),
@@ -406,7 +420,7 @@ async function main(): Promise<void> {
     console.log(`\noverhead: ${JSON.stringify(overhead)}`);
     console.log(`B vs C: ${JSON.stringify(comparison)}`);
     for (const [k, d] of [["A", diagA], ["B", diagB], ["C", diagC]] as const) if (d) console.log(`${k} model calls: ${JSON.stringify(d.modelCallsByPurpose)}; fallbacks ${d.fallbacks.length}; recoveries ${d.recoveries}`);
-    const transfer = { identities: { a: idA ?? null, b: idB ?? null, publisher: imp?.publisher?.slice(0, 16) ?? null }, bCacheBefore, variations: variation ? variationsB : null, relabeled: imp?.relabeled ?? [], writeCanary: imp?.writeCanary ?? false, canaryPassed: canaryB, refused: imp?.refused ?? [], importOutcome: imp?.outcome ?? null, actionsB, verifiedB };
+    const transfer = { identities: { a: idA ?? null, b: idB ?? null, publisher: imp?.publisher?.slice(0, 16) ?? null }, bCacheBefore, variations: variation ? variationsB : null, relabeled: imp?.relabeled ?? [], writeCanary: imp?.writeCanary ?? false, canaryPassed: canaryB, refused: imp?.refused ?? [], importOutcome: imp?.outcome ?? null, actionsB, verifiedB, arenaWritesB };
     console.log(`transfer: ${JSON.stringify(transfer)}`);
     const report = { at: new Date().toISOString(), passed, expectRefusal, aWarmCache: aWarmCache ?? null, conflict, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));

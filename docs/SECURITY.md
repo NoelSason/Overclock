@@ -337,6 +337,11 @@ because its publisher's plan passed a critique (publication requires it) and the
 static analysis and a read-only dry run on that version. A publisher that skipped its critique
 would still pass the validator's structural checks: the validator does not re-run the critique.
 
+A publisher also needs evidence for every write its run skipped: the same write template verified
+on another record, or a fresh mutation-blocked read showing the record already in the end state
+that write asserts. A run with an unproven skip doesn't publish, and an importer's run with one
+doesn't count as a successful reuse (`docs/NETWORK.md`, "Skipped writes need evidence").
+
 ## Known gaps
 
 - WebSocket blocking and the operator-session fallback for exploration have no automated

@@ -84,7 +84,7 @@ unless noted.
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
 | `npx vitest run --project unit` | 160 passed |
-| `npx vitest run --project integration` | 129 passed, 2 skipped (live) |
+| `npx vitest run --project integration` | 133 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `pnpm test:network-capability` | 34 passed |
 | `pnpm test:network` | 26 passed |
@@ -100,6 +100,9 @@ unless noted.
 | Same alternating trials, that code (an isolated copy) vs one selector-engine setup per page and the faster cost simulation | Two series: medians 13.78 s and 13.32 s (new faster in 3 of 3 pairs), then 14.00 s and 13.75 s (2 of 3, one tie); first verified write 7.3–7.6 s and about 6.9 s; all 500/500 |
 | Scheduling order on one engine, alternating: bottom level across records vs record order | Wall medians 13.18 s and 12.96 s; first verified write 6.4–6.6 s and 0.83–0.91 s; all 500/500 |
 | Final code vs the earlier code, alternating, heavier machine load | Medians 15.86 s and 13.78 s; first verified write 8.6 s and 0.89 s; all 500/500, 0 duplicate, 0 collateral |
+| Publication gate: skipped writes need evidence (`tests/integration/publication-gate.test.ts`) | 4 passed: a rule that never fires can't authorize publication (records stay SKIPPED), rule applied elsewhere and end state already present are accepted, one unproven record blocks it |
+| `pnpm network:demo --records 10 --seed <s> --variation rename-save --no-cold-arm --a-warm-cache ...` under the gate (no model spend) | Seeds 1111, 2222, 3333, 5151, 6262, 7777 published and passed every check; seed 4242 refused: its only hold candidate is a VIP, so the hold rule never fires and a fresh read shows "VIP" |
+| Final demo command, seed 1111, conflict arm, no model spend | 11/11 checks headless and 11/11 with visible browsers (OVERCLOCK_HEADLESS=0); the arena counted 8 writes during B's run, matching B's 8 VERIFIED receipts; X found no capability and made 0 writes |
 | Worker and browser counts on the current code, alternating | 4 browsers with 16 workers fastest (13.1 s, 14.6 s); 24 workers 13.5 s, 14.8 s; 8 browsers 14.5–15.4 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 

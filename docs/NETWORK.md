@@ -36,7 +36,23 @@ optimization) and never pooled with it.
 | `strict-cold` | no | no | no | Yes |
 | `local-only` | yes, when `cache: "warm"` | no | no | Yes. A warm hit runs staged in every mode, because there is no plan to stream. |
 | `network-read` | no | yes | no | Yes |
-| `network-read-and-contribute` | no | yes | yes, after a run where every record verified | Yes |
+| `network-read-and-contribute` | no | yes | yes, after a run where every record verified and every skipped write has evidence (below) | Yes |
+
+**Skipped writes need evidence.** A record whose writes were all skipped by their conditions is
+`SKIPPED`, which took no action and has no receipt: a model-written condition that never comes
+true skips every record and still looks successful. So a run may publish, or count as a
+successful reuse, only if every skipped write has one of these (`services/engine/src/publication.ts`):
+
+- **rule applied:** the same write template made a `VERIFIED` write on another record of the run;
+- **state verified:** a fresh read in a mutation-blocked context shows the record already passes
+  that write's own verification.
+
+Otherwise the run logs the unproven skips and doesn't publish (`tests/integration/publication-gate.test.ts`).
+Skips stay `SKIPPED`; evidence never makes them `VERIFIED`. The engine has no independent oracle,
+so "rule applied" shows a rule fires in this run, not that its condition is right for every
+record; that is what the plan's adversarial review checks. On seed 4242 the gate refuses: the
+batch's only customer with two or more refunds is a VIP, so the hold rule never fires, and a
+fresh read shows "VIP", not "On hold". Seeds 1111, 2222, 3333, 5151, 6262, and 7777 publish.
 
 Set it with `pnpm cli run --knowledge <policy>`, the SDK, or `POST /api/runs`. The engine's
 network must also be enabled (`OVERCLOCK_NETWORK_ENABLED=true`); otherwise network policies

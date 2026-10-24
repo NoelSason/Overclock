@@ -129,11 +129,15 @@ export class BrowserManager {
       this.contextsOn[i]!--;
       throw err;
     }
+    const viewport = opts.viewport ?? { width: 1280, height: 860 };
+    const videoDir = process.env.OVERCLOCK_RECORD_VIDEO_DIR;
     const context = await browser.newContext({
-      viewport: opts.viewport ?? { width: 1280, height: 860 },
+      viewport,
       storageState: opts.storageState,
       // Keep service workers out of the picture so routing sees every request.
       serviceWorkers: "block",
+      // Evidence recording, off unless OVERCLOCK_RECORD_VIDEO_DIR is set: each page's video is saved when its context closes.
+      ...(videoDir ? { recordVideo: { dir: videoDir, size: viewport } } : {}),
     });
     // esbuild (via tsx) may wrap nested functions in __name(...) when serializing page.evaluate
     // callbacks; define it in every document so evaluated code runs unchanged.

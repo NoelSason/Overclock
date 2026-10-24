@@ -83,6 +83,8 @@ export interface TransferReport {
   expectRefusal?: boolean;
   /** Set on regression runs where runtime A reused its own cached plan instead of learning cold. */
   aWarmCache?: string | null;
+  /** The conflict arm: a runtime asking for the same task with one value changed (null when not run). */
+  conflict?: { goal: string; lookup: string; importOutcome: string | null; refused: string[]; writes: number | null; receipts: number; plannerCalls: number; status: string; error: string | null } | null;
   records: number;
   seed: number;
   variation: string | null;
@@ -103,6 +105,8 @@ export interface TransferReport {
     importOutcome: string | null;
     actionsB: Record<string, number>;
     verifiedB: number;
+    /** Writes the arena itself committed while B ran (absent in older recordings). */
+    arenaWritesB?: number;
   };
   a: TransferRun;
   b: TransferRun;

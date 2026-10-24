@@ -660,8 +660,10 @@ never from browser workers:
   bound by label); its writes then run behind a write canary. Otherwise the run discovers cold. An unreachable or disabled network also means a cold run
   (`tests/unit/network-service.test.ts`).
 - **After execution:** an imported capability gets a reuse report. With
-  `network-read-and-contribute`, a run where every record verified exports the executed plan
-  (with the same compiler-added guards) as a sanitized capability and proposes it.
+  `network-read-and-contribute`, a run where every record verified, and every skipped write has
+  evidence of a legitimate no-op (its template verified elsewhere in the run, or a fresh read shows
+  its end state), exports the executed plan (with the same compiler-added guards) as a sanitized
+  capability and proposes it.
 
 ## Limitations
 

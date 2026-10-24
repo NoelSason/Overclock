@@ -606,4 +606,36 @@ export class Executor {
   segment(id: string): CompiledSegment | undefined {
     return this.o.compiled.segments.get(id);
   }
+
+  /** Write tasks that a condition skipped, with what a fresh read of their end state needs. */
+  skippedWrites(): SkippedWrite[] {
+    const out: SkippedWrite[] = [];
+    for (const t of this.scheduler.tasks.values()) {
+      if (t.state !== "SKIPPED" || t.segment.kind !== "write") continue;
+      const node = t.segment.nodes.find(isWriteNode);
+      const app = this.o.apps.find((a) => a.name === t.segment.app);
+      if (!node || !app) continue;
+      out.push({ taskId: t.taskId, segmentId: t.segmentId, recordKey: t.recordKey, origin: new URL(app.origin).origin, node, nodes: t.segment.nodes, scope: t.record.scope, overrides: this.overrides.get(t.segmentId) ?? new Map() });
+    }
+    return out;
+  }
+
+  /** Write segment templates with at least one VERIFIED task in this run. */
+  verifiedWriteTemplates(): Set<string> {
+    const out = new Set<string>();
+    for (const t of this.scheduler.tasks.values()) if (t.segment.kind === "write" && t.state === "VERIFIED") out.add(t.segmentId);
+    return out;
+  }
+}
+
+export interface SkippedWrite {
+  taskId: string;
+  segmentId: string;
+  recordKey: string;
+  origin: string;
+  /** The write node the condition skipped; its `verify` describes the end state the write asserts. */
+  node: ActionNode;
+  nodes: ActionNode[];
+  scope: TaskInstance["record"]["scope"];
+  overrides: Map<string, SemanticLocator>;
 }

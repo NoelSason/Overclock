@@ -13,6 +13,7 @@ import type { EngineStore } from "./store";
 import type { RunHandle } from "./types";
 import { runStreamingPipeline } from "./streaming";
 import { importCapability, publishCapability, type ImportedCapability } from "./network";
+import { decidePublication, stateChecker } from "./publication";
 
 const VERIFICATION_SEMANTICS =
   "VERIFIED means every state-changing step for that record was read back from the application after a fresh navigation and matched the expected values (or the record needed no change). UNCONFIRMED means a write may or may not have committed and could not be confirmed. Sequential-agent runs never report VERIFIED: their completions are model claims.";
@@ -233,7 +234,7 @@ export class RunController implements RunHandle {
       if (!this.abort.signal.aborted) cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models, review: swarm.review });
     }
     this.outcomesList = this.executor?.outcomes() ?? [];
-    if (knowledge.startsWith("network") && !this.abort.signal.aborted) await this.contributeToNetwork(knowledge, imported);
+    if (knowledge.startsWith("network") && !this.abort.signal.aborted) await this.contributeToNetwork(knowledge, imported, executeState);
     this.finish(this.abort.signal.aborted ? "cancelled" : "completed");
   }
 
@@ -265,19 +266,24 @@ export class RunController implements RunHandle {
     }
   }
 
-  /** After execution: report reuse of an imported capability, or publish a newly verified one. */
-  private async contributeToNetwork(knowledge: string, imported: ImportedCapability | null): Promise<void> {
+  /**
+   * After execution: report reuse of an imported capability, or publish a newly verified one. Both
+   * need every record verified and evidence for every skipped write (see publication.ts).
+   */
+  private async contributeToNetwork(knowledge: string, imported: ImportedCapability | null, executeState: import("@overclock/browser-runtime").StorageState | undefined): Promise<void> {
     const client = await this.runtime.network.client();
     if (!client) return;
-    const outcomes = this.outcomesList;
-    const allVerified = outcomes.length > 0 && outcomes.every((o) => o.status === "VERIFIED" || o.status === "SKIPPED");
+    if (!imported && knowledge !== "network-read-and-contribute") return;
+    const states = stateChecker(this.runtime.browser, this.config.applications.map((a) => new URL(a.origin).origin), executeState);
+    const decision = await decidePublication({ outcomes: this.outcomesList, executor: this.executor, checkState: states.check }).finally(() => states.close());
+    const counts = { applied: decision.skips.filter((x) => x.evidence === "rule-applied").length, state: decision.skips.filter((x) => x.evidence === "state-verified").length, unproven: decision.skips.filter((x) => !x.evidence).length };
+    if (decision.skips.length) this.emit({ type: "log", level: counts.unproven ? "warn" : "info", message: `network: ${decision.skips.length} skipped write(s): ${counts.applied} with the rule applied elsewhere in this run, ${counts.state} with the end state verified by a fresh read, ${counts.unproven} unproven` });
     if (imported) {
-      await client.reportReuse(imported.versionId, allVerified).catch((err: unknown) => this.emit({ type: "log", level: "warn", message: `network: reuse report failed: ${(err as Error).message}` }));
+      await client.reportReuse(imported.versionId, decision.allowed).catch((err: unknown) => this.emit({ type: "log", level: "warn", message: `network: reuse report failed: ${(err as Error).message}` }));
       return;
     }
-    if (knowledge !== "network-read-and-contribute") return;
-    if (!allVerified || !this.finalPlan) {
-      this.emit({ type: "log", level: "info", message: "network: not publishing; only runs where every record verified are contributed" });
+    if (!decision.allowed || !this.finalPlan) {
+      this.emit({ type: "log", level: "info", message: `network: not publishing; ${decision.allowed ? "no final plan" : decision.reasons.join("; ")}` });
       return;
     }
     if (this.finalPlan.review?.status !== "passed") {

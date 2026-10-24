@@ -13,11 +13,15 @@ verified execution programs instead of reasoning about every action.
 > through SpacetimeDB, rebound it, and finished 10 records in a median 2.05 s with no planning
 > call. A fresh cold runtime took 18.8 s, measured before B's latest startup changes; allowing
 > for its own share of them, B is about 8.9× faster. 5 of 5 seeds, all records correct
-> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). A request that differs in any value, threshold,
-> or condition never reuses another operation's plan: in a live run it found no capability and
-> made zero writes. Warm, the engine reconciles 500 records across three apps in a median 13.3 s
-> with every write verified by a fresh read (500/500), and the first verified write lands in
-> under a second. See [Benchmark
+> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). A runtime publishes only when every record
+> verified and every skipped write has evidence of a legitimate no-op; under that gate seed 4242
+> no longer publishes (its hold rule never fires), while 1111, 2222, 3333, 5151, 6262, and 7777
+> do. A request that differs in any value, threshold, or condition never reuses another
+> operation's plan: in a live run it found no capability and made zero writes. Warm, the engine
+> reconciles 500 records across three apps in a median 13.8 s (with other apps busy on the
+> machine) with every write verified by a fresh read (500/500), and the first verified write
+> lands in under a second. The judging demo and a recorded fallback are in
+> [`docs/DEMO.md`](docs/DEMO.md). See [Benchmark
 > results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
@@ -421,6 +425,12 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
   re-optimization exists, so the `onlineReoptimization` switch only turns access paths off.
 - The engine reports reuse of imported capabilities but doesn't start network repair jobs
   after a capability breaks; it discovers cold instead.
+- Publication evidence for skipped writes has no independent oracle. "Rule applied" shows a
+  write template fires and verifies in the run, not that its condition is right for every
+  record (the adversarial review checks that), and legitimate exceptions it never sees work,
+  such as a hold rule whose only candidate is a VIP, block publication.
+- The final demo's runtime A replays a plan it learned and reviewed in an earlier run (no model
+  calls). The cold version is recorded in `benchmarks/results/network/` but costs model calls.
 - The crawler, dry run, and effect classification have no automated tests of their own, and
   the critique's judgement is measured only by the offline evaluation and live runs. The
   pipelines' review gate is tested with a scripted model.
@@ -491,6 +501,6 @@ it is evaluated only after a code freeze, so the engine can't be tuned to it.
   validation rules.
 - [`docs/SECURITY.md`](docs/SECURITY.md): permission model and trust boundaries.
 - [`docs/NETWORK.md`](docs/NETWORK.md): Overclock Network design, status, and setup.
-- [`docs/DEMO.md`](docs/DEMO.md): judging script and reset procedure.
+- [`docs/DEMO.md`](docs/DEMO.md): the judging demo, its 90-second script, the recorded fallback (`docs/demo/transfer-recording.mp4`), and the reset procedure.
 - [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): generated from real results only.
 - [`PROGRESS.md`](PROGRESS.md): status by milestone.
