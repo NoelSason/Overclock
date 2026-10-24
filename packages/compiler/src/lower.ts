@@ -27,6 +27,43 @@ export interface LowerResult {
 
 const DEFAULT_TIMEOUT = 10_000;
 
+/**
+ * Compare-and-swap guards the plan forgot: when an edit fills or selects a control whose value an
+ * earlier extract read under the same condition, its submit must check that the form still shows
+ * that value. Applied before lowering, and to every plan that is published, so the executed
+ * program and the shared capability agree. Existing guards are kept.
+ */
+export function addReadGuards(plan: DslPlan): { plan: DslPlan; added: { stepId: string; control: string }[] } {
+  const added: { stepId: string; control: string }[] = [];
+  const phases = plan.phases.map((ph) => {
+    const reads = new Map<string, { expr: string; when: string }>();
+    let form: DslStep[] = [];
+    const steps = ph.steps.map((st): DslStep => {
+      if (st.op === "extract") {
+        for (const f of st.fields) if (f.parse === "string" && !reads.has(f.control)) reads.set(f.control, { expr: `$out.${st.id}.${f.name}`, when: st.when ?? "" });
+      } else if (st.op === "goto") form = [];
+      else if (st.op === "fill" || st.op === "select") form.push(st);
+      else if (st.op === "submit") {
+        const guarded = new Set(st.guards.map((g) => g.control));
+        const extra: { control: string; equals: string }[] = [];
+        for (const f of form) {
+          if (f.op !== "fill" && f.op !== "select") continue;
+          const r = reads.get(f.control);
+          if (!r || guarded.has(f.control) || (r.when !== "" && r.when !== (st.when ?? ""))) continue;
+          guarded.add(f.control);
+          extra.push({ control: f.control, equals: r.expr });
+          added.push({ stepId: st.id, control: f.control });
+        }
+        form = [];
+        if (extra.length) return { ...st, guards: [...st.guards, ...extra] };
+      }
+      return st;
+    });
+    return { ...ph, steps };
+  });
+  return { plan: added.length ? { ...plan, phases } : plan, added };
+}
+
 /** `{$rec.id}`-style template with every expression replaced by `*` (for resource identity). */
 export function templateShape(t: string): string {
   return t.replace(/\{[^}]*\}/g, "{}");
@@ -82,10 +119,12 @@ export function stepExprs(s: DslStep): string[] {
  */
 export function lowerPlan(input: LowerInput): LowerResult {
   const issues: Issue[] = [];
+  const { plan, added } = addReadGuards(input.plan);
+  for (const a of added) issues.push({ severity: "warning", code: "auto-guard", message: `Submit "${a.stepId}" now guards "${a.control}" with the value the plan read earlier (compare-and-swap)`, stepId: a.stepId });
   const controls = new Map<string, AppControl>();
   for (const m of input.models) for (const [id, c] of Object.entries(m.controls)) controls.set(id, c);
   const appNames = new Set(input.apps.map((a) => a.name));
-  const phaseIds = new Set(input.plan.phases.map((p) => p.id));
+  const phaseIds = new Set(plan.phases.map((p) => p.id));
   const allStepIds = new Set<string>();
   const nodes: ActionNode[] = [];
 
@@ -100,7 +139,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
   };
   const locatorOf = (c: AppControl): SemanticLocator => structuredClone(c.locator);
 
-  for (const phase of input.plan.phases) {
+  for (const phase of plan.phases) {
     if (allStepIds.has(phase.id)) issues.push({ severity: "error", code: "duplicate-id", message: `Phase id "${phase.id}" collides with a step id`, phaseId: phase.id });
     for (const d of phase.dependsOn) if (!phaseIds.has(d)) issues.push({ severity: "error", code: "unknown-phase", message: `Phase "${phase.id}" depends on unknown phase "${d}"`, phaseId: phase.id });
 
@@ -302,18 +341,18 @@ export function lowerPlan(input: LowerInput): LowerResult {
     }
   }
 
-  if (input.plan.outcomes.length === 0) issues.push({ severity: "error", code: "missing-outcomes", message: "Plan declares no expected outcomes" });
+  if (plan.outcomes.length === 0) issues.push({ severity: "error", code: "missing-outcomes", message: "Plan declares no expected outcomes" });
 
   const program: ExecutionProgram = {
     version: IR_VERSION,
     id: input.programId,
     goal: input.goal,
-    strategy: { id: input.strategyId, name: input.plan.strategy.name, summary: input.plan.strategy.summary },
+    strategy: { id: input.strategyId, name: plan.strategy.name, summary: plan.strategy.summary },
     allowedOrigins: input.apps.map((a) => new URL(a.origin).origin),
     apps: input.apps,
     inputs: input.inputs,
     nodes,
-    expectedOutcomes: input.plan.outcomes.map((o) => ({ id: o.id, description: o.description, scope: "record" as const })),
+    expectedOutcomes: plan.outcomes.map((o) => ({ id: o.id, description: o.description, scope: "record" as const })),
     approvalPolicy: { requireApprovalFor: ["irreversible"], approvedNodes: [] },
   };
   return { program, issues };

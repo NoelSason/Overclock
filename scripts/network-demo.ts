@@ -1,7 +1,7 @@
 /**
  * Overclock Network: runtime A discovers and publishes, runtime B imports, rebinds, and executes.
  *
- *   tsx scripts/network-demo.ts [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--compare-cold]
+ *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--compare-cold] [--keep]
  *
  * Needs the arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev` starts one). The
  * script publishes the module to a separate `overclock-demo` database and wipes it first, so
@@ -15,6 +15,9 @@
  *   3. the arena loads a new scenario (seed + 1: different records, same apps) and, with
  *      --variation, a UI change; runtime B (:4020, network-read) imports the capability,
  *      rebinds it to its own observation, and executes without a planner call.
+ *
+ * With --keep, both engines stay up after the report (Ctrl+C stops them), so their runs can be
+ * opened in a dashboard started with NEXT_PUBLIC_OVERCLOCK_URL=http://127.0.0.1:4010 (or 4020).
  *
  * With --compare-cold, B then repeats its scenario (reloaded, same seed and variation) with the
  * strict-cold policy, so network-warm and strict-cold are compared on identical data.
@@ -134,6 +137,7 @@ async function main(): Promise<void> {
   const variation = argValue(argv, "--variation");
   const mode = (argValue(argv, "--mode") ?? "overclock") as RunConfigInput["mode"];
   const compareCold = argv.includes("--compare-cold");
+  const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
 
@@ -250,6 +254,10 @@ async function main(): Promise<void> {
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     console.log(`\nreport: ${join(DEMO_DIR, "report.json")}`);
     if (!passed) process.exitCode = 1;
+    if (keep) {
+      console.log("\nengines still running: A http://127.0.0.1:4010, B http://127.0.0.1:4020 (Ctrl+C stops them)");
+      await new Promise<void>((resolve) => process.once("SIGINT", () => resolve()));
+    }
   } finally {
     a.kill("SIGTERM");
     b.kill("SIGTERM");

@@ -34,7 +34,8 @@
     "network:test": "vitest run --config tests/network/vitest.config.ts",
     "network:deploy": "tsx scripts/network-deploy.ts",
     "network:probe": "tsx scripts/network-probe.ts",
-    "network:authorize": "tsx scripts/network-authorize.ts"
+    "network:authorize": "tsx scripts/network-authorize.ts",
+    "network:demo": "tsx scripts/network-demo.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
