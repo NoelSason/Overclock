@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-24T21:17:10.866Z",
+  "label": "after-b-startup",
+  "records": 500,
+  "workers": 16,
+  "trials": 3,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 15994,
+  "results": [
+    {
+      "runId": "run_20261024211622_474ae2",
+      "status": "completed",
+      "wallMs": 16369,
+      "firstVerifiedMs": 8880,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.979,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024211638_819460",
+      "status": "completed",
+      "wallMs": 15994,
+      "firstVerifiedMs": 8835,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.981,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024211654_8e1287",
+      "status": "completed",
+      "wallMs": 15879,
+      "firstVerifiedMs": 8661,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.98,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

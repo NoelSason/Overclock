@@ -130,11 +130,11 @@ instructions that don't state the size.
    and verify its hash.
 2. Run static analysis on it.
 3. **Rebind:** visit the route families it needs in a mutation-blocked context (a targeted
-   mini-crawl), build a local app model, and bind every portable control to exactly one local
-   control with deterministic rules. The outcome is one of `EXACT_COMPATIBLE`,
-   `STRUCTURALLY_COMPATIBLE`, `REQUIRES_REBINDING`, `REQUIRES_REPAIR`, `INCOMPATIBLE`, or
-   `NO_CAPABILITY`. Writes are safe only when their controls bound uniquely and their effects
-   match the declared ones.
+   mini-crawl, one page per app, with the apps crawled concurrently), build a local app model,
+   and bind every portable control to exactly one local control with deterministic rules. The
+   outcome is one of `EXACT_COMPATIBLE`, `STRUCTURALLY_COMPATIBLE`, `REQUIRES_REBINDING`,
+   `REQUIRES_REPAIR`, `INCOMPATIBLE`, or `NO_CAPABILITY`. Writes are safe only when their
+   controls bound uniquely and their effects match the declared ones.
 4. Rewrite the plan to local ids, compile it locally, and run it under every local gate.
 5. Report the reuse with sanitized counters only.
 
@@ -397,7 +397,8 @@ Transfer page renders them.
   capability's publisher was A's identity, and B's local plan cache was empty before its run.
 - **Overhead:** publication about 60 ms; validation by a separate identity 1.6–1.8 s (static
   analysis, rebinding, and a read-only dry run; it executes no writes); B's lookup and fetch
-  under 20 ms; rebinding 1.2–1.3 s.
+  under 20 ms; rebinding 1.2–1.3 s (0.52–0.53 s since rebinding crawls the apps in parallel; see
+  the next section).
 - **Local warm replay** (C rerunning its own cached plan) is faster than B, because B pays for
   rebinding and the write canary. It is plain cache reuse, not a transfer between runtimes.
 - **Not a fair comparison with older numbers:** the 32.7× and 56× ratios below were measured when
@@ -407,6 +408,43 @@ Transfer page renders them.
   then the engine runs the same static analysis before publishing and records any rejection.
   The adaptive-concurrency change landed while this series ran: seeds 4242 and 1111 ran before
   it, seeds 2222 (rerun), 3333, and 7777 after.
+
+### Runtime B after faster startup and rebinding (5 seeds, no model spend, 2026-10-24)
+
+Three changes shorten the time before B's first write. None of them changes what B checks:
+binding, the write canary, and fresh read-back are the same.
+
+- **Rebinding crawls the apps in parallel:** one page per app in the same mutation-blocked
+  context, so no origin sees more than one navigation at a time. Each app's pages are still
+  visited in order (a detail page is found through its list page), and the lists the crawl
+  reports are merged in capability order, so the result doesn't depend on which app finishes
+  first.
+- **Logins run concurrently:** each app in its own page of the shared login context, and the
+  operator and explorer sessions at the same time. A network import waits only for the operator
+  session; discovery, when it runs, waits for both.
+- **The engine launches its browser pool at startup** (`OVERCLOCK_WARM_BROWSERS=0` launches on
+  first use instead). Before, the first run on a fresh engine paid for the launches: in B's
+  event log, 0.88 s passed before its network lookup started. Now it's 0.39 s.
+
+`pnpm network:demo --records 10 --seed <s> --variation rename-save --no-cold-arm --a-warm-cache
+<dir>` on the same five seeds. A replayed its own cached, reviewed plan and published (a
+regression run). A and B start without model access, so a cache or import miss fails the run
+instead of spending. B imported and rebound under the same renamed buttons.
+
+| Runtime B, same seeds and records | Before (5-seed series above) | After |
+| --- | --- | --- |
+| Wall time, median (range) | 3.3 s (3.0–3.4) | **2.05 s (1.75–2.29)** |
+| First verified write, median | 2.7 s | **1.45 s** |
+| Rebinding | 1.2–1.3 s | 0.52–0.53 s |
+| Arena checker, every run | 10/10, 0 duplicate, 0 collateral | 10/10, 0, 0 |
+| Planner calls, model cost | 0, $0 | 0, $0 |
+
+C wasn't re-measured: a strict-cold run needs model calls, and the benchmark budget is spent.
+Against the earlier C median of 18.8 s, B is 9.2× faster (12.7× to the first verified write). C
+would also gain from the faster startup, by about the 0.5 s B saved outside rebinding, which
+still leaves about 8.9×. A warm 500-record run doesn't touch these paths. Alternating trials
+between an engine on the earlier code and one on the new code, under the same machine load,
+gave medians of 16.2 s and 16.1 s, all 500/500.
 
 ### A conflicting request reuses nothing (live, 2026-10-24)
 

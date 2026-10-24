@@ -10,12 +10,13 @@ verified execution programs instead of reasoning about every action.
 > checker. With Claude Opus 5.5 fast mode for planning and critique, a cold mode E run takes
 > about 19 s for 25 records and 42 s for 500 (500/500 correct). After the website's save
 > buttons were renamed, a second, independent runtime imported the first runtime's capability
-> through SpacetimeDB, rebound it, and finished 10 records in a median 3.3 s with no planning
-> call, against 18.8 s for a fresh cold runtime: 5 of 5 seeds, all records correct
+> through SpacetimeDB, rebound it, and finished 10 records in a median 2.05 s with no planning
+> call. A fresh cold runtime took 18.8 s, measured before B's latest startup changes; allowing
+> for its own share of them, B is about 8.9× faster. 5 of 5 seeds, all records correct
 > ([`docs/NETWORK.md`](docs/NETWORK.md#results)). A request that differs in any value, threshold,
 > or condition never reuses another operation's plan: in a live run it found no capability and
-> made zero writes. Warm, the engine reconciles 500 records across three apps in a median 14.8 s
-> with every write verified (500/500). See [Benchmark
+> made zero writes. Warm, the engine reconciles 500 records across three apps in a median 13.3 s
+> with every write verified by a fresh read (500/500). See [Benchmark
 > results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
@@ -73,7 +74,10 @@ local arena, five seeds), every edit form's save button was renamed after runtim
 workflow. Runtime B, with its own identity and an empty cache, imported A's capability, rebound
 the renamed buttons by structure, wrote behind a write canary, and finished in a median 3.3 s
 with no planning call, against 18.8 s for a fresh strict-cold runtime on the same records and
-interface (5.9×). Every run of every arm passed the arena's ground-truth check. When the edit
+interface (5.9×). Every run of every arm passed the arena's ground-truth check. With rebinding
+and login now running per app in parallel and the browser pool launched at engine startup, B
+takes a median 2.05 s on the same seeds (first verified write 1.45 s); C wasn't re-measured,
+and against its earlier 18.8 s that is 9.2×, or about 8.9× allowing for C's own faster startup. When the edit
 fields were moved into a tab instead, B refused the capability, guessed nothing, and planned
 cold. See [`docs/NETWORK.md`](docs/NETWORK.md#results) and the dashboard's Transfer page.
 
@@ -265,7 +269,9 @@ trials; results in `benchmarks/results/warm/`.
 
 | Engine | Median wall (range) | Correct |
 | --- | --- | --- |
-| Final: 4 browsers, each behind its own server process; XPath-anchored fields read in one page call | **14.8 s** (14.7–15.5) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
+| Final: single-page tables read in one round of calls | **13.3 s** (13.2–13.6) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
+| Before that, in the same alternating trials (same machine load) | 14.8 s (14.8–15.8) | 500/500 |
+| 4 browsers, each behind its own server process; XPath-anchored fields read in one page call | 14.8 s (14.7–15.5) | 500/500 in every trial, 0 duplicate, 0 collateral writes |
 | Before the batched reads | 17.2 s (17.0–17.3) | 500/500 |
 | Before the batched reads, one browser in the engine's process | 23.9 s | 500/500 |
 | Before today's execution changes (same procedure, not recorded to a file) | 29.1 s | 500/500 |

@@ -63,15 +63,17 @@ export async function openDialogText(page: Page): Promise<string | null> {
 
 /**
  * Match count of a locator and whether its single match is visible, in one page call. Visible
- * follows Playwright's definition: a non-empty bounding box and no `visibility: hidden`.
+ * follows Playwright's definition: a non-empty bounding box and no `visibility: hidden`. Also
+ * whether that element is a checkbox or radio, which decides how a fill sets it.
  */
-function uniqueVisible(els: Element[]): { n: number; visible: boolean } {
+function uniqueVisible(els: Element[]): { n: number; visible: boolean; checkable?: boolean } {
   if (els.length !== 1) return { n: els.length, visible: false };
-  const r = els[0]!.getBoundingClientRect();
-  return { n: 1, visible: r.width > 0 && r.height > 0 && getComputedStyle(els[0]!).visibility !== "hidden" };
+  const el = els[0]!;
+  const r = el.getBoundingClientRect();
+  return { n: 1, visible: r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden", checkable: el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") };
 }
 
-async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number }> {
+async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number; checkable?: boolean }> {
   const loc = env.locatorOverrides.get(node.id) ?? node.target;
   if (!loc) throw new RuntimeError(`Node ${node.id} (${node.type}) has no target`, node.id);
   // Fast path, one browser call: the top-ranked strategy matches exactly one visible element, the
@@ -80,7 +82,7 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
   if (!loc.scope && loc.strategies[0]) {
     const first = strategyToLocator(env.page, loc.strategies[0]);
     const quick = await first.evaluateAll(uniqueVisible).catch(() => null);
-    if (quick?.n === 1 && quick.visible) return { locator: first, tier: 0 };
+    if (quick?.n === 1 && quick.visible) return { locator: first, tier: 0, checkable: quick.checkable === true };
   }
   try {
     const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
@@ -354,47 +356,109 @@ interface TablePage {
   rows: Record<string, string>[];
 }
 
-async function readTablePage(table: Locator, spec: ExtractTable): Promise<TablePage> {
-  return table.evaluate(
-    (el, args) => {
-      const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-      const tableEl = el.tagName === "TABLE" ? (el as HTMLTableElement) : (el.querySelector("table") as HTMLTableElement | null);
-      if (!tableEl) return { missing: Object.values(args.columns), rows: [] };
-      let headerCells = Array.from(tableEl.querySelectorAll("thead th"));
-      if (headerCells.length === 0) headerCells = Array.from(tableEl.querySelectorAll("tr:first-child th, tr:first-child td"));
-      const headers = headerCells.map((h) => norm((h as HTMLElement).innerText || h.textContent || ""));
-      const idx: Record<string, number> = {};
-      const missing: string[] = [];
-      for (const [name, header] of Object.entries(args.columns)) {
-        const i = headers.indexOf(norm(header));
-        if (i < 0) missing.push(header);
-        else idx[name] = i;
+interface TableArgs {
+  columns: Record<string, string>;
+  links: string[];
+}
+
+/**
+ * In-page table reader, self-contained because Playwright runs it in the page. Two call shapes:
+ * `locator.evaluate(readTable, args)` reads the one element a resolved locator points at, and
+ * `locator.evaluateAll(readTable, args)` reads the elements a strategy matched, yielding their
+ * count and, only when exactly one matched, its rows.
+ */
+function readTable(a: Element | Element[], args: TableArgs): { n: number; page?: TablePage } {
+  const els = Array.isArray(a) ? a : [a];
+  if (els.length !== 1) return { n: els.length };
+  const el = els[0]!;
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const tableEl = el.tagName === "TABLE" ? (el as HTMLTableElement) : (el.querySelector("table") as HTMLTableElement | null);
+  if (!tableEl) return { n: 1, page: { missing: Object.values(args.columns), rows: [] } };
+  let headerCells = Array.from(tableEl.querySelectorAll("thead th"));
+  if (headerCells.length === 0) headerCells = Array.from(tableEl.querySelectorAll("tr:first-child th, tr:first-child td"));
+  const headers = headerCells.map((h) => norm((h as HTMLElement).innerText || h.textContent || ""));
+  const idx: Record<string, number> = {};
+  const missing: string[] = [];
+  for (const [name, header] of Object.entries(args.columns)) {
+    const i = headers.indexOf(norm(header));
+    if (i < 0) missing.push(header);
+    else idx[name] = i;
+  }
+  const bodyRows = tableEl.tBodies.length ? Array.from(tableEl.tBodies).flatMap((b) => Array.from(b.rows)) : Array.from(tableEl.rows).slice(1);
+  const rows = bodyRows
+    .filter((tr) => tr.querySelectorAll("td").length > 0)
+    .map((tr) => {
+      const cells = Array.from(tr.querySelectorAll("td,th"));
+      const row: Record<string, string> = {};
+      for (const [name, i] of Object.entries(idx)) {
+        const cell = cells[i] as HTMLElement | undefined;
+        row[name] = (cell?.innerText ?? cell?.textContent ?? "").trim();
+        if (args.links.includes(name)) row[name + "Href"] = cell?.querySelector("a")?.getAttribute("href") ?? "";
       }
-      const bodyRows = tableEl.tBodies.length ? Array.from(tableEl.tBodies).flatMap((b) => Array.from(b.rows)) : Array.from(tableEl.rows).slice(1);
-      const rows = bodyRows
-        .filter((tr) => tr.querySelectorAll("td").length > 0)
-        .map((tr) => {
-          const cells = Array.from(tr.querySelectorAll("td,th"));
-          const row: Record<string, string> = {};
-          for (const [name, i] of Object.entries(idx)) {
-            const cell = cells[i] as HTMLElement | undefined;
-            row[name] = (cell?.innerText ?? cell?.textContent ?? "").trim();
-            if (args.links.includes(name)) row[name + "Href"] = cell?.querySelector("a")?.getAttribute("href") ?? "";
-          }
-          return row;
-        });
-      return { missing, rows };
-    },
-    { columns: spec.columns, links: spec.linkColumns },
-  );
+      return row;
+    });
+  return { n: 1, page: { missing, rows } };
+}
+
+/** In-page: a strategy's match count and, for exactly one match, the disabled check extractTable makes on "next". */
+function nextState(els: Element[]): { n: number; disabled?: boolean } {
+  if (els.length !== 1) return { n: els.length };
+  const e = els[0]!;
+  return { n: 1, disabled: e.hasAttribute("disabled") || e.getAttribute("aria-disabled") === "true" || e.classList.contains("disabled") };
+}
+
+async function readTablePage(table: Locator, spec: ExtractTable): Promise<TablePage> {
+  return (await table.evaluate(readTable, { columns: spec.columns, links: spec.linkColumns })).page!;
+}
+
+/**
+ * The common single-page case in one round of page calls: the table's top strategy is read in the
+ * same call that matches it, while every strategy of the "next" control is matched at the same
+ * time (all through Playwright's own selector engines). It returns rows only for what the full
+ * path would decide on its first probes without waiting: the table's top strategy matched exactly
+ * one element, the table has rows and every column, and "next" resolves (first strategy with
+ * exactly one match, every earlier one with none) to a disabled control. Anything else (an empty
+ * or still-rendering table, an ambiguous or missing control, a scoped locator, a further page)
+ * returns null, and the caller takes the full path unchanged.
+ */
+async function singlePageTable(page: Page, loc: SemanticLocator, spec: ExtractTable, nextLoc: SemanticLocator | undefined): Promise<TablePage | null> {
+  const top = loc.strategies[0];
+  if (!top || loc.scope || (nextLoc && (nextLoc.scope || nextLoc.strategies.length === 0))) return null;
+  const args: TableArgs = { columns: spec.columns, links: spec.linkColumns };
+  const [table, ...next] = await Promise.all([
+    strategyToLocator(page, top).evaluateAll(readTable, args).catch(() => null),
+    ...(nextLoc?.strategies ?? []).map((s) => strategyToLocator(page, s).evaluateAll(nextState).catch(() => null)),
+  ]);
+  if (table?.n !== 1 || !table.page || table.page.rows.length === 0 || table.page.missing.length) return null;
+  if (nextLoc) {
+    const first = next.findIndex((r) => r === null || r.n !== 0);
+    if (first < 0 || next[first]?.n !== 1 || next[first]?.disabled !== true) return null;
+  }
+  return table.page;
 }
 
 async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable): Promise<ActionOutcome> {
   const start = performance.now();
   const loc = env.locatorOverrides.get(node.id) ?? spec.target;
-  const resolved = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 3000), nodeId: node.id });
   const all: Record<string, string>[] = [];
   const seen = new Set<string>();
+  const keep = (rows: Record<string, string>[]) => {
+    for (const row of rows) {
+      const k = spec.key ? row[spec.key] : undefined;
+      if (k !== undefined) {
+        if (seen.has(k)) continue;
+        seen.add(k);
+      }
+      all.push(row);
+    }
+  };
+  const nextLoc = spec.pagination && spec.pagination.maxPages > 1 ? (env.locatorOverrides.get(`${node.id}#next`) ?? spec.pagination.next) : undefined;
+  const quick = await singlePageTable(env.page, loc, spec, nextLoc);
+  if (quick) {
+    keep(quick.rows);
+    return { ms: performance.now() - start, locatorTier: 0, output: { rows: all, pages: 1 } };
+  }
+  const resolved = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 3000), nodeId: node.id });
   let pages = 0;
   let tier = resolved.strategyIndex;
   let table = resolved.locator;
@@ -408,14 +472,7 @@ async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable
       page = await readTablePage(table, spec);
     }
     if (page.missing.length) throw new LocatorNotFoundError(`Table columns not found: ${page.missing.join(", ")}`, node.id, spec.target.controlId);
-    for (const row of page.rows) {
-      const k = spec.key ? row[spec.key] : undefined;
-      if (k !== undefined) {
-        if (seen.has(k)) continue;
-        seen.add(k);
-      }
-      all.push(row);
-    }
+    keep(page.rows);
     pages++;
     if (!spec.pagination || pages >= spec.pagination.maxPages) break;
     let next: Locator;
@@ -461,7 +518,7 @@ export async function executeAction(env: ActionEnv, node: ActionNode): Promise<A
     case "fill": {
       const t = await target(env, node);
       const v = node.input ? resolveValue(node.input, scope) : "";
-      const isCheck = await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio"));
+      const isCheck = t.checkable ?? (await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")));
       if (isCheck) await t.locator.setChecked(v === true || /^(true|yes|on|1|checked)$/i.test(toStr(v)), { timeout: node.timeoutMs });
       else await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
       return { ms: performance.now() - start, locatorTier: t.tier };

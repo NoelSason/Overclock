@@ -61,7 +61,9 @@ calls, $0 of model spend.
 checker, which the agents never see; 0 duplicate and 0 collateral writes; every write made with
 browser clicks and confirmed by a fresh read. The comparison panel: a third fresh runtime C,
 planning from scratch on the same records and interface, took about 19 s and $0.43; B took
-about 3.3 s and $0 (5.9× median across five seeds).
+about 3.3 s and $0 (5.9× median across five seeds). If asked: since that recording, parallel
+rebinding and login and a browser pool launched at engine startup bring B to a median 2.05 s on
+the same seeds, still $0 and 10/10 (regression runs; C wasn't re-measured).
 
 **150–180 s: what it refuses.** Switch the recording selector to the `fields-in-tab` refusal:
 when the edit fields moved into a tab, B refused the capability with the exact reasons, guessed

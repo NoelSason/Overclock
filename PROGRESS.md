@@ -42,7 +42,7 @@ is implemented with a known gap. **Proposed** means design only.
 | Network capability layer and validation worker | Working (tested) | `pnpm test:network-capability` |
 | SpacetimeDB module and network client | Working (tested) | `pnpm test:network` against a real local SpacetimeDB |
 | Engine integration with the network | Working (measured) | `pnpm network:demo`: one run with every acceptance check passing ([`docs/NETWORK.md`](docs/NETWORK.md#results)) |
-| Network-warm vs strict-cold comparison | Working (measured, 5 seeds) | `benchmarks/results/network/`: with every save button renamed between A and B, B 3.3 s median vs strict-cold C 18.8 s, all runs 10/10; plus a local warm-replay arm |
+| Network-warm vs strict-cold comparison | Working (measured, 5 seeds) | `benchmarks/results/network/`: with every save button renamed between A and B, B 3.3 s median vs strict-cold C 18.8 s, all runs 10/10; plus a local warm-replay arm. After parallel rebinding and login and a startup browser pool, B 2.05 s median on the same seeds (regression runs, $0; C not re-measured) |
 | Changed-UI transfer (structural rebinding behind a write canary) | Working (tested, measured) | `tests/network-capability/rebind.test.ts` (renamed button: canary-gated; irreversible or tab-hidden: refused); 5 of 5 seeds in `pnpm network:demo --variation rename-save`; refusal recorded with `--variation fields-in-tab --expect-refusal` |
 | Dashboard Transfer page | Working (manually checked) | `/transfer` renders the recorded demo reports; checked in a browser. No e2e test. |
 | Engine-started network repair | Proposed | Client-level repair leases are tested; the engine doesn't start repair jobs |
@@ -94,7 +94,9 @@ unless noted.
 | `pnpm network:demo --records 10 --seed 4242 --no-cold-arm` (live) | Every check passed: A 22.5 s, B 3.1 s (`EXACT_COMPATIBLE`), both 10/10 |
 | `pnpm network:demo --records 10 --variation rename-save --conflict-arm --no-cold-arm` (live) | Every check passed at 13:17 (A cold) and at 13:40 on the final code (A reused its own cached plan, no model spend): X made zero writes, B 10/10 |
 | `tsx scripts/warm-bench.ts --records 500 --workers 16 --trials 3` (no model calls) | Median 14.8 s on the final code (17.2 s before the batched reads), 500/500 in every trial |
-| `pnpm network:demo ... --conflict-arm --a-warm-cache ...` on the final code (no model spend) | Every check passed again after the batched-read change: X zero writes, B 10/10 in 3.3 s |
+| `pnpm network:demo ... --conflict-arm --a-warm-cache ...` on the final code (no model spend) | Every check passed again after the batched-read change: X zero writes, B 10/10 in 3.3 s. After parallel rebinding, concurrent logins, and the startup browser pool: every check passed in 3 of 3 runs, B 1.81–1.92 s, X zero writes; the five-seed series without X passed 5 of 5, B median 2.05 s |
+| Warm 500 records, earlier code vs new code, trials alternated on two engines under the same machine load | Medians 16.2 s and 16.1 s, all 500/500, no model calls: no regression (the 14.8 s baseline ran with less background load on the machine) |
+| Same alternating trials, earlier code vs single-page table reads (plus one-call entry counts and checkbox detection) | Medians 14.8 s and 13.3 s (first verified write 8.2 s and 6.6 s), all 500/500, no model calls; an earlier pair under heavier load: 16.0 s and 14.1 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 
 Model spend on 2026-10-24 after noon: about $17.9 (benchmarks $7.1, network demos $7.6 including

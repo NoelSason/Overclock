@@ -4,7 +4,7 @@ import { looseEquals, resolveValue, toStr } from "@overclock/compiler";
 import { routePattern } from "@overclock/perception";
 import { exprScope, readBatch, readControl, type ActionEnv, type RecordScope } from "./actions";
 import { NavigationError } from "./errors";
-import { resolveLocator } from "./locate";
+import { resolveLocator, strategyToLocator } from "./locate";
 
 export interface ReadBackField {
   name: string;
@@ -66,25 +66,37 @@ export function entityIds(url: string): string[] {
  * doesn't block a match and a longer unrelated entry that merely contains the text doesn't match.
  */
 export async function countMatchingEntries(region: Locator, expected: string): Promise<{ matches: number; entries: number }> {
-  return region.evaluate((el, exp) => {
-    const norm = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
-    const CHROME = "h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style";
-    const items = Array.from(el.querySelectorAll("li,[role=listitem]")).filter((i) => !i.closest("form") && !i.querySelector("li,[role=listitem]"));
-    if (!items.length) {
-      const c = el.cloneNode(true) as HTMLElement;
-      for (const x of Array.from(c.querySelectorAll(CHROME))) x.remove();
-      const parts: string[] = [];
-      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
-      while (walk.nextNode()) {
-        const t = norm(walk.currentNode.textContent);
-        if (t) parts.push(t);
-      }
-      const text = parts.join(" ");
-      return { matches: text === exp ? 1 : 0, entries: text ? 1 : 0 };
+  const r = await region.evaluate(entryCount, expected);
+  return { matches: r.matches ?? 0, entries: r.entries ?? 0 };
+}
+
+/**
+ * In-page entry counter, self-contained because Playwright runs it in the page. Two call shapes:
+ * `locator.evaluate(entryCount, expected)` counts in the one element a resolved locator points
+ * at, and `locator.evaluateAll(entryCount, expected)` counts only when a strategy matched exactly
+ * one element (n is the match count either way).
+ */
+function entryCount(a: Element | Element[], exp: string): { n: number; matches?: number; entries?: number } {
+  const els = Array.isArray(a) ? a : [a];
+  if (els.length !== 1) return { n: els.length };
+  const el = els[0]!;
+  const norm = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
+  const CHROME = "h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style";
+  const items = Array.from(el.querySelectorAll("li,[role=listitem]")).filter((i) => !i.closest("form") && !i.querySelector("li,[role=listitem]"));
+  if (!items.length) {
+    const c = el.cloneNode(true) as HTMLElement;
+    for (const x of Array.from(c.querySelectorAll(CHROME))) x.remove();
+    const parts: string[] = [];
+    const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const t = norm(walk.currentNode.textContent);
+      if (t) parts.push(t);
     }
-    const own = (e: Element) => norm(e.textContent) === exp || Array.from(e.querySelectorAll("*")).some((d) => !d.matches(CHROME) && !d.closest(CHROME) && norm(d.textContent) === exp);
-    return { matches: items.filter(own).length, entries: items.length };
-  }, expected);
+    const text = parts.join(" ");
+    return { n: 1, matches: text === exp ? 1 : 0, entries: text ? 1 : 0 };
+  }
+  const own = (e: Element) => norm(e.textContent) === exp || Array.from(e.querySelectorAll("*")).some((d) => !d.matches(CHROME) && !d.closest(CHROME) && norm(d.textContent) === exp);
+  return { n: 1, matches: items.filter(own).length, entries: items.length };
 }
 
 /**
@@ -116,11 +128,17 @@ export async function readBack(env: ActionEnv, spec: VerificationSpec, opts: { t
     const expected = normalize(resolveValue(f.equals, scope));
     if (f.match === "entry") {
       let counted: { matches: number; entries: number } | null = null;
-      try {
-        const r = await resolveLocator(env.page, f.target, { timeoutMs: 2000 });
-        counted = await countMatchingEntries(r.locator, toStr(expected));
-      } catch {
-        counted = null;
+      // One call when the top-ranked strategy matches exactly one region (resolveLocator's first probe).
+      const top = f.target.strategies[0];
+      const quick = top && !f.target.scope ? await strategyToLocator(env.page, top).evaluateAll(entryCount, toStr(expected)).catch(() => null) : null;
+      if (quick?.n === 1) counted = { matches: quick.matches ?? 0, entries: quick.entries ?? 0 };
+      else {
+        try {
+          const r = await resolveLocator(env.page, f.target, { timeoutMs: 2000 });
+          counted = await countMatchingEntries(r.locator, toStr(expected));
+        } catch {
+          counted = null;
+        }
       }
       const matches = counted?.matches ?? 0;
       if (matches > 1) duplicate = true;

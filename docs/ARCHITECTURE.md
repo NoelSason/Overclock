@@ -308,6 +308,15 @@ one browser and one thread it took 23–172 ms. What runs now:
   other fields and click targets check "exactly one element matched" (and, for targets,
   visibility) in the same call that reads or locates them. A field or target that doesn't match
   exactly one element takes the full resolution path unchanged.
+- **Single-page tables in one round of calls:** a table read issues, at the same moment, one call
+  that matches and reads the table and one per strategy of its "next" control. The rows are used
+  only for what the full path would decide on its first probes: the table's top strategy matched
+  one element with rows and every column, and "next" resolves (first strategy with exactly one
+  match, every earlier one with none) to a disabled control. An empty or still-rendering table,
+  an ambiguous or missing control, a scoped locator, or a further page takes the full path. The
+  two search reads per record dropped from 73 ms to 26 ms each. A collection field's entry count
+  during verification is likewise one call when its top strategy matches one region, and a fill
+  learns whether its field is a checkbox from the call that located it.
 - **No lingering waiters:** a write's response, network failure, and timeout are page listeners
   removed as soon as the write settles.
 - **Constant-time scheduler counts** (active tasks per app).
@@ -316,14 +325,42 @@ one browser and one thread it took 23–172 ms. What runs now:
   `appendEvent` returns.
 - **No source-mapped stack traces** in the engine (`OVERCLOCK_SOURCE_MAPS=1` restores them):
   Playwright captures a stack for every browser call, and mapping it was the largest single cost.
+- **A warm start for the first run:** the engine launches its browser pool when it starts
+  (`OVERCLOCK_WARM_BROWSERS=0` launches on first use), logs in to every app concurrently, and
+  logs the operator and explorer sessions in at the same time; a network import waits only for
+  the operator session. Rebinding crawls the apps concurrently, one page each. For a runtime
+  importing a capability, these cut the run from 3.3 s to 2.05 s (median, 5 seeds;
+  [`NETWORK.md`](NETWORK.md#results)).
 
 After these changes the machine is the limit: during a warm 500-record run it is 80–83% busy,
 mostly in Chromium loading and rendering about 3,300 pages (one request each; the arena itself
 uses 7–11% of a core and serves over 10,000 pages a second in isolation). More workers than about
 16 don't help, and two engines splitting the records finish no sooner. Disabling the GPU process
 (`--disable-gpu --disable-software-rasterizer`) measured slower (16.5 s against 14.8 s median)
-and isn't used. The next large step would be skipping the separate verification page load after
-each write, which is not done: a fresh read is the verification guarantee.
+and isn't used. With the single-page table reads, a warm 500-record run took a median 13.3 s
+against 14.8 s for the previous code, in trials alternated between two engines under the same
+machine load (3 each, all 500/500); the first verified write came at 6.6 s instead of 8.2 s.
+
+Measured and not done:
+
+- **Reading the redirect page instead of loading the verification page.** After a write, the
+  arena redirects to the record's page with a flag (`/tickets/T-1?saved=1`), not to the exact
+  verification URL. Accepting a different query would let a page whose content depends on the
+  query stand in for the record's page, so every write is still verified by a fresh load of the
+  exact URL.
+- **Not waiting for the write's redirect to commit** (Playwright's `noWaitAfter`), since the
+  verification replaces that page anyway. Chromium lets the pending form navigation commit over
+  a later page load, so the verification load was interrupted, twice in a row in tests.
+- **Skipping the route guard for plain GETs.** Interception costs about 1 ms per page load, and
+  route patterns match URLs, not methods, so excluding GETs would also let a read-only page's
+  POST through.
+- **Avoiding Playwright's selector engine on read-only pages.** The first locator call on a new
+  page costs about 10 ms (Playwright sets up its injected script per document; a plain
+  `page.evaluate` doesn't need it). Search pages need role and text strategies to find "next",
+  and reproducing those engines outside Playwright isn't worth the risk of a wrong last-page
+  decision.
+- **Serving searches from a list scan.** The list tables carry the search results' columns, but
+  a scan can't prove it returns the rows the server's search would.
 
 ### Adaptive concurrency (AIMD)
 

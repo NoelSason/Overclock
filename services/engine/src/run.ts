@@ -143,11 +143,15 @@ export class RunController implements RunHandle {
       return;
     }
 
-    // Both sessions log in at once (sessions are memoized, so a viewer fallback shares the operator login).
-    const [explore, executeState] = await Promise.all([this.runtime.exploreState(apps), this.runtime.executeSessions.storageStateFor(apps)]);
-    if (explore.role === "operator") this.emit({ type: "log", level: "warn", message: "no read-only explorer role available; exploring with the operator session (all mutations still blocked)" });
+    // Both sessions log in at once (sessions are memoized, so a viewer fallback shares the operator
+    // login). Only discovery needs the explorer session, so a network import doesn't wait for it.
+    const exploring = this.runtime.exploreState(apps);
+    exploring.catch(() => undefined); // awaited below; this only keeps an early failure from being unhandled
+    const executeState = await this.runtime.executeSessions.storageStateFor(apps);
     const knowledge = knowledgePolicy(this.config);
     const imported = knowledge.startsWith("network") ? await this.importFromNetwork(executeState) : null;
+    const explore = await exploring;
+    if (explore.role === "operator") this.emit({ type: "log", level: "warn", message: "no read-only explorer role available; exploring with the operator session (all mutations still blocked)" });
     // Every run stores its final plan, so a later warm run can reuse it. Only local-only and
     // network policies read the cache; a strict-cold run never does.
     const localCache = knowledge === "local-only" || knowledge.startsWith("network") ? this.runtime.cache : undefined;
