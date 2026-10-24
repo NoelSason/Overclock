@@ -238,7 +238,7 @@ function stubClaude(answer: (user: string) => Promise<RepairPlan>): DeepModel & 
 const pickCurrentState = async (user: string): Promise<RepairPlan> => {
   await new Promise((r) => setTimeout(r, 800));
   const id = /^\s+(c\d+) combobox label="Current state"/m.exec(user)?.[1];
-  return id ? { kind: "repair", controlId: id, preludeClicks: [], rationale: "the record's current status" } : { kind: "impossible", reason: "no status field" };
+  return id ? { impossible: false, controlId: id, preludeClicks: [], rationale: "the record's current status" } : { impossible: true, controlId: "", preludeClicks: [], rationale: "no status field" };
 };
 
 describe("concurrent repairs", () => {
@@ -277,7 +277,7 @@ describe("concurrent repairs", () => {
     app.setVariants({ ambiguousStatus: true });
     const starts: string[] = [];
     const ends: string[] = [];
-    const claude = stubClaude(async () => ({ kind: "repair", controlId: "c999", preludeClicks: [], rationale: "invented" }));
+    const claude = stubClaude(async () => ({ impossible: false, controlId: "c999", preludeClicks: [], rationale: "invented" }));
     const h = harness({ claude, onRepairStart: (k) => starts.push(k), onRepairEnd: (k) => ends.push(k) });
     const err = await runRecord(h, await newWorker(), { id: "I-2", status: "closed" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(LocatorNotFoundError);
@@ -326,9 +326,9 @@ describe.skipIf(!LIVE)("live model tiers (OVERCLOCK_LIVE=1)", () => {
     const jev = new JevProvider(jevConfigFromEnv(), ledger);
     expect(jev.usable).toBe(true);
     const { h, result } = await liveCase("L2 Jev choose", { jev });
-    const l2 = h.events.filter((e) => e.level === 2 && e.phase !== "started");
-    expect(l2.length).toBeGreaterThan(0);
-    if (result) expect(h.engine.stats().byLevel[2]!.successes).toBe(1);
+    expect(result).not.toBeNull();
+    expect(h.engine.stats().byLevel[2]!.successes).toBe(1);
+    expect(app.items.get("I-2")!.status).toBe("closed");
   });
 
   it("L2 vision: Jev with a screenshot", async () => {

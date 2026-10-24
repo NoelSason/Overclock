@@ -7,7 +7,7 @@ import { describeLocator, describeTarget, failingLocator, intentOf, isWriteNode,
 import { classifyButton, decideDialog, dialogButtons, matchDialog, raisedByWrite } from "./dialogs";
 import { dialogScope, formOf, locatorForControl, locatorForFact, locatorForTable } from "./locators";
 import { compatible, decide, eligible, rankCandidates, rankFacts, type Candidate } from "./match";
-import { candidateAtPoint, candidateText, RECOMPILE_SYSTEM, renderObservation, RepairPlanSchema, screenshotForVision, type DeepModel, type ReflexModel } from "./models";
+import { candidateAtPoint, optionText, RECOMPILE_SYSTEM, renderObservation, RepairPlanSchema, screenshotForVision, type DeepModel, type ReflexModel } from "./models";
 import { dialogRuleKey, locatorRuleKey, RuleBook, type FailureKind, type Rule } from "./rules";
 import { IRREVERSIBLE, normalize } from "./text";
 
@@ -575,7 +575,7 @@ export class RecoveryEngine {
    * Role-focused question for Jev: what the step does, what it was recorded against, and which
    * observed control now plays that role. Phrasing calibrated live (see models.ts optionText).
    */
-  private reflexQuestion(ctx: Ctx, obs: Observation, l1: L1Result): { task: string; instructions: string; intent: string } {
+  private reflexQuestion(ctx: Ctx, l1: L1Result): { task: string; instructions: string; intent: string } {
     if (ctx.failure === "dialog") {
       const d = l1.dialog;
       const about = `a dialog titled "${d?.title ?? ""}" ("${(d?.text ?? ctx.dialogText).slice(0, 200)}")`;
@@ -601,14 +601,13 @@ export class RecoveryEngine {
       default:
         return { task: `A browser automation step uses the ${noun} "${name}" on this page. ${recorded}`, instructions: `Which ${noun} on the page now does what "${name}" did?`, intent: intentOf(ctx.node, d) };
     }
-    void obs;
   }
 
   private async reflex(ctx: Ctx, obs: Observation, l1: L1Result, jev: ReflexModel): Promise<{ plan?: Plan; calls: number; budget?: boolean }> {
     const t = performance.now();
     const writeish = this.writeish(ctx);
     const threshold = writeish ? REFLEX_WRITE_CONFIDENCE : REFLEX_READ_CONFIDENCE;
-    const qn = this.reflexQuestion(ctx, obs, l1);
+    const qn = this.reflexQuestion(ctx, l1);
     const intent = qn.intent;
     this.emit(ctx, 2, "started", `Asking the reflex model for ${intent} among ${l1.shortlist.length} observed candidate(s)`);
     let calls = 0;
@@ -647,7 +646,7 @@ export class RecoveryEngine {
           const v = this.corroborate(ctx, obs, c, l1.dialog);
           const plan = v.ok ? await v.plan : null;
           if (v.ok && plan) {
-            plan.reason = `Reflex model chose ${c.id} "${c.label ?? c.name}" (confidence ${ans.confidence.toFixed(2)}, ${Math.round(ans.ms)} ms${shot ? ", with screenshot" : ""})`;
+            plan.reason = `Reflex model chose ${c.id} "${c.label ?? c.name}" (confidence ${picked.confidence.toFixed(2)}, margin ${picked.margin.toFixed(2)}, ${Math.round(picked.ms)} ms${shot ? ", with screenshot" : ""})`;
             const ms = performance.now() - t;
             this.bump(2, true, ms);
             return { plan, calls };
@@ -745,7 +744,7 @@ export class RecoveryEngine {
       this.modelCalls++;
       const res = await claude.parse({ role: "planner", purpose: "recovery.recompile", system: RECOMPILE_SYSTEM, user, schema: RepairPlanSchema, maxTokens: 2000, effort: "low" });
       const out = res.data;
-      if (out.kind === "impossible") return fail(`Model found no safe repair: ${out.reason.slice(0, 200)}`);
+      if (out.impossible || !out.controlId) return fail(`Model found no safe repair: ${out.rationale.slice(0, 200)}`);
       const c = obs.controls.find((x) => x.id === out.controlId);
       if (!c) return fail(`Model answered ${out.controlId}, which is not in the observation`);
       const v = this.corroborate(ctx, obs, c, l1.dialog);

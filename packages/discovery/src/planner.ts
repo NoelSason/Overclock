@@ -1,4 +1,4 @@
-import { DslPlan, type AppModel } from "@overclock/contracts";
+import { DslPlanForModel, normalizeModelPlan, type AppModel, type DslPlan } from "@overclock/contracts";
 import type { ClaudeProvider, ParseResult } from "@overclock/models";
 import type { Issue } from "@overclock/compiler";
 import { renderAppModel } from "./render";
@@ -75,7 +75,8 @@ export function plannerPrompt(req: PlannerRequest): string {
 }
 
 export async function generatePlan(claude: ClaudeProvider, req: PlannerRequest, purpose = "planner.plan"): Promise<ParseResult<DslPlan>> {
-  return claude.parse({ role: "planner", purpose, system: PLANNER_SYSTEM, user: plannerPrompt(req), schema: DslPlan, maxTokens: 24_000, signal: req.signal });
+  const r = await claude.parse({ role: "planner", purpose, system: PLANNER_SYSTEM, user: plannerPrompt(req), schema: DslPlanForModel, maxTokens: 24_000, signal: req.signal });
+  return { ...r, data: normalizeModelPlan(r.data) };
 }
 
 /** Strategy directives for competitive synthesis. Only offered when the observed apps support them. */
