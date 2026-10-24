@@ -1,7 +1,7 @@
 /**
  * Overclock Network: runtime A discovers and publishes, runtime B imports, rebinds, and executes.
  *
- *   tsx scripts/network-demo.ts [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock]
+ *   tsx scripts/network-demo.ts [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--compare-cold]
  *
  * Needs the arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev` starts one). The
  * script publishes the module to a separate `overclock-demo` database and wipes it first, so
@@ -15,6 +15,9 @@
  *   3. the arena loads a new scenario (seed + 1: different records, same apps) and, with
  *      --variation, a UI change; runtime B (:4020, network-read) imports the capability,
  *      rebinds it to its own observation, and executes without a planner call.
+ *
+ * With --compare-cold, B then repeats its scenario (reloaded, same seed and variation) with the
+ * strict-cold policy, so network-warm and strict-cold are compared on identical data.
  *
  * Every number printed comes from the engines' run summaries and the arena's checker. Tokens
  * stay in each runtime's data dir and are never printed.
@@ -114,6 +117,7 @@ async function main(): Promise<void> {
   const seed = Number(argValue(argv, "--seed") ?? 4242);
   const variation = argValue(argv, "--variation");
   const mode = (argValue(argv, "--mode") ?? "overclock") as RunConfigInput["mode"];
+  const compareCold = argv.includes("--compare-cold");
   const arena = new Arena();
   await arena.health();
 
@@ -188,9 +192,18 @@ async function main(): Promise<void> {
     const resB = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "network-read", thumbnails: false }));
     const outB = brief("runtime-b", resB, await arena.check());
     console.log(JSON.stringify(outB, null, 2));
+
+    let outCold: ReturnType<typeof brief> | null = null;
+    if (compareCold) {
+      await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
+      console.log(`\nB again, same scenario${variation ? " and variation" : ""}, strict-cold (no network, no local cache)`);
+      const resCold = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "strict-cold", thumbnails: false }));
+      outCold = brief("runtime-b strict-cold", resCold, await arena.check());
+      console.log(JSON.stringify(outCold, null, 2));
+    }
     if (variation) await arena.resetVariations();
 
-    const report = { at: new Date().toISOString(), database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, a: outA, b: outB };
+    const report = { at: new Date().toISOString(), database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, a: outA, b: outB, bStrictCold: outCold };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     console.log(`\nreport: ${join(DEMO_DIR, "report.json")}`);
   } finally {
