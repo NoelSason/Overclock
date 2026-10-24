@@ -1,4 +1,6 @@
 import type { TaskTemplateId } from "@overclock/contracts";
+import { HOLDOUT_TEMPLATE, holdoutExpectation, type HoldoutEntityKind } from "../holdout/task";
+import type { AppName } from "./apps";
 import type { Customer, Dataset, Order, Ticket } from "./model";
 
 /**
@@ -9,7 +11,7 @@ import type { Customer, Dataset, Order, Ticket } from "./model";
 export interface TemplateInfo {
   id: TaskTemplateId;
   title: string;
-  apps: ("CRM" | "Orders" | "Support")[];
+  apps: AppName[];
   recordField: string;
   holdout: boolean;
   goal: (n: number) => string;
@@ -74,9 +76,11 @@ export const TEMPLATES: Record<TaskTemplateId, TemplateInfo> = {
         "3. Otherwise leave the customer unchanged.",
       ].join("\n"),
   },
+  "t4-holdout": HOLDOUT_TEMPLATE,
 };
 
-export type EntityKey = `customer:${string}` | `order:${string}` | `ticket:${string}`;
+export type EntityKind = "customer" | "order" | "ticket" | HoldoutEntityKind;
+export type EntityKey = `${EntityKind}:${string}`;
 
 export interface RecordExpectation {
   recordKey: string;
@@ -84,6 +88,8 @@ export interface RecordExpectation {
   entities: { key: EntityKey; fields: Record<string, string | number> }[];
   /** Notes that must exist exactly once on a ticket after the run. */
   notes: { ticketId: string; body: string }[];
+  /** Other append-only entries that must exist exactly once on their entity after the run. */
+  appends?: { key: EntityKey; body: string }[];
   escalated: boolean;
   needsChange: boolean;
 }
@@ -216,5 +222,7 @@ export function expectedOutcome(template: TaskTemplateId, base: Dataset, keys: s
       return t2(base, keys);
     case "t3-crm-status-sync":
       return t3(base, keys);
+    case "t4-holdout":
+      return holdoutExpectation(base.holdout, keys);
   }
 }

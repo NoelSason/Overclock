@@ -4,7 +4,7 @@ import { evaluateBool } from "@overclock/compiler";
 import { checkPostconditions, checkPreconditions, executeAction, exprScope, openDialogText, type ActionEnv, type ActionOutcome, type RecordScope } from "./actions";
 import { AmbiguousLocatorError, ApprovalRequiredError, CancelledError, HiddenTargetError, LocatorNotFoundError, RuntimeError, UnexpectedDialogError } from "./errors";
 import { resolveLocator } from "./locate";
-import { readBack, type ReadBackResult } from "./readback";
+import { readBack, writeTargetUrl, type ReadBackResult } from "./readback";
 import type { BrowserWorker } from "./worker";
 
 export interface ActionRecord {
@@ -238,16 +238,19 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
         calls += repair.modelCalls;
         result.modelCalls += repair.modelCalls;
       }
-      if (!repair?.dismiss || repair.confirmsWrite) {
+      if (!repair || repair.confirmsWrite) {
         fail(node, calls, err);
         throw err;
       }
-      try {
-        await clickControl(page, repair.dismiss, node.id, 2000);
-      } catch {
-        // Stale dismiss control: the next round re-asks recovery with a higher attempt number.
+      // No dismiss control means the dialog already closed; the next round re-checks.
+      if (repair.dismiss) {
+        try {
+          await clickControl(page, repair.dismiss, node.id, 2000);
+        } catch {
+          // Stale dismiss control: the next round re-asks recovery with a higher attempt number.
+        }
+        await page.waitForLoadState("domcontentloaded").catch(() => undefined);
       }
-      await page.waitForLoadState("domcontentloaded").catch(() => undefined);
     }
   };
 
@@ -269,11 +272,11 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
       const stale = learned.findIndex((k) => k.startsWith(node.id + "#prelude:"));
       if (stale >= 0) learned.splice(stale);
     }
+    const learnedValues = learned.map((k) => overrides.get(k));
     await checkPreconditions(env, node);
 
     let outcome: ActionOutcome | null = null;
     let modelCalls = 0;
-    let nodeRepairs = 0;
     let pending: RuntimeError | null = null;
     for (let attempt = 0; ; attempt++) {
       let err: unknown;
@@ -297,7 +300,6 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
         fail(node, modelCalls, err);
         throw err;
       }
-      nodeRepairs++;
       result.repairs++;
       modelCalls += repair.modelCalls;
       result.modelCalls += repair.modelCalls;
@@ -310,9 +312,11 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
       } catch (applyErr) {
         // Write outcomes (uncertain, rejected) and other failures are never retried here.
         if (!isRepairable(applyErr)) throw applyErr;
-        // The repair could not be applied (stale rule). Ask again; if a dialog is still open,
-        // re-raise it without re-running the node so a pending submit is not clicked twice.
-        pending = err instanceof UnexpectedDialogError && (await openDialogText(page)) ? err : null;
+        // Confirming raised another dialog: that one is the failure to repair next.
+        if (applyErr instanceof UnexpectedDialogError) pending = applyErr;
+        // Otherwise the repair could not be applied (stale rule). Ask again; if the dialog is still
+        // open, re-raise it without re-running the node so a pending submit is not clicked twice.
+        else pending = err instanceof UnexpectedDialogError && (await openDialogText(page)) ? err : null;
       }
     }
     if (node.type === "navigate") modelCalls += await clearLoadDialogs(node);
@@ -323,11 +327,13 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
     }
     result.actions++;
     hooks.onAction?.({ taskId: input.taskId, nodeId: node.id, actionType: node.type, ms: outcome.ms, ok: true, modelCalls, locatorTier: outcome.locatorTier ?? undefined });
-    if (learned.length && nodeRepairs === 0) hooks.onReuse?.({ taskId: input.taskId, segmentId: input.segmentId, nodeId: node.id, keys: learned });
+    // Learned overrides that were in effect and not replaced by a repair during this node.
+    const reused = learned.filter((k, i) => overrides.get(k) === learnedValues[i]);
+    if (reused.length) hooks.onReuse?.({ taskId: input.taskId, segmentId: input.segmentId, nodeId: node.id, keys: reused });
 
     if (node.verify && isWrite(node)) {
       hooks.onOp?.("verify", node);
-      const rb = await readBack(env, node.verify, { timeoutMs: node.timeoutMs });
+      const rb = await readBack(env, node.verify, { timeoutMs: node.timeoutMs, entityUrl: writeTargetUrl(input.nodes, node.id, input.scope, env.origin) });
       result.receipts.push({ nodeId: node.id, readBack: rb, writeStatus: outcome.writeStatus });
       hooks.onAction?.({ taskId: input.taskId, nodeId: node.id + ":verify", actionType: "verify", ms: rb.ms, ok: rb.ok, modelCalls: 0 });
       if (!rb.ok) {

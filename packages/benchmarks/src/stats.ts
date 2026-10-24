@@ -119,6 +119,12 @@ export interface AggregateRow extends BenchmarkAggregate {
   recoveryMs: { median: number };
   /** Total cost / total checker-correct records over completed runs; null when nothing was correct. */
   costPerCorrectUsd: number | null;
+  /** Engine-claimed share of input records VERIFIED or SKIPPED (summary.recordsVerified / summary.records); NaN when no run counted input records only. */
+  verifiedPct: { median: number };
+  tokens: { median: number };
+  utilization: { median: number };
+  /** Summary discovery / compile / execution medians (fallback when no stage breakdown is reported). */
+  phaseMs: { discovery: number; compile: number; execution: number };
   /** Median ms per pipeline stage (summary.stageMs) over completed runs that report stages. */
   stageMs: Record<string, number>;
   stageRuns: number;
@@ -173,11 +179,21 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     costPerCorrectUsd: totalCorrect > 0 ? totalCost / totalCorrect : null,
     modelCalls: { median: median(ok.map((r) => r.modelCalls)) },
     verifiedButWrong: sum(checked.map((r) => r.verifiedButWrong)),
+    skippedButWrong: checked.every((r) => typeof r.skippedButWrong === "number") ? sum(checked.map((r) => r.skippedButWrong ?? 0)) : null,
     firstVerifiedMs: { median: nullableMedian(firstVerified) },
     neverVerified: ok.length - firstVerified.length,
     firstActionMs: { median: nullableMedian(finite(ok.map((r) => r.firstActionMs))) },
     overlapMs: { median: median(finite(ok.map((r) => r.overlapMs))) },
     recoveryMs: { median: median(finite(ok.map((r) => r.recoveryMs))) },
+    // Only summaries that count unique input records; older ones also counted derived records and aren't comparable.
+    verifiedPct: { median: median(finite(ok.map((r) => (r.summary && r.summary.recordsAccounting === "input-records" && r.summary.records > 0 ? r.summary.recordsVerified / r.summary.records : NaN)))) },
+    tokens: { median: median(ok.map((r) => r.inputTokens + r.outputTokens)) },
+    utilization: { median: median(finite(ok.filter((r) => r.summary).map((r) => r.workerUtilization))) },
+    phaseMs: {
+      discovery: median(ok.filter((r) => r.summary).map((r) => r.discoveryMs)),
+      compile: median(ok.filter((r) => r.summary).map((r) => r.compileMs)),
+      execution: median(ok.filter((r) => r.summary).map((r) => r.executionMs)),
+    },
     stageMs,
     stageRuns: staged.length,
     writes: {

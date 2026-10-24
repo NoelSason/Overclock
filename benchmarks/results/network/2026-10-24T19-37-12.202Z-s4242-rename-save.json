@@ -1,0 +1,298 @@
+{
+  "at": "2026-10-24T19:37:12.202Z",
+  "passed": true,
+  "expectRefusal": false,
+  "checks": [
+    {
+      "check": "A passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "B passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "A and B are distinct runtimes: different network identities; B started with an empty local cache",
+      "ok": true,
+      "detail": "A c200a33f42265da5, B c2008cf6063d5b2b, capability publisher c200a33f42265da5, B cache entries before its run 0"
+    },
+    {
+      "check": "B bound every control the capability needs (0 unbound)",
+      "ok": true,
+      "detail": "25 bound, 0 unbound"
+    },
+    {
+      "check": "B wrote through browser controls and verified each write by a fresh read",
+      "ok": true,
+      "detail": "actions {\"navigate\":41,\"extract\":33,\"select\":8,\"fill\":5,\"click\":8,\"verify\":8,\"compute\":1}; 8 VERIFIED receipts"
+    },
+    {
+      "check": "B saw the UI change and rebound it: changed labels reported, writes behind a passed write canary",
+      "ok": true,
+      "detail": "\"Update order\" -> \"Apply changes\" (structural), \"Save ticket\" -> \"Commit ticket\" (structural), \"Save changes\" -> \"Update record\" (structural); write canary on, passed 3x"
+    },
+    {
+      "check": "B imported the shared capability (executable after rebinding)",
+      "ok": true,
+      "detail": "cap_4d4a431303f0e4fc54ffd623@1 REQUIRES_REBINDING, 25 bound, 0 unbound"
+    },
+    {
+      "check": "B executed the imported plan (no cold planning)",
+      "ok": true,
+      "detail": "policy network-import, selected network"
+    },
+    {
+      "check": "B made fewer planner calls than A (zero expected)",
+      "ok": true,
+      "detail": "A 1, B 0"
+    },
+    {
+      "check": "C (strict-cold comparison arm) passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    }
+  ],
+  "database": "overclock-demo",
+  "endpoint": "ws://127.0.0.1:3100",
+  "records": 10,
+  "seed": 4242,
+  "variation": "rename-save",
+  "mode": "overclock",
+  "versionId": "cap_4d4a431303f0e4fc54ffd623@1",
+  "validation": {
+    "versionId": "cap_4d4a431303f0e4fc54ffd623@1",
+    "outcome": "pass",
+    "category": "ok",
+    "ms": 1646
+  },
+  "overhead": {
+    "aLookupMs": 2,
+    "aPublishMs": 61,
+    "validationMs": 1646,
+    "promoteMs": 7,
+    "bLookupMs": 6,
+    "bFetchMs": 8,
+    "bRebindMs": 1181
+  },
+  "plannerCalls": {
+    "a": 1,
+    "b": 0
+  },
+  "comparison": {
+    "wallSpeedup": 5.9,
+    "timeToFirstVerifiedSpeedup": 6.76,
+    "modelCalls": {
+      "strictCold": 5,
+      "networkWarm": 0
+    },
+    "costUsd": {
+      "strictCold": 0.429526,
+      "networkWarm": 0
+    }
+  },
+  "transfer": {
+    "identities": {
+      "a": "c200a33f42265da5",
+      "b": "c2008cf6063d5b2b",
+      "publisher": "c200a33f42265da5"
+    },
+    "bCacheBefore": 0,
+    "variations": {
+      "theme": "default",
+      "renameButtons": {
+        "CRM": {
+          "Save changes": "Update record"
+        },
+        "Orders": {
+          "Update order": "Apply changes"
+        },
+        "Support": {
+          "Save ticket": "Commit ticket"
+        }
+      },
+      "shuffleFields": {},
+      "confirmModal": {},
+      "announcementModal": {},
+      "pageSize": {},
+      "editInTab": {},
+      "latency": {},
+      "failures": {},
+      "concurrencyLimit": {}
+    },
+    "relabeled": [
+      {
+        "key": "Orders:/orders/:id/edit:button:update_order",
+        "from": "Update order",
+        "to": "Apply changes",
+        "evidence": "structural"
+      },
+      {
+        "key": "Support:/tickets/:id/edit:button:save_ticket",
+        "from": "Save ticket",
+        "to": "Commit ticket",
+        "evidence": "structural"
+      },
+      {
+        "key": "CRM:/customers/:id/edit:button:save_changes",
+        "from": "Save changes",
+        "to": "Update record",
+        "evidence": "structural"
+      }
+    ],
+    "writeCanary": true,
+    "canaryPassed": 3,
+    "refused": [],
+    "importOutcome": "REQUIRES_REBINDING",
+    "actionsB": {
+      "navigate": 41,
+      "extract": 33,
+      "select": 8,
+      "fill": 5,
+      "click": 8,
+      "verify": 8,
+      "compute": 1
+    },
+    "verifiedB": 8
+  },
+  "a": {
+    "runtime": "runtime-a",
+    "status": "completed",
+    "knowledge": "network-read-and-contribute",
+    "network": {
+      "lookups": 1,
+      "hits": 0,
+      "outcome": "NO_CAPABILITY",
+      "lookupMs": 2,
+      "fetchMs": 0,
+      "rebindMs": 0,
+      "published": true,
+      "repairs": 0
+    },
+    "wallMs": 19335,
+    "firstActionMs": 4261.5,
+    "firstVerifiedMs": 18932.3,
+    "stageMs": {
+      "discovery": 1731,
+      "planning": 13106,
+      "execution": 15058,
+      "critique": 3913
+    },
+    "modelCalls": 5,
+    "modelCostUsd": 0.427254,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {
+      "dependency-scout.effects": {
+        "calls": 3,
+        "ms": 1135,
+        "costUsd": 0.000102
+      },
+      "planner.plan": {
+        "calls": 1,
+        "ms": 13103,
+        "costUsd": 0.301416
+      },
+      "verifier.critique": {
+        "calls": 1,
+        "ms": 3911,
+        "costUsd": 0.125736
+      }
+    },
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "parallel-scout: streaming: plan with the \"per-record\" strategy immediately and execute validated fragments as they arrive; deeper discovery, side-effect classification, and critique continue in parallel; access paths"
+  },
+  "b": {
+    "runtime": "runtime-b",
+    "status": "completed",
+    "knowledge": "network-read",
+    "network": {
+      "lookups": 1,
+      "hits": 1,
+      "outcome": "REQUIRES_REBINDING",
+      "capabilityId": "cap_4d4a431303f0e4fc54ffd623",
+      "version": 1,
+      "lookupMs": 6,
+      "fetchMs": 8,
+      "rebindMs": 1181,
+      "published": false,
+      "repairs": 0
+    },
+    "wallMs": 3183,
+    "firstActionMs": 2199.2,
+    "firstVerifiedMs": 2707.9,
+    "stageMs": {
+      "discovery": 1203,
+      "execution": 1053
+    },
+    "modelCalls": 0,
+    "modelCostUsd": 0,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {},
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "network-import: imported cap_4d4a431303f0e4fc54ffd623@1 (REQUIRES_REBINDING) from the Overclock Network and rebound to this runtime's own observation; no planner call"
+  },
+  "c": {
+    "runtime": "runtime-c",
+    "status": "completed",
+    "knowledge": "strict-cold",
+    "wallMs": 18766,
+    "firstActionMs": 4004.6,
+    "firstVerifiedMs": 18301.2,
+    "stageMs": {
+      "discovery": 1682,
+      "planning": 12969,
+      "execution": 14814,
+      "critique": 3495
+    },
+    "modelCalls": 5,
+    "modelCostUsd": 0.429526,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {
+      "dependency-scout.effects": {
+        "calls": 3,
+        "ms": 929,
+        "costUsd": 0.000102
+      },
+      "planner.plan": {
+        "calls": 1,
+        "ms": 12966,
+        "costUsd": 0.30168
+      },
+      "verifier.critique": {
+        "calls": 1,
+        "ms": 3494,
+        "costUsd": 0.127744
+      }
+    },
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "parallel-scout: streaming: plan with the \"per-record\" strategy immediately and execute validated fragments as they arrive; deeper discovery, side-effect classification, and critique continue in parallel; access paths"
+  }
+}

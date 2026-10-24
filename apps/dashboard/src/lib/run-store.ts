@@ -16,9 +16,13 @@ import { engine, errorMessage } from "./api";
  * does not re-render the swarm map, and so on.
  */
 
-export type Slice = "meta" | "stages" | "swarm" | "candidates" | "program" | "fragments" | "tasks" | "workers" | "telemetry" | "approvals";
+export type Slice = "meta" | "stages" | "swarm" | "candidates" | "program" | "fragments" | "tasks" | "workers" | "telemetry" | "approvals" | "network";
 
-const SLICE_OF: Record<EventType, Slice> = {
+/**
+ * Event type -> slice. Partial on purpose: an event type added to the contracts later still
+ * flows through the reducer and lands in "meta" until a panel claims it.
+ */
+const SLICE_OF: Partial<Record<EventType, Slice>> = {
   "run.created": "meta",
   "run.status": "meta",
   "run.completed": "meta",
@@ -49,7 +53,14 @@ const SLICE_OF: Record<EventType, Slice> = {
   stage: "stages",
   "scout.page": "swarm",
   fragment: "fragments",
+  "network.lookup": "network",
+  "network.import": "network",
+  "network.publish": "network",
+  "network.repair": "network",
+  "network.update": "network",
 };
+
+export const ALL_SLICES: readonly Slice[] = ["meta", "stages", "swarm", "candidates", "program", "fragments", "tasks", "workers", "telemetry", "approvals", "network"];
 
 export type ConnectionState = "loading" | "live" | "reconnecting" | "ended" | "error";
 
@@ -66,7 +77,7 @@ export class RunStore {
   readonly view: RunView;
   connection: ConnectionInfo = { state: "loading" };
 
-  private readonly versions: Record<Slice | "connection", number> = { meta: 0, stages: 0, swarm: 0, candidates: 0, program: 0, fragments: 0, tasks: 0, workers: 0, telemetry: 0, approvals: 0, connection: 0 };
+  private readonly versions: Record<Slice | "connection", number> = { meta: 0, stages: 0, swarm: 0, candidates: 0, program: 0, fragments: 0, tasks: 0, workers: 0, telemetry: 0, approvals: 0, network: 0, connection: 0 };
   private readonly listeners = new Set<() => void>();
   private queue: RunEvent[] = [];
   private frame: number | null = null;

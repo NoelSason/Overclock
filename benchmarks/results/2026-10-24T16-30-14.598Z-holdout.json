@@ -1,0 +1,3287 @@
+{
+  "version": 1,
+  "suite": "holdout",
+  "createdAt": 1792859414618,
+  "machine": {
+    "platform": "darwin",
+    "cpus": 16,
+    "memoryGb": 128,
+    "node": "v24.13.0"
+  },
+  "budgetUsd": 10,
+  "spentUsd": 1.3678020000000002,
+  "runs": [
+    {
+      "suite": "holdout",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163014_73d293",
+      "startedAt": 1792859414625,
+      "summary": {
+        "runId": "run_20261024163014_73d293",
+        "mode": "overclock",
+        "status": "failed",
+        "wallMs": 60120,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859474750
+      },
+      "wallMs": 60120,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.978043912175648,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock-staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163114_dcf317",
+      "startedAt": 1792859474755,
+      "summary": {
+        "runId": "run_20261024163114_dcf317",
+        "mode": "overclock-staged",
+        "status": "failed",
+        "wallMs": 60115,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859534873
+      },
+      "wallMs": 60115,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.978956999085089,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "overclock-staged",
+        "mode": "overclock-staged",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "compiled-parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163214_fd5e19",
+      "startedAt": 1792859534879,
+      "summary": {
+        "runId": "run_20261024163214_fd5e19",
+        "mode": "compiled-parallel",
+        "status": "failed",
+        "wallMs": 60132,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859595013
+      },
+      "wallMs": 60132,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.975853123129117,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "compiled-parallel",
+        "mode": "compiled-parallel",
+        "intelligence": "single-planner",
+        "concurrency": "fixed",
+        "maxWorkers": 8,
+        "initialWorkers": 8,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163315_205aa4",
+      "startedAt": 1792859595017,
+      "summary": {
+        "runId": "run_20261024163315_205aa4",
+        "mode": "overclock",
+        "status": "completed",
+        "wallMs": 54413,
+        "discoveryMs": 1678,
+        "compileMs": 52213,
+        "executionMs": 48246,
+        "records": 25,
+        "tasks": 200,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 6,
+        "inputTokens": 44299,
+        "outputTokens": 7267,
+        "modelCostUsd": 0.253271,
+        "workerUtilization": 0.748,
+        "maxConcurrency": 8,
+        "strategy": "per-record",
+        "firstActionMs": 6214,
+        "firstVerifiedMs": 54220.8,
+        "overlapMs": 47331,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 1678,
+          "planning": 43206,
+          "execution": 49141,
+          "critique": 9007
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792859649434
+      },
+      "wallMs": 54413,
+      "discoveryMs": 1678,
+      "compileMs": 52213,
+      "executionMs": 48246,
+      "correctPerMin": 27.566941723485197,
+      "modelCalls": 6,
+      "inputTokens": 44299,
+      "outputTokens": 7267,
+      "costUsd": 0.253271,
+      "workerUtilization": 0.748,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 6214,
+      "firstVerifiedMs": 54220.8,
+      "overlapMs": 47331,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock-staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163409_930e42",
+      "startedAt": 1792859649438,
+      "summary": {
+        "runId": "run_20261024163409_930e42",
+        "mode": "overclock-staged",
+        "status": "completed",
+        "wallMs": 67363,
+        "discoveryMs": 5761,
+        "compileMs": 60926,
+        "executionMs": 657,
+        "records": 25,
+        "tasks": 77,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 11,
+        "inputTokens": 88038,
+        "outputTokens": 16226,
+        "modelCostUsd": 0.476807,
+        "workerUtilization": 0.413,
+        "maxConcurrency": 16,
+        "strategy": "list-scan",
+        "firstActionMs": 66759.3,
+        "firstVerifiedMs": 67087,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 5761,
+          "planning": 28002,
+          "critique": 32924,
+          "execution": 657
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792859716804
+      },
+      "wallMs": 67363,
+      "discoveryMs": 5761,
+      "compileMs": 60926,
+      "executionMs": 657,
+      "correctPerMin": 22.267416831198137,
+      "modelCalls": 11,
+      "inputTokens": 88038,
+      "outputTokens": 16226,
+      "costUsd": 0.476807,
+      "workerUtilization": 0.413,
+      "maxConcurrency": 16,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 66759.3,
+      "firstVerifiedMs": 67087,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "overclock-staged",
+        "mode": "overclock-staged",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    },
+    {
+      "suite": "holdout",
+      "label": "compiled-parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163516_cd6ca6",
+      "startedAt": 1792859716811,
+      "summary": {
+        "runId": "run_20261024163516_cd6ca6",
+        "mode": "compiled-parallel",
+        "status": "completed",
+        "wallMs": 16158,
+        "discoveryMs": 895,
+        "compileMs": 14235,
+        "executionMs": 916,
+        "records": 25,
+        "tasks": 100,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 3,
+        "inputTokens": 12378,
+        "outputTokens": 1864,
+        "modelCostUsd": 0.075773,
+        "workerUtilization": 0.953,
+        "maxConcurrency": 8,
+        "strategy": "per-record",
+        "firstActionMs": 15314.7,
+        "firstVerifiedMs": 15948.2,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 895,
+          "planning": 14235,
+          "execution": 915
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792859732972
+      },
+      "wallMs": 16158,
+      "discoveryMs": 895,
+      "compileMs": 14235,
+      "executionMs": 916,
+      "correctPerMin": 92.8332714444857,
+      "modelCalls": 3,
+      "inputTokens": 12378,
+      "outputTokens": 1864,
+      "costUsd": 0.075773,
+      "workerUtilization": 0.953,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 15314.7,
+      "firstVerifiedMs": 15948.2,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "compiled-parallel",
+        "mode": "compiled-parallel",
+        "intelligence": "single-planner",
+        "concurrency": "fixed",
+        "maxWorkers": 8,
+        "initialWorkers": 8,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163532_6a4827",
+      "startedAt": 1792859732976,
+      "summary": {
+        "runId": "run_20261024163532_6a4827",
+        "mode": "overclock",
+        "status": "failed",
+        "wallMs": 61384,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859794362
+      },
+      "wallMs": 61384,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.751987488596377,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock-staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163634_cb0234",
+      "startedAt": 1792859794367,
+      "summary": {
+        "runId": "run_20261024163634_cb0234",
+        "mode": "overclock-staged",
+        "status": "failed",
+        "wallMs": 61372,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859855741
+      },
+      "wallMs": 61372,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.754089812944015,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "overclock-staged",
+        "mode": "overclock-staged",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "compiled-parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t4-holdout-s9101-n25",
+      "template": "t4-holdout",
+      "seed": 9101,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163735_c8880a",
+      "startedAt": 1792859855745,
+      "summary": {
+        "runId": "run_20261024163735_c8880a",
+        "mode": "compiled-parallel",
+        "status": "failed",
+        "wallMs": 61295,
+        "discoveryMs": 0,
+        "compileMs": 0,
+        "executionMs": 0,
+        "records": 25,
+        "tasks": 0,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recoveries": 0,
+        "modelCalls": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "modelCostUsd": 0,
+        "workerUtilization": 0,
+        "maxConcurrency": 1,
+        "firstActionMs": null,
+        "firstVerifiedMs": null,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {},
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t4-holdout-s9101-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "SP-26-15890",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "state",
+            "expected": "discard_pending",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-64502",
+            "entity": "specimen:SP-25-64502",
+            "field": "entry",
+            "expected": "Discard requested: consent withdrawn (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-54614",
+            "entity": "specimen:SP-25-54614",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-15788",
+            "entity": "specimen:SP-25-15788",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-38084",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "specimen:SP-26-34156",
+            "field": "hold_reason",
+            "expected": "Duplicate label",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-26-34156",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "available"
+          },
+          {
+            "recordKey": "SP-25-91607",
+            "entity": "specimen:SP-25-91607",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3161 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "SP-26-51345",
+            "entity": "specimen:SP-26-51345",
+            "field": "hold_reason",
+            "expected": "Unknown participant",
+            "actual": ""
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-41558",
+            "entity": "specimen:SP-25-41558",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-71353",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-26-51632",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-09144",
+            "entity": "specimen:SP-25-09144",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3187 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "SP-26-52799",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "state",
+            "expected": "quarantined",
+            "actual": "reserved"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "unit:ULT-01",
+            "field": "service",
+            "expected": "service_requested",
+            "actual": "normal"
+          },
+          {
+            "recordKey": "SP-25-86140",
+            "entity": "specimen:SP-25-86140",
+            "field": "entry",
+            "expected": "Quarantined: excursion EXC-3182 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792859917042
+      },
+      "wallMs": 61295,
+      "discoveryMs": 0,
+      "compileMs": 0,
+      "executionMs": 0,
+      "correctPerMin": 10.767599314789136,
+      "modelCalls": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "workerUtilization": 0,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": null,
+      "firstVerifiedMs": null,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Audit these 25 specimens in the Rimewell sample registry. Each specimen is identified by its accession number.\n\nRules, for each specimen in the list. Apply them in order and stop at the first rule that applies:\n1. Already on review hold: leave the specimen unchanged.\n2. Duplicate tube label: if any other specimen in the registry has the same tube label, place a review hold with the reason \"Duplicate label\". Change nothing else.\n3. Unknown participant: if the specimen's participant is not registered, place a review hold with the reason \"Unknown participant\". Change nothing else.\n4. Withdrawn consent: if the participant's consent is Withdrawn, set the state to Discard pending and add the custody entry \"Discard requested: consent withdrawn\". If the state is already Discard pending or Consumed, leave the specimen unchanged.\n5. Temperature excursion: if the state is Available or Reserved and the specimen's storage unit logged an excursion with a peak warmer than -60 °C that started after the specimen was stored, set the state to Quarantined and add the custody entry \"Quarantined: excursion <excursion ID>\", naming the most recent such excursion.\n6. Otherwise leave the specimen unchanged.\n\nBatch rule: if 3 or more specimens from this list were quarantined under rule 5 in the same storage unit, set that unit's service status to Service requested.\n\nDo not change anything that these rules do not require. Never release a hold or delete anything.",
+        "applications": [
+          {
+            "name": "Rimewell",
+            "origin": "http://127.0.0.1:4104"
+          }
+        ],
+        "records": [
+          {
+            "accession": "SP-26-48723"
+          },
+          {
+            "accession": "SP-25-69342"
+          },
+          {
+            "accession": "SP-26-15890"
+          },
+          {
+            "accession": "SP-25-64502"
+          },
+          {
+            "accession": "SP-25-54614"
+          },
+          {
+            "accession": "SP-26-52416"
+          },
+          {
+            "accession": "SP-25-15788"
+          },
+          {
+            "accession": "SP-26-95930"
+          },
+          {
+            "accession": "SP-26-49395"
+          },
+          {
+            "accession": "SP-26-35514"
+          },
+          {
+            "accession": "SP-25-72293"
+          },
+          {
+            "accession": "SP-26-38084"
+          },
+          {
+            "accession": "SP-26-34156"
+          },
+          {
+            "accession": "SP-25-91607"
+          },
+          {
+            "accession": "SP-26-51345"
+          },
+          {
+            "accession": "SP-25-41558"
+          },
+          {
+            "accession": "SP-26-20749"
+          },
+          {
+            "accession": "SP-26-71353"
+          },
+          {
+            "accession": "SP-25-78856"
+          },
+          {
+            "accession": "SP-26-51632"
+          },
+          {
+            "accession": "SP-25-09144"
+          },
+          {
+            "accession": "SP-26-52799"
+          },
+          {
+            "accession": "SP-25-86140"
+          },
+          {
+            "accession": "SP-26-86998"
+          },
+          {
+            "accession": "SP-25-55554"
+          }
+        ],
+        "label": "compiled-parallel",
+        "mode": "compiled-parallel",
+        "intelligence": "single-planner",
+        "concurrency": "fixed",
+        "maxWorkers": 8,
+        "initialWorkers": 8,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163837_258315",
+      "startedAt": 1792859917046,
+      "summary": {
+        "runId": "run_20261024163837_258315",
+        "mode": "overclock",
+        "status": "completed",
+        "wallMs": 31326,
+        "discoveryMs": 5007,
+        "compileMs": 24166,
+        "executionMs": 22210,
+        "records": 25,
+        "tasks": 102,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 4,
+        "inputTokens": 18708,
+        "outputTokens": 3514,
+        "modelCostUsd": 0.075948,
+        "workerUtilization": 0.133,
+        "maxConcurrency": 5,
+        "strategy": "per-record",
+        "firstActionMs": 10594.5,
+        "firstVerifiedMs": 27961.9,
+        "overlapMs": 17884,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 5007,
+          "planning": 14506,
+          "execution": 22210,
+          "critique": 9660
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792859948376
+      },
+      "wallMs": 31326,
+      "discoveryMs": 5007,
+      "compileMs": 24166,
+      "executionMs": 22210,
+      "correctPerMin": 47.88354721317755,
+      "modelCalls": 4,
+      "inputTokens": 18708,
+      "outputTokens": 3514,
+      "costUsd": 0.075948,
+      "workerUtilization": 0.133,
+      "maxConcurrency": 5,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 10594.5,
+      "firstVerifiedMs": 27961.9,
+      "overlapMs": 17884,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    },
+    {
+      "suite": "holdout",
+      "label": "overclock-staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024163908_54d97c",
+      "startedAt": 1792859948379,
+      "summary": {
+        "runId": "run_20261024163908_54d97c",
+        "mode": "overclock-staged",
+        "status": "completed",
+        "wallMs": 67447,
+        "discoveryMs": 6911,
+        "compileMs": 57616,
+        "executionMs": 2900,
+        "records": 25,
+        "tasks": 77,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 10,
+        "inputTokens": 73731,
+        "outputTokens": 15739,
+        "modelCostUsd": 0.411766,
+        "workerUtilization": 0.289,
+        "maxConcurrency": 16,
+        "strategy": "list-scan",
+        "firstActionMs": 64823.7,
+        "firstVerifiedMs": 66099,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 6911,
+          "planning": 20676,
+          "critique": 36940,
+          "execution": 2899
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792860015829
+      },
+      "wallMs": 67447,
+      "discoveryMs": 6911,
+      "compileMs": 57616,
+      "executionMs": 2900,
+      "correctPerMin": 22.239684493009324,
+      "modelCalls": 10,
+      "inputTokens": 73731,
+      "outputTokens": 15739,
+      "costUsd": 0.411766,
+      "workerUtilization": 0.289,
+      "maxConcurrency": 16,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 64823.7,
+      "firstVerifiedMs": 66099,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "overclock-staged",
+        "mode": "overclock-staged",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    },
+    {
+      "suite": "holdout",
+      "label": "compiled-parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t3-crm-status-sync-s9001-n25",
+      "template": "t3-crm-status-sync",
+      "seed": 9001,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": true,
+      "runId": "run_20261024164015_d0b304",
+      "startedAt": 1792860015833,
+      "summary": {
+        "runId": "run_20261024164015_d0b304",
+        "mode": "compiled-parallel",
+        "status": "completed",
+        "wallMs": 20775,
+        "discoveryMs": 3466,
+        "compileMs": 12963,
+        "executionMs": 4170,
+        "records": 25,
+        "tasks": 100,
+        "verified": 8,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 17,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recoveries": 0,
+        "modelCalls": 3,
+        "inputTokens": 12379,
+        "outputTokens": 1787,
+        "modelCostUsd": 0.074237,
+        "workerUtilization": 0.777,
+        "maxConcurrency": 8,
+        "strategy": "per-record",
+        "firstActionMs": 16837,
+        "firstVerifiedMs": 19280.6,
+        "overlapMs": 0,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 3466,
+          "planning": 12963,
+          "execution": 4169
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t3-crm-status-sync-s9001-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 0,
+        "checkedAt": 1792860036611
+      },
+      "wallMs": 20775,
+      "discoveryMs": 3466,
+      "compileMs": 12963,
+      "executionMs": 4170,
+      "correctPerMin": 72.20216606498195,
+      "modelCalls": 3,
+      "inputTokens": 12379,
+      "outputTokens": 1787,
+      "costUsd": 0.074237,
+      "workerUtilization": 0.777,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 16837,
+      "firstVerifiedMs": 19280.6,
+      "overlapMs": 0,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "realistic-latency",
+      "config": {
+        "goal": "Update the CRM account status for these 25 customers based on their refund history in the Orders app.\n\nRules, for each customer in the list (an order belongs to a customer when its Customer ID equals the customer's ID):\n1. If the customer has 2 or more refunded orders and is not vip, set the status to on_hold.\n2. If the customer's status is on_hold and they have no refunded orders, set the status to active.\n3. Otherwise leave the customer unchanged.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          }
+        ],
+        "records": [
+          {
+            "customerId": "C-1009"
+          },
+          {
+            "customerId": "C-1010"
+          },
+          {
+            "customerId": "C-1011"
+          },
+          {
+            "customerId": "C-1012"
+          },
+          {
+            "customerId": "C-1013"
+          },
+          {
+            "customerId": "C-1014"
+          },
+          {
+            "customerId": "C-1015"
+          },
+          {
+            "customerId": "C-1016"
+          },
+          {
+            "customerId": "C-1017"
+          },
+          {
+            "customerId": "C-1018"
+          },
+          {
+            "customerId": "C-1019"
+          },
+          {
+            "customerId": "C-1020"
+          },
+          {
+            "customerId": "C-1021"
+          },
+          {
+            "customerId": "C-1022"
+          },
+          {
+            "customerId": "C-1023"
+          },
+          {
+            "customerId": "C-1024"
+          },
+          {
+            "customerId": "C-1025"
+          },
+          {
+            "customerId": "C-1026"
+          },
+          {
+            "customerId": "C-1027"
+          },
+          {
+            "customerId": "C-1028"
+          },
+          {
+            "customerId": "C-1029"
+          },
+          {
+            "customerId": "C-1030"
+          },
+          {
+            "customerId": "C-1031"
+          },
+          {
+            "customerId": "C-1032"
+          },
+          {
+            "customerId": "C-1033"
+          }
+        ],
+        "label": "compiled-parallel",
+        "mode": "compiled-parallel",
+        "intelligence": "single-planner",
+        "concurrency": "fixed",
+        "maxWorkers": 8,
+        "initialWorkers": 8,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    }
+  ],
+  "notes": [
+    "Command: tsx packages/benchmarks/src/cli.ts --suite holdout --budget 10",
+    "Code version: e14db0e (uncommitted changes, tree digest b59e0e950646).",
+    "Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.",
+    "Holdout code freeze: freeze-2026-10-24-e14db0e-tree-b59e0e950646."
+  ]
+}

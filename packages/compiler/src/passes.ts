@@ -122,7 +122,7 @@ export function redundantObservationElimination(input: ActionNode[]): PassResult
   });
 }
 
-/** Pass 3: locator reuse — nodes targeting the same control share one resolution-cache entry. */
+/** Pass 3: locator reuse — every reference to the same control uses one ranked locator definition. */
 export function locatorReuse(input: ActionNode[]): PassResult {
   return timed("locator-reuse", () => {
     const nodes = clone(input);
@@ -141,7 +141,7 @@ export function locatorReuse(input: ActionNode[]): PassResult {
       for (const f of n.verify?.fields ?? []) note(f.target);
     }
     const shared = [...keys.values()].filter((c) => c > 1).reduce((s, c) => s + c - 1, 0);
-    return { nodes, changes: shared, detail: `${targets} target reference(s) over ${keys.size} distinct control(s); ${shared} resolution(s) served from the per-worker locator cache after first use` };
+    return { nodes, changes: shared, detail: `${targets} target reference(s) over ${keys.size} distinct control(s); ${shared} reference(s) share another reference's locator definition (a repair learned for that control on a page applies to each of them)` };
   });
 }
 

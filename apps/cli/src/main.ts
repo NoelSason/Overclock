@@ -109,11 +109,13 @@ async function buildRunConfig(ctx: Ctx, args: ParsedArgs): Promise<RunConfigInpu
   const intelligence = flagChoice(args, "intelligence", IntelligenceMode.options);
   const concurrency = flagChoice(args, "concurrency", ConcurrencyMode.options);
   const cache = flagChoice(args, "cache", ["cold", "warm"] as const);
+  const knowledge = flagChoice(args, "knowledge", ["strict-cold", "local-only", "network-read", "network-read-and-contribute"] as const);
   const workers = flagInt(args, "workers", 1, 32);
   if (mode) config.mode = mode;
   if (intelligence) config.intelligence = intelligence;
   if (concurrency) config.concurrency = concurrency;
   if (cache) config.cache = cache;
+  if (knowledge) config.knowledge = knowledge;
   if (workers !== undefined) config.maxWorkers = workers;
   if (flagBool(args, "no-jev")) config.useJev = false;
   if (flagBool(args, "dry-run")) config.dryRun = true;
@@ -489,7 +491,8 @@ const COMMANDS: Record<string, Command> = {
       "run [--scenario] [--goal \"…\"] [--records file.csv|file.json] [--app Name=origin ...]\n" +
       "    [--mode overclock|overclock-staged|compiled-parallel|compiled-single|sequential-agent] [--workers N]\n" +
       "    [--intelligence adaptive|single-planner|parallel-scout] [--concurrency adaptive|fixed]\n" +
-      "    [--no-jev] [--no-streaming] [--no-access-paths] [--no-write-canary] [--dry-run] [--cache cold|warm] [--json]",
+      "    [--no-jev] [--no-streaming] [--no-access-paths] [--no-write-canary] [--dry-run] [--cache cold|warm]\n" +
+      "    [--knowledge strict-cold|local-only|network-read|network-read-and-contribute] [--json]",
     summary:
       "Start a run, show live progress, and print the verified result. --scenario takes goal, records, and apps from the arena; other flags override them. " +
       "Modes: overclock (streaming, default), overclock-staged (stage-gated swarm), compiled-parallel, compiled-single, sequential-agent. " +
@@ -509,6 +512,7 @@ const COMMANDS: Record<string, Command> = {
       "no-write-canary": "boolean",
       "dry-run": "boolean",
       cache: "string",
+      knowledge: "string",
       json: "boolean",
     },
     run: runCmd,

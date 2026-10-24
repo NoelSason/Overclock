@@ -16,7 +16,14 @@ import { migrate } from "./migrations";
  *
  * Durability: WAL + synchronous=NORMAL. A committed event survives a process crash; the most
  * recent transactions can be lost on OS crash / power loss (SQLite's documented trade-off).
+ * Worker-state and action events (observability only: crash recovery reads task states and
+ * receipts, never these) are queued and committed together on the next event-loop turn, or
+ * before any other event in the same transaction, so the log keeps seq order. Every other event
+ * is committed before appendEvent returns, and every read flushes the queue first.
  */
+
+/** Event types committed in groups: observability only, never read by crash recovery. */
+const DEFERRED_TYPES: ReadonlySet<string> = new Set(["worker.state", "action"]);
 
 export function defaultDbPath(): string {
   return join(repoRoot(), ".data", "engine", "engine.db");
@@ -176,6 +183,9 @@ export class EngineStore {
   /** Runs that already have a `runs` row (avoids an INSERT OR IGNORE per event). */
   private readonly knownRuns = new Set<string>();
   private closed = false;
+  /** Observability events waiting for the next group commit (see the durability note). */
+  private readonly deferred: RunEvent[] = [];
+  private flushScheduled = false;
 
   constructor(path: string = defaultDbPath()) {
     this.path = path;
@@ -206,25 +216,58 @@ export class EngineStore {
    * event with the same (runId, seq) is already stored, so replaying an event stream is safe.
    */
   appendEvent(e: RunEvent): boolean {
-    const { runId, seq, ts, t, type, ...rest } = e;
-    // Payloads normally arrive redacted from the EventBus; run configs are re-redacted here
-    // because they are the one payload that carries user-supplied inputs wholesale.
-    const payload: Row = type === "run.created" ? redact(rest as Row) : (rest as Row);
+    if (DEFERRED_TYPES.has(e.type)) {
+      this.deferred.push(e);
+      if (!this.flushScheduled) {
+        this.flushScheduled = true;
+        setImmediate(() => this.flush());
+      }
+      return true;
+    }
     const s = this.s;
     s.begin.run();
+    let inserted: boolean;
     try {
-      if (!this.knownRuns.has(runId)) s.ensureRun.run(runId, ts, "pending", "", "", "{}", ts);
-      const inserted = s.insertEvent.run(runId, seq, ts, t, type, JSON.stringify(payload)).changes;
-      if (!inserted) {
-        s.commit.run();
-        return false;
-      }
-      this.project(e, payload);
+      this.writeDeferred();
+      inserted = this.write(e);
       s.commit.run();
     } catch (err) {
       s.rollback.run();
       throw err;
     }
+    return inserted;
+  }
+
+  /** Commit queued observability events now (also runs before every read and on close). */
+  flush(): void {
+    this.flushScheduled = false;
+    if (!this.deferred.length || this.closed) return;
+    const s = this.s;
+    s.begin.run();
+    try {
+      this.writeDeferred();
+      s.commit.run();
+    } catch (err) {
+      s.rollback.run();
+      throw err;
+    }
+  }
+
+  private writeDeferred(): void {
+    for (const d of this.deferred.splice(0)) this.write(d);
+  }
+
+  /** Insert one event and its projections inside the caller's transaction. False for a duplicate (runId, seq). */
+  private write(e: RunEvent): boolean {
+    const { runId, seq, ts, t, type, ...rest } = e;
+    // Payloads normally arrive redacted from the EventBus; run configs are re-redacted here
+    // because they are the one payload that carries user-supplied inputs wholesale.
+    const payload: Row = type === "run.created" ? redact(rest as Row) : (rest as Row);
+    const s = this.s;
+    if (!this.knownRuns.has(runId)) s.ensureRun.run(runId, ts, "pending", "", "", "{}", ts);
+    const inserted = s.insertEvent.run(runId, seq, ts, t, type, JSON.stringify(payload)).changes;
+    if (!inserted) return false;
+    this.project(e, payload);
     this.knownRuns.add(runId);
     return true;
   }
@@ -329,6 +372,7 @@ export class EngineStore {
   // ---------------------------------------------------------------- reads
 
   listRuns(): RunListItem[] {
+    this.flush();
     return this.s.listRuns.all().map((r) => {
       const run = toRun(r);
       return { runId: run.runId, status: run.status, mode: run.mode, goal: run.goal, createdAt: run.createdAt, label: run.label, summary: run.summary };
@@ -336,12 +380,14 @@ export class EngineStore {
   }
 
   getRun(runId: string): StoredRun | undefined {
+    this.flush();
     const r = this.s.getRun.get(runId);
     return r ? toRun(r) : undefined;
   }
 
   /** Events with seq > after, in seq order. `limit <= 0` or Infinity means no limit. */
   events(runId: string, after = 0, limit = 1000): RunEvent[] {
+    this.flush();
     const lim = !Number.isFinite(limit) || limit <= 0 ? -1 : Math.floor(limit);
     return this.s.events.all(runId, after, lim).map(toEvent);
   }
@@ -352,6 +398,7 @@ export class EngineStore {
   }
 
   lastSeq(runId: string): number {
+    this.flush();
     return num(this.s.lastSeq.get(runId)?.s);
   }
 
@@ -398,6 +445,7 @@ export class EngineStore {
   }
 
   receipts(runId: string): StoredReceipt[] {
+    this.flush();
     return this.s.receipts.all(runId).map((r) => ({
       seq: num(r.seq),
       taskId: str(r.task_id),
@@ -410,6 +458,7 @@ export class EngineStore {
   }
 
   tasks(runId: string): StoredTask[] {
+    this.flush();
     return this.s.tasks.all(runId).map((r) => ({
       taskId: str(r.task_id),
       segmentId: str(r.segment_id),
@@ -424,11 +473,13 @@ export class EngineStore {
   }
 
   taskTransitions(runId: string, taskId?: string): StoredTaskTransition[] {
+    this.flush();
     const rows = taskId === undefined ? this.s.transitions.all(runId) : this.s.transitionsForTask.all(runId, taskId);
     return rows.map((r) => ({ taskId: str(r.task_id), seq: num(r.seq), state: str(r.state) as TaskState, t: num(r.t) }));
   }
 
   stageIntervals(runId: string): StoredStageInterval[] {
+    this.flush();
     return this.s.stageIntervals.all(runId).map((r) => ({
       seq: num(r.seq),
       stage: str(r.stage) as StageName,
@@ -439,6 +490,7 @@ export class EngineStore {
   }
 
   scoutPages(runId: string): StoredScoutPage[] {
+    this.flush();
     return this.s.scoutPages.all(runId).map((r) => ({
       seq: num(r.seq),
       t: num(r.t),
@@ -452,6 +504,7 @@ export class EngineStore {
   }
 
   fragments(runId: string): StoredFragment[] {
+    this.flush();
     const history = new Map<string, StoredFragment["history"]>();
     for (const r of this.s.fragmentTransitions.all(runId)) {
       const id = str(r.fragment_id);
@@ -474,6 +527,7 @@ export class EngineStore {
 
   /** Row counts per projection table for one run (diagnostics and tests). */
   projectionCounts(runId: string): Record<ProjectionTable | "events", number> {
+    this.flush();
     const out = { events: num(this.s.countEvents.get(runId)?.n) } as Record<ProjectionTable | "events", number>;
     for (const table of PROJECTION_TABLES) out[table] = num(this.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE run_id = ?`).get(runId)?.n);
     return out;
@@ -481,6 +535,7 @@ export class EngineStore {
 
   close(): void {
     if (this.closed) return;
+    this.flush();
     this.closed = true;
     this.db.close();
   }

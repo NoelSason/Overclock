@@ -87,18 +87,7 @@ export const DslWait = z.object({
   text: z.string().optional(),
 });
 
-export const DslStep = z.discriminatedUnion("op", [
-  DslGoto,
-  DslFill,
-  DslSelect,
-  DslClick,
-  DslSubmit,
-  DslExtract,
-  DslExtractTable,
-  DslCompute,
-  DslAssert,
-  DslWait,
-]);
+export const DslStep = z.discriminatedUnion("op", [DslGoto, DslFill, DslSelect, DslClick, DslSubmit, DslExtract, DslExtractTable, DslCompute, DslAssert, DslWait]);
 export type DslStep = z.infer<typeof DslStep>;
 export type DslStepOp = DslStep["op"];
 
@@ -134,3 +123,52 @@ export const DslSegmentPatch = z.object({
   rationale: z.string(),
 });
 export type DslSegmentPatch = z.infer<typeof DslSegmentPatch>;
+
+/**
+ * Model-facing encoding. Structured outputs cap a schema at 24 optional parameters and 16
+ * union-typed (incl. nullable) parameters. The step fields shared by every variant (`when`,
+ * `after`, `note`) therefore become required, with "" / [] meaning absent; the remaining
+ * per-variant fields stay optional (well under the cap). `normalizeModelPlan` restores the
+ * canonical form.
+ */
+const REQUIRED_EMPTY = new Set(["when", "after", "note"]);
+
+export function toModelSchema(schema: z.ZodType): z.ZodType {
+  const conv = (s: z.ZodType, key?: string): z.ZodType => {
+    const desc = s.description;
+    let out: z.ZodType;
+    if (s instanceof z.ZodOptional) {
+      const inner = conv(s.unwrap() as z.ZodType);
+      out = key && REQUIRED_EMPTY.has(key) ? inner : inner.optional();
+    } else if (s instanceof z.ZodObject) out = z.object(Object.fromEntries(Object.entries(s.shape as Record<string, z.ZodType>).map(([k, v]) => [k, conv(v, k)])));
+    else if (s instanceof z.ZodArray) out = z.array(conv(s.element as z.ZodType));
+    else if (s instanceof z.ZodDiscriminatedUnion) out = z.discriminatedUnion(s.def.discriminator, (s.options as z.ZodObject[]).map((o) => conv(o) as z.ZodObject) as [z.ZodObject, ...z.ZodObject[]]);
+    else return s;
+    return desc ? out.describe(desc) : out;
+  };
+  return conv(schema);
+}
+
+/** Drop the empty sentinels (and any nulls) a model emitted for absent values, then parse canonically. */
+export function normalizeModelOutput<T extends z.ZodType>(canonical: T, value: unknown): z.infer<T> {
+  const strip = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(strip);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) {
+        if (x === null) continue;
+        if (REQUIRED_EMPTY.has(k) && (x === "" || (Array.isArray(x) && x.length === 0))) continue;
+        out[k] = strip(x);
+      }
+      return out;
+    }
+    return v;
+  };
+  return canonical.parse(strip(value));
+}
+
+export const DslPlanForModel = toModelSchema(DslPlan);
+
+export function normalizeModelPlan(plan: unknown): DslPlan {
+  return normalizeModelOutput(DslPlan, plan);
+}

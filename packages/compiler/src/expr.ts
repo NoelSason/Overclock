@@ -24,7 +24,7 @@ export type Ast =
   | { k: "binary"; op: BinaryOp; left: Ast; right: Ast }
   | { k: "list"; items: Ast[] };
 
-type BinaryOp = "||" | "&&" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "in";
+type BinaryOp = "||" | "&&" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "in" | "+" | "-" | "*" | "/";
 
 export class ExprError extends Error {
   constructor(
@@ -38,7 +38,7 @@ export class ExprError extends Error {
 
 type Tok = { t: "num"; v: number; p: number } | { t: "str"; v: string; p: number } | { t: "id"; v: string; p: number } | { t: "root"; v: string; p: number } | { t: "op"; v: string; p: number } | { t: "eof"; p: number };
 
-const OPS = ["==", "!=", "<=", ">=", "&&", "||", "<", ">", "!", "-", "(", ")", "[", "]", ",", "."];
+const OPS = ["==", "!=", "<=", ">=", "&&", "||", "<", ">", "!", "-", "+", "*", "/", "(", ")", "[", "]", ",", "."];
 
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = [];
@@ -150,16 +150,32 @@ class Parser {
     return l;
   }
   private cmp(): Ast {
-    let l = this.unary();
+    let l = this.additive();
     for (;;) {
       if (this.isOp("<") || this.isOp("<=") || this.isOp(">") || this.isOp(">=")) {
         const op = (this.next() as { v: string }).v as BinaryOp;
-        l = { k: "binary", op, left: l, right: this.unary() };
+        l = { k: "binary", op, left: l, right: this.additive() };
       } else if (this.isId("in")) {
         this.next();
-        l = { k: "binary", op: "in", left: l, right: this.unary() };
+        l = { k: "binary", op: "in", left: l, right: this.additive() };
       } else return l;
     }
+  }
+  private additive(): Ast {
+    let l = this.multiplicative();
+    while (this.isOp("+") || this.isOp("-")) {
+      const op = (this.next() as { v: string }).v as BinaryOp;
+      l = { k: "binary", op, left: l, right: this.multiplicative() };
+    }
+    return l;
+  }
+  private multiplicative(): Ast {
+    let l = this.unary();
+    while (this.isOp("*") || this.isOp("/")) {
+      const op = (this.next() as { v: string }).v as BinaryOp;
+      l = { k: "binary", op, left: l, right: this.unary() };
+    }
+    return l;
   }
   private unary(): Ast {
     if (this.isOp("!")) {
@@ -312,7 +328,9 @@ function guardList(list: unknown[], ctx: EvalCtx): unknown[] {
   return list;
 }
 
-const FILTER_OPS = new Set(["==", "!=", "<", "<=", ">", ">=", "in", "contains"]);
+/** filterBy operators. "~=" is text equality ignoring case and surrounding whitespace on both sides. */
+const FILTER_OPS = new Set(["==", "!=", "~=", "<", "<=", ">", ">=", "in", "contains"]);
+const foldText = (x: unknown) => asStr(x).trim().toLowerCase();
 
 export const FUNCTIONS: Record<string, Fn> = {
   lower: { min: 1, max: 1, impl: ([s]) => asStr(s).toLowerCase() },
@@ -357,6 +375,8 @@ export const FUNCTIONS: Record<string, Fn> = {
             return looseEquals(v, value);
           case "!=":
             return !looseEquals(v, value);
+          case "~=":
+            return v !== null && v !== undefined && value !== null && value !== undefined && foldText(v) === foldText(value);
           case "in":
             return asList(value).some((x) => looseEquals(v, x));
           case "contains":
@@ -526,6 +546,17 @@ function evalAst(a: Ast, scope: Scope, ctx: EvalCtx): unknown {
           return !looseEquals(l, r);
         case "in":
           return Array.isArray(r) ? r.some((x) => looseEquals(l, x)) : r && typeof r === "object" ? asStr(l) in r : asStr(r).includes(asStr(l));
+        case "+":
+        case "-":
+        case "*":
+        case "/": {
+          // Numbers only; "+" with a non-number is text concatenation (null counts as "").
+          const x = asNum(l);
+          const y = asNum(r);
+          if (x === null || y === null) return a.op === "+" ? asStr(l) + asStr(r) : null;
+          if (a.op === "/") return y === 0 ? null : x / y;
+          return a.op === "+" ? x + y : a.op === "-" ? x - y : x * y;
+        }
         default:
           return compare(a.op, l, r);
       }

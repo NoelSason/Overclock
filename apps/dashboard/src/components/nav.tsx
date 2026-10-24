@@ -8,6 +8,7 @@ import { cx } from "./ui/primitives";
 const LINKS = [
   { href: "/", label: "Console", match: (p: string) => p === "/" || (p.startsWith("/runs/") && p.length > 6) },
   { href: "/runs", label: "Runs", match: (p: string) => p === "/runs" },
+  { href: "/transfer", label: "Transfer", match: (p: string) => p.startsWith("/transfer") },
   { href: "/benchmarks", label: "Benchmarks", match: (p: string) => p.startsWith("/benchmarks") },
 ];
 

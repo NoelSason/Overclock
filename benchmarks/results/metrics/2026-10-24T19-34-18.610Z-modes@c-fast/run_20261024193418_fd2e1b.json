@@ -1,0 +1,111 @@
+{
+  "summary": {
+    "runId": "run_20261024193418_fd2e1b",
+    "mode": "compiled-parallel",
+    "status": "completed",
+    "wallMs": 20499,
+    "discoveryMs": 912,
+    "compileMs": 17573,
+    "executionMs": 1758,
+    "records": 25,
+    "tasks": 227,
+    "verified": 22,
+    "failed": 0,
+    "unconfirmed": 0,
+    "skipped": 14,
+    "needsApproval": 0,
+    "recordsVerified": 25,
+    "recordsAccounting": "input-records",
+    "recoveries": 0,
+    "modelCalls": 4,
+    "inputTokens": 15545,
+    "outputTokens": 6485,
+    "modelCostUsd": 0.348846,
+    "workerUtilization": 0.896,
+    "maxConcurrency": 8,
+    "strategy": "per-record",
+    "firstActionMs": 18840.7,
+    "firstVerifiedMs": 19544.6,
+    "overlapMs": 0,
+    "recoveryMs": 0,
+    "stageMs": {
+      "discovery": 912,
+      "planning": 17573,
+      "execution": 1757
+    },
+    "knowledge": "strict-cold"
+  },
+  "derived": {
+    "elapsedMs": 20499,
+    "verified": 22,
+    "throughputPerMin": 746.142106155673,
+    "recentThroughputPerMin": 132,
+    "utilization": 0.8827369849075811,
+    "activeWorkers": 0,
+    "costPerVerifiedUsd": 0.015856633363636366,
+    "modelFreeActionRatio": 1,
+    "firstActionMs": 18840.7,
+    "firstVerifiedMs": 19544.6,
+    "overlapMs": 0
+  },
+  "spans": [
+    {
+      "name": "worker.task",
+      "count": 152,
+      "totalMs": 12491,
+      "p50": 71.02,
+      "p95": 266.03
+    }
+  ],
+  "latency": {
+    "nav:CRM": 13,
+    "nav:Support": 11,
+    "nav:Orders": 15,
+    "write:Support": 73,
+    "write:Orders": 127,
+    "write:CRM": 72
+  },
+  "ledger": {
+    "calls": 4,
+    "inputTokens": 15545,
+    "outputTokens": 6485,
+    "costUsd": 0.348845934,
+    "ms": 18291.715584000107,
+    "failures": 0
+  },
+  "recovery": {
+    "byLevel": {
+      "0": {
+        "attempts": 0,
+        "successes": 0,
+        "ms": 0
+      },
+      "1": {
+        "attempts": 0,
+        "successes": 0,
+        "ms": 0
+      },
+      "2": {
+        "attempts": 0,
+        "successes": 0,
+        "ms": 0
+      },
+      "3": {
+        "attempts": 0,
+        "successes": 0,
+        "ms": 0
+      },
+      "4": {
+        "attempts": 0,
+        "successes": 0,
+        "ms": 0
+      }
+    },
+    "modelCalls": 0,
+    "observations": 0,
+    "propagated": 0,
+    "rules": 0,
+    "escalations": 0,
+    "deduped": 0
+  }
+}

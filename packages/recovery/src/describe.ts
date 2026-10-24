@@ -46,7 +46,7 @@ export function describeLocator(loc: SemanticLocator): string {
   return (loc.controlId ? `${loc.controlId}: ` : "") + loc.strategies.map(describeStrategy).join(" | ");
 }
 
-function kindOf(node: ActionNode, loc: SemanticLocator, field: ExtractField | undefined, info: AppControl | undefined, role: string | undefined): TargetKind {
+function kindOf(node: ActionNode, field: ExtractField | undefined, info: AppControl | undefined, role: string | undefined): TargetKind {
   if (field) return "value";
   if (node.type === "extract" && node.table) return "table";
   if (node.type === "select") return "select";
@@ -57,7 +57,6 @@ function kindOf(node: ActionNode, loc: SemanticLocator, field: ExtractField | un
     if (role === "checkbox" || info?.kind === "checkbox") return "checkbox";
     return "button";
   }
-  void loc;
   return "value";
 }
 
@@ -129,7 +128,7 @@ export function describeTarget(args: { node: ActionNode; env: ActionEnv; loc: Se
   }
   const scopeCss = loc.scope?.kind === "css" ? loc.scope.selector : undefined;
   return {
-    kind: kindOf(node, loc, field, info, role),
+    kind: kindOf(node, field, info, role),
     role,
     names,
     label,

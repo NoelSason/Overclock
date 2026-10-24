@@ -156,6 +156,99 @@ describe("scheduler", () => {
     }
   });
 
+  it("parks a step awaiting approval without closing its phase, then resumes or rejects it", () => {
+    const h = harness();
+    const write = [...h.c.segments.values()].find((x) => x.kind === "write")!;
+    let parkedId: string | null = null;
+    for (let i = 0; i < 200 && !h.s.isDone(); i++) {
+      const inl = h.s.takeInline();
+      if (inl) {
+        h.run(inl, () => "C-1");
+        continue;
+      }
+      const t = h.s.lease("w1", () => true);
+      if (!t) break;
+      if (t.segmentId === write.id && !parkedId) {
+        parkedId = t.taskId;
+        h.s.park(t.taskId, "irreversible: needs approval");
+        continue;
+      }
+      h.run(t, (k) => `C-${k}`);
+    }
+    expect(parkedId).not.toBeNull();
+    // Everything else finished, but the parked step keeps its phase (and the run) open.
+    expect(h.s.tasks.get(parkedId!)!.state).toBe("NEEDS_APPROVAL");
+    expect(h.s.isDone()).toBe(false);
+    h.s.unpark(parkedId!, true, "approved by a human");
+    const again = h.s.lease("w1", () => true)!;
+    expect(again.taskId).toBe(parkedId);
+    h.run(again, (k) => `C-${k}`);
+    expect(h.s.isDone()).toBe(true);
+
+    const r = harness();
+    let rejected: string | null = null;
+    for (let i = 0; i < 200 && !rejected; i++) {
+      const inl = r.s.takeInline();
+      if (inl) {
+        r.run(inl, () => "C-1");
+        continue;
+      }
+      const t = r.s.lease("w1", () => true);
+      if (!t) break;
+      if (t.segmentId === write.id) {
+        r.s.park(t.taskId, "irreversible: needs approval");
+        r.s.unpark(t.taskId, false, "rejected by a human");
+        rejected = t.taskId;
+      } else r.run(t, (k) => `C-${k}`);
+    }
+    expect(r.s.tasks.get(rejected!)!.state).toBe("NEEDS_APPROVAL");
+    expect(r.s.isParked(rejected!)).toBe(false);
+  });
+
+  it("refuses to recompute reads that a committed write of the same record used", () => {
+    // Two writes per record share read_order. Once the first write committed, recomputing
+    // read_order for the second write would decide again from post-write state.
+    const twoWrites: DslStep[] = [
+      ...perRecord,
+      { id: "open_tedit", op: "goto", app: "Support", url: "/tickets/T-{$rec.orderId}/edit", when: "$out.read_order.status == 'refunded'" },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "'resolved'", when: "$out.read_order.status == 'refunded'" },
+      {
+        id: "save2",
+        op: "submit",
+        control: "support.edit.submit",
+        when: "$out.read_order.status == 'refunded'",
+        writes: ["app:support:ticket:T-{$rec.orderId}"],
+        guards: [],
+        verify: { url: "/tickets/T-{$rec.orderId}", fields: [{ name: "status", control: "support.detail.status", equals: "'resolved'" }] },
+        irreversible: false,
+      },
+    ];
+    const plan: DslPlan = { strategy: { name: "t", summary: "t", rationale: "t" }, phases: [{ id: "per_record", kind: "foreach", over: "$input.records", key: "$rec.orderId", dependsOn: [], steps: twoWrites }], outcomes: [{ id: "o", description: "o" }], assumptions: [], risks: [] };
+    const records = [{ orderId: "A" }];
+    const { program, issues } = lowerPlan({ plan, models: [ordersModel, supportModel], apps, goal: "g", inputs: { records }, programId: "p", strategyId: "s" });
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const c = compileProgram(program);
+    const s = new Scheduler(c, { records }, { now: () => 0 }, { criticalPathPriority: true, leaseMs: () => 10_000 });
+    s.start();
+    const writes = [...c.segments.values()].filter((x) => x.kind === "write");
+    expect(writes).toHaveLength(2);
+    const [first, second] = writes.map((w) => `${w.id}@A`);
+    let checked = false;
+    for (let i = 0; i < 40 && !checked; i++) {
+      const t = s.takeInline() ?? s.lease("w1", () => true);
+      if (!t) break;
+      if (t.taskId === second) {
+        expect(s.tasks.get(first!)!.state).toBe("VERIFIED");
+        expect(s.committedDependents(t.taskId)).toEqual([first]);
+        checked = true;
+        break;
+      }
+      for (const n of t.segment.nodes) if (n.id === "read_order") t.record.scope.out[n.id] = { status: "refunded", cust: "C-1" };
+      s.complete(t.taskId, t.segment.kind === "write" ? "VERIFIED" : "COMPLETED", t.segment.nodeIds);
+    }
+    expect(checked).toBe(true);
+  });
+
   it("expands a dependent phase from aggregated outputs of the previous phase", () => {
     const holds: DslPlan["phases"][number] = {
       id: "holds",
@@ -201,5 +294,46 @@ describe("AIMD concurrency controller", () => {
     c.record({ ms: 0, ok: false, throttled: true });
     c.record({ ms: 0, ok: false, throttled: true });
     expect(c.limit).toBe(Math.floor(before / 2));
+  });
+
+  it("doubles in slow start, then grows by one slot after the first congestion signal", () => {
+    let t = 0;
+    const c = new AimdController("Orders", { min: 1, max: 64, initial: 4, windowMs: 1000, errorThreshold: 0.2 }, () => t);
+    const window = (ms: number, n = 10) => {
+      for (let i = 0; i < n; i++) {
+        t += 1000 / n;
+        c.record({ ms, ok: true });
+      }
+    };
+    window(100, 10);
+    expect(c.limit).toBe(8);
+    window(100, 20);
+    expect(c.limit).toBe(16);
+    window(100, 40);
+    expect(c.limit).toBe(32);
+    // Latency up 4x with no throughput gain: hold, and leave slow start.
+    window(400, 40);
+    expect(c.limit).toBe(32);
+    window(100, 80);
+    expect(c.limit).toBe(33);
+  });
+
+  it("ignores demand-limited windows: no congestion signal and no growth when the app wasn't at its limit", () => {
+    let t = 0;
+    const c = new AimdController("Orders", { min: 1, max: 64, initial: 4, windowMs: 1000, errorThreshold: 0.2 }, () => t);
+    const window = (ms: number, n: number, saturated: boolean) => {
+      for (let i = 0; i < n; i++) {
+        t += 1000 / n;
+        c.record({ ms, ok: true, saturated });
+      }
+    };
+    window(100, 10, true);
+    expect(c.limit).toBe(8);
+    // Few tasks were ready: throughput fell and latency rose, but the app never used its 8 slots.
+    window(400, 4, false);
+    expect(c.limit).toBe(8);
+    // Still in slow start once demand returns: it doubles instead of adding one.
+    window(100, 20, true);
+    expect(c.limit).toBe(16);
   });
 });

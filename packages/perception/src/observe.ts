@@ -210,17 +210,20 @@ export function toAppControls(app: string, obs: Observation): AppControl[] {
     });
   }
   raw.tables.forEach((t) => {
-    const id = uniqueId(`${prefix}.${slug(t.caption ?? "table")}_table`);
+    // Captions often carry data ("10 customers, showing 1-10"); identity must come from structure.
+    const stableCaption = t.caption && !/\d/.test(t.caption) ? t.caption : undefined;
+    const ident = stableCaption ?? (t.headers.slice(0, 2).join(" ") || "table");
+    const id = uniqueId(`${prefix}.${slug(ident)}_table`);
     const strategies: LocatorStrategy[] = [];
-    if (t.caption) strategies.push({ kind: "role", role: "table", name: t.caption, exact: true });
-    strategies.push({ kind: "css", selector: t.cssPath });
+    if (stableCaption) strategies.push({ kind: "role", role: "table", name: stableCaption, exact: true });
     if (raw.tables.length === 1) strategies.push({ kind: "css", selector: "table" });
+    strategies.push({ kind: "css", selector: t.cssPath });
     out.push({
       id,
       app,
       page: obs.routePattern,
       role: "table",
-      name: t.caption ?? "table",
+      name: stableCaption ?? ident,
       kind: "table",
       locator: { controlId: id, strategies, confidence: 0.9, evidence: ev(`t${t.idx}`), regionFingerprint: obs.fingerprint.regions[`table${t.idx}`] },
       detail: t.headers.join(" | "),
@@ -232,7 +235,8 @@ export function toAppControls(app: string, obs: Observation): AppControl[] {
       id,
       app,
       page: obs.routePattern,
-      role: "definition",
+      // A titled region's fact is a collection (notes, comments); verification counts its entries.
+      role: f.region ? "region" : "definition",
       name: f.label,
       kind: "fact",
       locator: { controlId: id, strategies: [{ kind: "css", selector: `xpath=${f.xpath}` }, { kind: "css", selector: f.cssPath }], confidence: 0.85, evidence: ev(`fact:${f.label}`), regionFingerprint: obs.fingerprint.regions.facts },

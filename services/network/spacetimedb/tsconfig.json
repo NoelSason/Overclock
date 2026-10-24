@@ -1,0 +1,22 @@
+/*
+ * tsconfig for the Overclock Network SpacetimeDB module. Based on the template from
+ * `spacetime init --lang typescript`; the target/lib/module/isolatedModules/noEmit options are
+ * required by SpacetimeDB. This directory is not part of the root tsconfig; `spacetime build`
+ * type-checks it with the local tsc.
+ */
+{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "noUncheckedIndexedAccess": true,
+
+    /* Required by SpacetimeDB; do not modify. */
+    "target": "ESNext",
+    "lib": ["ES2021", "dom"],
+    "module": "ESNext",
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["./src/**/*"]
+}

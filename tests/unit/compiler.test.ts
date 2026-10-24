@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionNode, DslPlan, DslStep } from "@overclock/contracts";
-import { compileProgram, dependencyAnalysis, evaluate, commonSubexpressionReuse, hasErrors, lowerPlan, redundantObservationElimination, renderTemplate, topoSort, validateProgram, verificationPlacement, type Scope } from "@overclock/compiler";
+import { addReadGuards, compileProgram, inheritSubmitConditions, dependencyAnalysis, evaluate, commonSubexpressionReuse, hasErrors, lowerPlan, redundantObservationElimination, renderTemplate, topoSort, validateProgram, verificationPlacement, type Scope } from "@overclock/compiler";
 import { apps, ordersModel, supportModel } from "../fixtures/appmodel";
 
 const records = [{ orderId: "ORD-1" }, { orderId: "ORD-2" }];
@@ -52,6 +52,119 @@ describe("lowering and validation", () => {
     expect(save.target?.controlId).toBe("support.edit.submit");
     expect(save.verify?.fields[0]?.target.controlId).toBe("support.detail.status");
     expect(fe.body!.find((n) => n.id === "decide")!.dependsOn.sort()).toEqual(["read_order", "read_tickets"]);
+  });
+
+  it("checks compare-and-swap guards before the form is modified", () => {
+    const guarded = steps.map((st) => (st.op === "submit" ? { ...st, guards: [{ control: "support.edit.status", equals: "$out.read_tickets.rows[0].status" }] } : st));
+    const { program } = lower(plan(guarded as DslStep[]));
+    const body = program.nodes[0]!.body!;
+    const select = body.find((n) => n.id === "set_status")!;
+    const save = body.find((n) => n.id === "save")!;
+    expect(select.preconditions).toHaveLength(1);
+    expect(select.preconditions[0]!.kind).toBe("fieldEquals");
+    expect(save.preconditions).toHaveLength(0);
+  });
+
+  it("drops a guard that expects the value the same form is about to write", () => {
+    // Seen live: a repaired plan guarded the note box with the note text it was about to type,
+    // so the guard could only pass after the write had already happened.
+    const guarded = steps.map((st) => (st.op === "submit" ? { ...st, guards: [{ control: "support.edit.status", equals: "'resolved'" }] } : st));
+    const { program, issues } = lower(plan(guarded as DslStep[]));
+    expect(issues.some((i) => i.code === "self-defeating-guard" && i.severity === "warning")).toBe(true);
+    const body = program.nodes[0]!.body!;
+    expect(body.find((n) => n.id === "set_status")!.preconditions).toHaveLength(0);
+    expect(body.find((n) => n.id === "save")!.preconditions).toHaveLength(0);
+  });
+
+  it("re-opens a page when acting on it needs a decision computed from that page's own reads", () => {
+    // Seen live: open the ticket, read it, read the order elsewhere, decide from both, then act on
+    // the ticket page. Joining the ticket chain would make it depend on itself.
+    const cyc: DslStep[] = [
+      { id: "open_order", op: "goto", app: "Orders", url: "/orders/{$rec.orderId}" },
+      { id: "read_order", op: "extract", fields: [{ name: "status", control: "orders.detail.status", parse: "string" }] },
+      { id: "open_ticket", op: "goto", app: "Support", url: "/tickets/{$rec.ticketId}" },
+      { id: "read_ticket", op: "extract", fields: [{ name: "status", control: "support.detail.status", parse: "string" }] },
+      { id: "decide", op: "compute", assign: [{ name: "go", expr: "$out.read_order.status == 'refunded' && $out.read_ticket.status != 'resolved'" }] },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "'resolved'", when: "$out.decide.go" },
+      {
+        id: "save",
+        op: "submit",
+        control: "support.edit.submit",
+        when: "$out.decide.go",
+        writes: ["app:support:ticket:{$rec.ticketId}"],
+        guards: [],
+        verify: { url: "/tickets/{$rec.ticketId}", fields: [{ name: "status", control: "support.detail.status", equals: "'resolved'" }] },
+        irreversible: false,
+      },
+    ];
+    const { program, issues } = lower(plan(cyc));
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const c = compileProgram(program);
+    const write = [...c.segments.values()].find((x) => x.kind === "write")!;
+    expect(write.nodeIds[0]).toBe("set_status__renav");
+    expect(write.nodes[0]!.type).toBe("navigate");
+    expect(write.nodes[0]!.url).toEqual(program.nodes[0]!.body!.find((n) => n.id === "open_ticket")!.url);
+    const decideSeg = [...c.segments.values()].find((x) => x.nodeIds.includes("decide"))!;
+    expect(write.dependsOn).toContain(decideSeg.id);
+  });
+
+  it("adds the compare-and-swap guard a plan forgot for a field it read and then overwrites", () => {
+    const readThenEdit: DslStep[] = [
+      steps[0]!,
+      steps[1]!,
+      { id: "open_edit", op: "goto", app: "Support", url: "/tickets/{$rec.orderId}/edit" },
+      { id: "read_form", op: "extract", fields: [{ name: "status", control: "support.edit.status", parse: "string" }] },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "'resolved'" },
+      { ...(steps[7] as Extract<DslStep, { op: "submit" }>), when: undefined, guards: [] },
+    ];
+    const { plan: guarded, added } = addReadGuards(plan(readThenEdit));
+    expect(added).toEqual([{ stepId: "save", control: "support.edit.status" }]);
+    const save = guarded.phases[0]!.steps.find((x) => x.id === "save") as Extract<DslStep, { op: "submit" }>;
+    expect(save.guards).toEqual([{ control: "support.edit.status", equals: "$out.read_form.status" }]);
+    // Lowering applies it: the guard checks the form before the select changes it.
+    const { program, issues } = lower(plan(readThenEdit));
+    expect(issues.some((i) => i.code === "auto-guard")).toBe(true);
+    expect(program.nodes[0]!.body!.find((n) => n.id === "set_status")!.preconditions[0]).toMatchObject({ kind: "fieldEquals", expected: { expr: "$out.read_form.status" } });
+    // A read under a different condition doesn't guard the edit, and existing guards stay as they are.
+    const conditional = readThenEdit.map((x) => (x.id === "read_form" ? { ...x, when: "$out.read_order.status == 'refunded'" } : x));
+    expect(addReadGuards(plan(conditional as DslStep[])).added).toEqual([]);
+  });
+
+  it("drops guards that compare with a computed value, keeps reads, and auto-guards only from reads before the form changed", () => {
+    // Seen live: guards: [{ control: <customer id input>, equals: "$out.decide3.targetCust" }], the
+    // value the edit is about to write. Such a guard fails whenever a change is needed.
+    const edit = (guards: { control: string; equals: string }[], extra: DslStep[] = []): DslStep[] => [
+      steps[0]!,
+      steps[1]!,
+      { id: "pick", op: "compute", assign: [{ name: "target", expr: "if($out.read_order.status == 'refunded', 'resolved', 'open')" }, { name: "seen", expr: "$out.read_order.status" }] },
+      { id: "open_edit", op: "goto", app: "Support", url: "/tickets/{$rec.orderId}/edit" },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "$out.pick.target" },
+      ...extra,
+      { ...(steps[7] as Extract<DslStep, { op: "submit" }>), when: undefined, guards },
+    ];
+    const computed = addReadGuards(plan(edit([{ control: "support.edit.status", equals: "$out.pick.target" }])));
+    expect(computed.dropped).toEqual([{ stepId: "save", control: "support.edit.status", equals: "$out.pick.target" }]);
+    expect((computed.plan.phases[0]!.steps.find((x) => x.id === "save") as Extract<DslStep, { op: "submit" }>).guards).toEqual([]);
+    expect(lower(plan(edit([{ control: "support.edit.status", equals: "$out.pick.target" }]))).issues.some((i) => i.code === "computed-guard")).toBe(true);
+    // A compute field that only copies a read, a direct read, and a literal precondition are kept.
+    for (const equals of ["$out.pick.seen", "$out.read_order.status", "lower(trim($out.read_order.status))", "'open'"]) expect(addReadGuards(plan(edit([{ control: "support.edit.status", equals }]))).dropped).toEqual([]);
+    // An extract after the form changed reads the new value, so it never becomes a guard.
+    const late = addReadGuards(plan(edit([], [{ id: "confirm", op: "extract", fields: [{ name: "status", control: "support.edit.status", parse: "string" }] }])));
+    expect(late.added).toEqual([]);
+  });
+
+  it("gates an edit's fills with its submit's condition, but never gotos or extracts", () => {
+    const ungated = steps.map((st) => (st.id === "set_status" ? { ...st, when: undefined } : st)) as DslStep[];
+    const out = inheritSubmitConditions(plan(ungated));
+    const byId = new Map(out.phases[0]!.steps.map((x) => [x.id, x]));
+    expect(byId.get("set_status")!.when).toBe("$out.decide.needs");
+    expect(byId.get("read_order")!.when).toBeUndefined();
+    // A fill that already has its own condition keeps it.
+    const own = steps.map((st) => (st.id === "set_status" ? { ...st, when: "true" } : st)) as DslStep[];
+    expect(inheritSubmitConditions(plan(own)).phases[0]!.steps.find((x) => x.id === "set_status")!.when).toBe("true");
+    // Lowering applies it.
+    const { program } = lower(plan(ungated));
+    expect(program.nodes[0]!.body!.find((n) => n.id === "set_status")!.when).toBe("$out.decide.needs");
   });
 
   it("rejects controls that were never observed", () => {

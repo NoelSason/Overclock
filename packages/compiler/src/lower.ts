@@ -27,6 +27,134 @@ export interface LowerResult {
 
 const DEFAULT_TIMEOUT = 10_000;
 
+/** Functions that normalize a value without computing a different one. */
+const NORMALIZERS = new Set(["trim", "lower", "upper", "toString"]);
+
+/** `$out.<step>.<field>…`, optionally wrapped in normalizers like lower(trim(x)), or null. */
+function outPath(src: string): { step: string; field: string | undefined } | null {
+  let ast: ReturnType<typeof parseExpr>["ast"];
+  try {
+    ast = parseExpr(src).ast;
+  } catch {
+    return null;
+  }
+  while (ast.k === "call" && NORMALIZERS.has(ast.fn) && ast.args.length === 1) ast = ast.args[0]!;
+  const chain: string[] = [];
+  while (ast.k === "member" || ast.k === "index") {
+    chain.unshift(ast.k === "member" ? ast.prop : "[]");
+    ast = ast.obj;
+  }
+  if (ast.k !== "root" || ast.name !== "out" || !chain[0]) return null;
+  return { step: chain[0], field: chain[1] };
+}
+
+/**
+ * Make a plan's compare-and-swap guards mean what they must: "the form still shows the value
+ * read earlier". Applied before lowering, and to every plan that is published, so the executed
+ * program and the shared capability agree.
+ *  - A guard whose expected value is computed (for example the target value of the edit) is
+ *    dropped: it fails whenever a change is needed. A guard is kept when its value is a direct
+ *    read (an extract output, possibly through one compute field that copies it), a literal, or
+ *    a record field.
+ *  - A guard the plan left out is added when an edit fills or selects a control whose value an
+ *    extract read, under the same condition, before the form's first change.
+ */
+/**
+ * Fills, selects, and clicks between an edit's goto and its submit inherit the submit's "when"
+ * when they have none: without the submit nothing they do is saved, so gating them the same way
+ * changes no effect and spares the planner repeating the condition. Gotos and extracts keep their
+ * own conditions, because decisions may depend on what they read.
+ */
+export function inheritSubmitConditions(plan: DslPlan): DslPlan {
+  let changed = false;
+  const phases = plan.phases.map((ph) => {
+    const steps = [...ph.steps];
+    let chainStart = 0;
+    for (let i = 0; i < steps.length; i++) {
+      const st = steps[i]!;
+      if (st.op === "goto") chainStart = i + 1;
+      else if (st.op === "submit") {
+        if (st.when)
+          for (let j = chainStart; j < i; j++) {
+            const x = steps[j]!;
+            if ((x.op === "fill" || x.op === "select" || x.op === "click") && !x.when) {
+              steps[j] = { ...x, when: st.when };
+              changed = true;
+            }
+          }
+        chainStart = i + 1;
+      }
+    }
+    return { ...ph, steps };
+  });
+  return changed ? { ...plan, phases } : plan;
+}
+
+export function addReadGuards(plan: DslPlan): { plan: DslPlan; added: { stepId: string; control: string }[]; dropped: { stepId: string; control: string; equals: string }[] } {
+  const added: { stepId: string; control: string }[] = [];
+  const dropped: { stepId: string; control: string; equals: string }[] = [];
+  const phases = plan.phases.map((ph) => {
+    const extracts = new Set<string>();
+    const computes = new Map<string, Map<string, string>>();
+    const isRead = (src: string): boolean => {
+      const p = outPath(src);
+      if (!p) return parseExprRefs(src).size === 0;
+      if (extracts.has(p.step)) return true;
+      const assigned = p.field !== undefined ? computes.get(p.step)?.get(p.field) : undefined;
+      const q = assigned !== undefined ? outPath(assigned) : null;
+      return q !== null && extracts.has(q.step);
+    };
+    const reads = new Map<string, { expr: string; when: string }>();
+    let formReads: Map<string, { expr: string; when: string }> | null = null;
+    let form: DslStep[] = [];
+    const steps = ph.steps.map((st): DslStep => {
+      if (st.op === "extract") {
+        extracts.add(st.id);
+        for (const f of st.fields) if (f.parse === "string" && !reads.has(f.control)) reads.set(f.control, { expr: `$out.${st.id}.${f.name}`, when: st.when ?? "" });
+      } else if (st.op === "extractTable") extracts.add(st.id);
+      else if (st.op === "compute") computes.set(st.id, new Map(st.assign.map((a) => [a.name, a.expr])));
+      else if (st.op === "goto") {
+        form = [];
+        formReads = null;
+      } else if (st.op === "fill" || st.op === "select") {
+        formReads ??= new Map(reads);
+        form.push(st);
+      } else if (st.op === "submit") {
+        const kept = st.guards.filter((g) => {
+          if (isRead(g.equals)) return true;
+          dropped.push({ stepId: st.id, control: g.control, equals: g.equals });
+          return false;
+        });
+        const guarded = new Set(kept.map((g) => g.control));
+        const extra: { control: string; equals: string }[] = [];
+        for (const f of form) {
+          if (f.op !== "fill" && f.op !== "select") continue;
+          const r = (formReads ?? reads).get(f.control);
+          if (!r || guarded.has(f.control) || (r.when !== "" && r.when !== (st.when ?? ""))) continue;
+          guarded.add(f.control);
+          extra.push({ control: f.control, equals: r.expr });
+          added.push({ stepId: st.id, control: f.control });
+        }
+        form = [];
+        formReads = null;
+        if (extra.length || kept.length !== st.guards.length) return { ...st, guards: [...kept, ...extra] };
+      }
+      return st;
+    });
+    return { ...ph, steps };
+  });
+  return { plan: added.length || dropped.length ? { ...plan, phases } : plan, added, dropped };
+}
+
+function parseExprRefs(src: string): Set<string> {
+  try {
+    return parseExpr(src).outRefs;
+  } catch {
+    return new Set();
+  }
+}
+
+
 /** `{$rec.id}`-style template with every expression replaced by `*` (for resource identity). */
 export function templateShape(t: string): string {
   return t.replace(/\{[^}]*\}/g, "{}");
@@ -82,10 +210,13 @@ export function stepExprs(s: DslStep): string[] {
  */
 export function lowerPlan(input: LowerInput): LowerResult {
   const issues: Issue[] = [];
+  const { plan, added, dropped } = addReadGuards(inheritSubmitConditions(input.plan));
+  for (const a of added) issues.push({ severity: "warning", code: "auto-guard", message: `Submit "${a.stepId}" now guards "${a.control}" with the value the plan read earlier (compare-and-swap)`, stepId: a.stepId });
+  for (const d of dropped) issues.push({ severity: "warning", code: "computed-guard", message: `Submit "${d.stepId}" guarded "${d.control}" with a computed value (${d.equals}); a guard must compare with a value read from the app, so it was dropped`, stepId: d.stepId });
   const controls = new Map<string, AppControl>();
   for (const m of input.models) for (const [id, c] of Object.entries(m.controls)) controls.set(id, c);
   const appNames = new Set(input.apps.map((a) => a.name));
-  const phaseIds = new Set(input.plan.phases.map((p) => p.id));
+  const phaseIds = new Set(plan.phases.map((p) => p.id));
   const allStepIds = new Set<string>();
   const nodes: ActionNode[] = [];
 
@@ -100,7 +231,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
   };
   const locatorOf = (c: AppControl): SemanticLocator => structuredClone(c.locator);
 
-  for (const phase of input.plan.phases) {
+  for (const phase of plan.phases) {
     if (allStepIds.has(phase.id)) issues.push({ severity: "error", code: "duplicate-id", message: `Phase id "${phase.id}" collides with a step id`, phaseId: phase.id });
     for (const d of phase.dependsOn) if (!phaseIds.has(d)) issues.push({ severity: "error", code: "unknown-phase", message: `Phase "${phase.id}" depends on unknown phase "${d}"`, phaseId: phase.id });
 
@@ -171,11 +302,13 @@ export function lowerPlan(input: LowerInput): LowerResult {
                 issues.push({ severity: "error", code: "unknown-control", message: `Step "${s.id}" verifies with unknown control "${f.control}"`, stepId: s.id });
                 return null;
               }
-              return { name: f.name, target: locatorOf(vc), equals: { expr: f.equals }, attr: attrFor(vc) };
+              return { name: f.name, target: locatorOf(vc), equals: { expr: f.equals }, attr: attrFor(vc), ...(vc.role === "region" ? { match: "entry" as const } : {}) };
             })
             .filter((x): x is NonNullable<typeof x> => x !== null);
           if (verifyFields.length === 0) issues.push({ severity: "error", code: "missing-verification", message: `Submit "${s.id}" has no read-back verification fields`, stepId: s.id });
           if (s.writes.length === 0) issues.push({ severity: "error", code: "missing-writes", message: `Submit "${s.id}" declares no written resources`, stepId: s.id });
+          const lastGoto = app ? [...body].reverse().find((b) => b.type === "navigate" && b.app === app) : undefined;
+          const formSteps = lastGoto ? body.slice(body.indexOf(lastGoto) + 1).filter((b) => b.app === app) : [];
           const guards: Condition[] = s.guards
             .map((g) => {
               const gc = controls.get(g.control);
@@ -183,16 +316,27 @@ export function lowerPlan(input: LowerInput): LowerResult {
                 issues.push({ severity: "error", code: "unknown-control", message: `Step "${s.id}" guards with unknown control "${g.control}"`, stepId: s.id });
                 return null;
               }
+              // A guard that expects the value this form is about to write can only pass after the
+              // write already happened: it is not a compare-and-swap on earlier data. Drop it.
+              const writer = formSteps.find((b) => (b.type === "fill" || b.type === "select") && b.target?.controlId === g.control && b.input && "expr" in b.input && b.input.expr.trim() === g.equals.trim());
+              if (writer) {
+                issues.push({ severity: "warning", code: "self-defeating-guard", message: `Step "${s.id}" guards "${g.control}" with the value step "${writer.id}" writes; guards must compare against values read before the edit, so this guard was dropped`, stepId: s.id });
+                return null;
+              }
               return { kind: "fieldEquals" as const, target: locatorOf(gc), expected: { expr: g.equals }, attr: attrFor(gc) };
             })
             .filter((x): x is NonNullable<typeof x> => x !== null);
+          // Compare-and-swap guards must see the form as loaded, before any fill/select changes it:
+          // attach them to the first interaction after the edit page's goto (or the submit itself).
+          const guardHost: ActionNode | undefined = formSteps.find((b) => b.type === "fill" || b.type === "select" || b.type === "click");
+          if (guardHost) guardHost.preconditions.push(...guards);
           n = base(s.id, "click", {
             app,
             target: c ? locatorOf(c) : undefined,
             effect: irreversible ? "irreversible" : "remote-write",
             retryPolicy: irreversible ? "never" : "verify-before-retry",
             requiresApproval: irreversible || undefined,
-            preconditions: guards,
+            preconditions: guardHost ? [] : guards,
             writes: [...s.writes, ...(app ? [pageResource(app, s.verify.url)] : [])],
             verify: { url: { template: s.verify.url }, fields: verifyFields },
             timeoutMs: 15_000,
@@ -225,7 +369,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
             table: {
               target: c ? locatorOf(c) : { strategies: [{ kind: "css", selector: "table" }], confidence: 0, evidence: [] },
               columns,
-              key: s.key,
+              key: s.key ?? undefined,
               linkColumns: s.links ?? [],
               pagination: next ? { next: locatorOf(next), maxPages: Math.min(200, s.maxPages ?? 50) } : undefined,
             },
@@ -281,7 +425,7 @@ export function lowerPlan(input: LowerInput): LowerResult {
       }
       const records = Array.isArray(input.inputs.records) ? input.inputs.records.length : 0;
       const maxIterations = Math.min(phase.maxIterations ?? Math.max(records, 1) * 4, 5000);
-      nodes.push(base(phase.id, "foreach", { over: phase.over, key: phase.key, as: "rec", maxIterations, body, dependsOn: [...phase.dependsOn], timeoutMs: 3_600_000 }));
+      nodes.push(base(phase.id, "foreach", { over: phase.over ?? undefined, key: phase.key ?? undefined, as: "rec", maxIterations, body, dependsOn: [...phase.dependsOn], timeoutMs: 3_600_000 }));
     } else {
       for (const n of body) if (n.dependsOn.length === 0) n.dependsOn = [...phase.dependsOn];
       nodes.push(...body);
@@ -289,18 +433,18 @@ export function lowerPlan(input: LowerInput): LowerResult {
     }
   }
 
-  if (input.plan.outcomes.length === 0) issues.push({ severity: "error", code: "missing-outcomes", message: "Plan declares no expected outcomes" });
+  if (plan.outcomes.length === 0) issues.push({ severity: "error", code: "missing-outcomes", message: "Plan declares no expected outcomes" });
 
   const program: ExecutionProgram = {
     version: IR_VERSION,
     id: input.programId,
     goal: input.goal,
-    strategy: { id: input.strategyId, name: input.plan.strategy.name, summary: input.plan.strategy.summary },
+    strategy: { id: input.strategyId, name: plan.strategy.name, summary: plan.strategy.summary },
     allowedOrigins: input.apps.map((a) => new URL(a.origin).origin),
     apps: input.apps,
     inputs: input.inputs,
     nodes,
-    expectedOutcomes: input.plan.outcomes.map((o) => ({ id: o.id, description: o.description, scope: "record" as const })),
+    expectedOutcomes: plan.outcomes.map((o) => ({ id: o.id, description: o.description, scope: "record" as const })),
     approvalPolicy: { requireApprovalFor: ["irreversible"], approvedNodes: [] },
   };
   return { program, issues };

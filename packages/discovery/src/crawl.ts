@@ -14,6 +14,8 @@ export interface CrawlOptions {
   maxPages?: number;
   maxPerPattern?: number;
   signal?: AbortSignal;
+  /** Called after every observed page (live discovery progress). */
+  onPage?: (obs: Observation, loadMs: number) => void;
 }
 
 export interface CrawlResult {
@@ -84,6 +86,7 @@ export async function crawlApp(opts: CrawlOptions): Promise<CrawlResult> {
         obs = await observe(page);
       }
       obs.metrics.navMs = Math.round(loadMs);
+      opts.onPage?.(obs, loadMs);
       (loads.get(pattern) ?? loads.set(pattern, []).get(pattern)!).push(loadMs);
       observations.push(obs);
       // Breadth-first: navigation links first, then a couple of record links per table.

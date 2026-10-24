@@ -1,4 +1,6 @@
 import type { TaskTemplateId } from "@overclock/contracts";
+import { generateHoldout } from "../holdout/generate";
+import { emptyHoldout } from "../holdout/model";
 import { Rng } from "./rng";
 import type { Customer, CustomerStatus, Dataset, Note, Order, OrderStatus, Ticket, TicketCategory, TicketOwner, TicketStatus } from "./model";
 
@@ -145,7 +147,7 @@ function finish(c: Ctx, listed: string[]): Generated {
   c.rng.shuffle(c.customers);
   c.rng.shuffle(c.tickets);
   c.orders.sort((a, b) => (a.placed_at < b.placed_at ? 1 : -1));
-  return { dataset: { customers: c.customers, orders: c.orders, tickets: c.tickets, notes: c.notes }, recordKeys: listed };
+  return { dataset: { customers: c.customers, orders: c.orders, tickets: c.tickets, notes: c.notes, holdout: emptyHoldout() }, recordKeys: listed };
 }
 
 function generateT1(seed: number, n: number): Generated {
@@ -268,5 +270,10 @@ export function generate(template: TaskTemplateId, seed: number, n: number): Gen
       return generateT2(seed, n);
     case "t3-crm-status-sync":
       return generateT3(seed, n);
+    case "t4-holdout": {
+      // The holdout template runs on the fourth app only; the classic apps stay empty.
+      const h = generateHoldout(seed, n);
+      return { dataset: { customers: [], orders: [], tickets: [], notes: [], holdout: h.data }, recordKeys: h.recordKeys };
+    }
   }
 }

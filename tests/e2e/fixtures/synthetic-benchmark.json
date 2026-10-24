@@ -1,0 +1,1404 @@
+{
+  "version": 1,
+  "suite": "fixture",
+  "createdAt": 1792778400000,
+  "machine": {
+    "platform": "fixture",
+    "cpus": 8,
+    "memoryGb": 16,
+    "node": "24"
+  },
+  "budgetUsd": 50,
+  "spentUsd": 0,
+  "runs": [
+    {
+      "suite": "fixture",
+      "label": "sequential-agent",
+      "mode": "sequential-agent",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778400000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 99,
+        "accuracy": 0.99,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 550428,
+      "discoveryMs": 110086,
+      "compileMs": 40,
+      "executionMs": 412821,
+      "correctPerMin": 10.791602171401165,
+      "modelCalls": 900,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 4.2,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "firstActionMs": 8400,
+      "firstVerifiedMs": 23003,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "sequential-agent"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "compiled-single",
+      "mode": "compiled-single",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778460000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 145573,
+      "discoveryMs": 29115,
+      "compileMs": 40,
+      "executionMs": 109180,
+      "correctPerMin": 41.21643436626298,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "firstActionMs": 6000,
+      "firstVerifiedMs": 14717,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-single"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "compiled-single",
+      "mode": "compiled-single",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778520000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 139055,
+      "discoveryMs": 27811,
+      "compileMs": 40,
+      "executionMs": 104291,
+      "correctPerMin": 43.14839452015389,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 1,
+      "verifiedButWrong": 0,
+      "firstActionMs": 6000,
+      "firstVerifiedMs": 15160,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-single"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778580000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 54390,
+      "discoveryMs": 10878,
+      "compileMs": 40,
+      "executionMs": 40793,
+      "correctPerMin": 110.31439602868174,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5800,
+      "firstVerifiedMs": 13502,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-parallel"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778640000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 54747,
+      "discoveryMs": 10949,
+      "compileMs": 40,
+      "executionMs": 41060,
+      "correctPerMin": 109.59504630390707,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5800,
+      "firstVerifiedMs": 13622,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-parallel"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t1-4244-100",
+      "template": "t1-order-reconcile",
+      "seed": 4244,
+      "records": 100,
+      "trial": 2,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778700000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4244-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 50627,
+      "discoveryMs": 10125,
+      "compileMs": 40,
+      "executionMs": 37970,
+      "correctPerMin": 118.51383649041026,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5800,
+      "firstVerifiedMs": 14601,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-parallel"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778760000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 39330,
+      "discoveryMs": 7866,
+      "compileMs": 40,
+      "executionMs": 29498,
+      "correctPerMin": 152.55530129672007,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5120,
+      "firstVerifiedMs": 12154,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock-staged"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778820000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 99,
+        "accuracy": 0.99,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 44098,
+      "discoveryMs": 8820,
+      "compileMs": 40,
+      "executionMs": 33074,
+      "correctPerMin": 134.69998639394078,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5120,
+      "firstVerifiedMs": 11888,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock-staged"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "staged",
+      "mode": "overclock-staged",
+      "scenarioId": "t1-4244-100",
+      "template": "t1-order-reconcile",
+      "seed": 4244,
+      "records": 100,
+      "trial": 2,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778880000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4244-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 38168,
+      "discoveryMs": 7634,
+      "compileMs": 40,
+      "executionMs": 28626,
+      "correctPerMin": 157.19974848040243,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 5120,
+      "firstVerifiedMs": 12923,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock-staged"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792778940000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 99,
+        "accuracy": 0.99,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 34728,
+      "discoveryMs": 6946,
+      "compileMs": 40,
+      "executionMs": 26046,
+      "correctPerMin": 171.0435383552177,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 2640,
+      "firstVerifiedMs": 7145,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779000000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 33354,
+      "discoveryMs": 6671,
+      "compileMs": 40,
+      "executionMs": 25016,
+      "correctPerMin": 179.88846914912756,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 2640,
+      "firstVerifiedMs": 6838,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4244-100",
+      "template": "t1-order-reconcile",
+      "seed": 4244,
+      "records": 100,
+      "trial": 2,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779060000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4244-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 36076,
+      "discoveryMs": 7215,
+      "compileMs": 40,
+      "executionMs": 27057,
+      "correctPerMin": 166.31555604834242,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 2640,
+      "firstVerifiedMs": 7156,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4245-100",
+      "template": "t1-order-reconcile",
+      "seed": 4245,
+      "records": 100,
+      "trial": 3,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779120000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4245-100",
+        "totalRecords": 100,
+        "correctRecords": 99,
+        "accuracy": 0.99,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 35162,
+      "discoveryMs": 7032,
+      "compileMs": 40,
+      "executionMs": 26372,
+      "correctPerMin": 168.93237017234514,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 2640,
+      "firstVerifiedMs": 6171,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4246-100",
+      "template": "t1-order-reconcile",
+      "seed": 4246,
+      "records": 100,
+      "trial": 4,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779180000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4246-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 32056,
+      "discoveryMs": 6411,
+      "compileMs": 40,
+      "executionMs": 24042,
+      "correctPerMin": 187.17244821562267,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 2640,
+      "firstVerifiedMs": 5967,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "ablation:no-jev",
+      "mode": "overclock",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779240000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 34870,
+      "discoveryMs": 6974,
+      "compileMs": 40,
+      "executionMs": 26153,
+      "correctPerMin": 172.06767995411528,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 3160,
+      "firstVerifiedMs": 7693,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "ablation:no-jev",
+      "mode": "overclock",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779300000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 37443,
+      "discoveryMs": 7489,
+      "compileMs": 40,
+      "executionMs": 28082,
+      "correctPerMin": 160.24357022674465,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 3160,
+      "firstVerifiedMs": 8605,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "warm",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779360000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 21854,
+      "discoveryMs": 4371,
+      "compileMs": 40,
+      "executionMs": 16391,
+      "correctPerMin": 274.54928159604646,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 760,
+      "firstVerifiedMs": 1836,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "warm",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779420000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 99,
+        "accuracy": 0.99,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 20397,
+      "discoveryMs": 4079,
+      "compileMs": 40,
+      "executionMs": 15298,
+      "correctPerMin": 291.21929695543463,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 760,
+      "firstVerifiedMs": 1761,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779480000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 95269,
+      "discoveryMs": 19054,
+      "compileMs": 40,
+      "executionMs": 71452,
+      "correctPerMin": 62.97956313176374,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 10400,
+      "firstVerifiedMs": 24390,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "latency:150±100",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-parallel"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "parallel",
+      "mode": "compiled-parallel",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779540000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 90327,
+      "discoveryMs": 18065,
+      "compileMs": 40,
+      "executionMs": 67745,
+      "correctPerMin": 66.42532133249195,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 10400,
+      "firstVerifiedMs": 23627,
+      "overlapMs": 0,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "latency:150±100",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "compiled-parallel"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4242-100",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 100,
+      "trial": 0,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779600000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4242-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 52879,
+      "discoveryMs": 10576,
+      "compileMs": 40,
+      "executionMs": 39659,
+      "correctPerMin": 113.46659354375083,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 4400,
+      "firstVerifiedMs": 11105,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "latency:150±100",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    },
+    {
+      "suite": "fixture",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-4243-100",
+      "template": "t1-order-reconcile",
+      "seed": 4243,
+      "records": 100,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": null,
+      "startedAt": 1792779660000,
+      "summary": null,
+      "check": {
+        "scenarioId": "t1-4243-100",
+        "totalRecords": 100,
+        "correctRecords": 100,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 4,
+        "checkedAt": 1792778400000
+      },
+      "wallMs": 54331,
+      "discoveryMs": 10866,
+      "compileMs": 40,
+      "executionMs": 40748,
+      "correctPerMin": 110.4341904253557,
+      "modelCalls": 14,
+      "inputTokens": 90000,
+      "outputTokens": 9000,
+      "costUsd": 0.3,
+      "workerUtilization": 0.7,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "firstActionMs": 4400,
+      "firstVerifiedMs": 11924,
+      "overlapMs": 6000,
+      "recoveryMs": 800,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "latency:150±100",
+      "config": {
+        "goal": "fixture",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "mode": "overclock"
+      }
+    }
+  ],
+  "notes": [
+    "Synthetic fixture for dashboard tests. These numbers were not measured."
+  ]
+}

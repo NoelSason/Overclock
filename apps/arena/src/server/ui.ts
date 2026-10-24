@@ -3,11 +3,11 @@ import { Rng } from "../data/rng";
 import { html, raw, SafeHtml, type Interpolation } from "./html";
 import type { EnumSpec } from "./labels";
 import { appCss, themeClass } from "./themes";
-import type { AppName } from "./variations";
+import type { ClassicApp } from "../data/apps";
 
 /** Product identity for each app. Names are invented; none refer to a real company. */
 export interface AppBrand {
-  app: AppName;
+  app: ClassicApp;
   name: string;
   home: string;
   cookie: string;
@@ -16,7 +16,7 @@ export interface AppBrand {
   loginTagline: string;
 }
 
-export const BRANDS: Record<AppName, AppBrand> = {
+export const BRANDS: Record<ClassicApp, AppBrand> = {
   CRM: {
     app: "CRM",
     name: "Ledgerline CRM",
@@ -51,7 +51,7 @@ export const BRANDS: Record<AppName, AppBrand> = {
 
 /** Per-request rendering context: the variation snapshot and session-specific bits. */
 export interface Ui {
-  app: AppName;
+  app: ClassicApp;
   brand: AppBrand;
   v: VariationConfig;
   /** Visible text of a button or link, after the renameButtons variation. */

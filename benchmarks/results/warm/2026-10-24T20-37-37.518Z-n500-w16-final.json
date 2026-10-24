@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-24T20:37:37.518Z",
+  "label": "final",
+  "records": 500,
+  "workers": 16,
+  "trials": 3,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 17221,
+  "results": [
+    {
+      "runId": "run_20261024203645_4be797",
+      "status": "completed",
+      "wallMs": 16959,
+      "firstVerifiedMs": 9081,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.984,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024203702_ed6f36",
+      "status": "completed",
+      "wallMs": 17314,
+      "firstVerifiedMs": 9411,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.982,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024203720_3e0ce0",
+      "status": "completed",
+      "wallMs": 17221,
+      "firstVerifiedMs": 9619,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.982,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

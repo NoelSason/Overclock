@@ -1,18 +1,22 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startArena, type Arena } from "@overclock/arena";
+import { HOLDOUT_APP, SAVE_BUTTON_RENAMES, startArena, type Arena } from "@overclock/arena";
 import { VariationConfig, type CheckResult, type PublicScenario } from "@overclock/contracts";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * Arena web layer: three apps plus the judge API, started in-process on ephemeral ports and
- * driven with a real browser. Labels and button texts used here are test-only knowledge.
+ * Arena web layer: the three classic apps plus the judge API, started in-process on ephemeral
+ * ports and driven with a real browser. Labels and button texts used here are test-only
+ * knowledge. The fourth (holdout) app has its own test file.
  */
 
 const USERNAME = process.env.ARENA_USERNAME || "operator";
 const PASSWORD = process.env.ARENA_PASSWORD || "overclock-arena";
+const VIEWER = process.env.ARENA_VIEWER_USERNAME || "viewer";
+const VIEWER_PASSWORD = process.env.ARENA_VIEWER_PASSWORD || "overclock-viewer";
+const CLASSIC = ["CRM", "Orders", "Support"] as const;
 
 let arena: Arena;
 let dir: string;
@@ -23,11 +27,11 @@ let page: Page;
 const defaults = () => VariationConfig.parse({});
 const vary = (patch: Partial<VariationConfig>) => arena.setVariations({ ...defaults(), ...patch });
 
-async function login(p: Page, origin: string, path = "/"): Promise<void> {
+async function login(p: Page, origin: string, path = "/", username = USERNAME, password = PASSWORD): Promise<void> {
   await p.goto(origin + path);
   expect(new URL(p.url()).pathname).toBe("/login");
-  await p.getByLabel("Username").fill(USERNAME);
-  await p.getByLabel("Password").fill(PASSWORD);
+  await p.getByLabel("Username").fill(username);
+  await p.getByLabel("Password").fill(password);
   await p.getByRole("button", { name: "Sign in" }).click();
   await p.waitForURL((u) => u.pathname !== "/login");
 }
@@ -49,7 +53,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<{ s
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "oc-arena-it-"));
-  arena = await startArena({ adminPort: 0, ports: { CRM: 0, Orders: 0, Support: 0 }, dataDir: dir, defaultScenario: { seed: 7, template: "t1-order-reconcile", records: 40 } });
+  arena = await startArena({ adminPort: 0, ports: { CRM: 0, Orders: 0, Support: 0, [HOLDOUT_APP]: 0 }, dataDir: dir, defaultScenario: { seed: 7, template: "t1-order-reconcile", records: 40 } });
   browser = await chromium.launch({ headless: true });
   ctx = await browser.newContext();
   ctx.setDefaultTimeout(10_000);
@@ -353,6 +357,119 @@ describe("variations", () => {
   });
 });
 
+/** Session cookie for one classic app, signed in over plain HTTP. */
+async function sessionCookie(origin: string, username: string, password: string): Promise<string> {
+  const res = await fetch(origin + "/login", {
+    method: "POST",
+    redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username, password, next: "/" }).toString(),
+  });
+  expect(res.status).toBe(303);
+  return res.headers.getSetCookie().map((c) => c.split(";")[0]!).join("; ");
+}
+
+describe("viewer role (read-only explorer)", () => {
+  it("sees the same pages, but every write in the UI is refused with 403 and counted", async () => {
+    const vctx = await browser.newContext();
+    vctx.setDefaultTimeout(10_000);
+    const p = await vctx.newPage();
+    for (const origin of [arena.origins.CRM, arena.origins.Orders, arena.origins.Support]) await login(p, origin, "/", VIEWER, VIEWER_PASSWORD);
+    const denied0 = arena.stats().apps;
+
+    const c = arena.store.crm.all().find((x) => x.status === "active")!;
+    await p.goto(`${arena.origins.CRM}/customers/${c.id}`);
+    await expect(p.getByRole("heading", { level: 1 }).textContent()).resolves.toBe(c.name);
+    await p.getByRole("link", { name: "Edit customer" }).click();
+    await p.getByLabel("Status").selectOption("on_hold");
+    const [res] = await Promise.all([postResponse(p), p.getByRole("button", { name: "Save changes" }).click()]);
+    expect(res.status()).toBe(403);
+    await expect(p.getByRole("heading", { level: 1 }).textContent()).resolves.toBe("Read-only access");
+    await expect(p.getByRole("alert").textContent()).resolves.toContain("view-only access");
+    expect(arena.store.crm.get(c.id)!).toEqual(c);
+
+    const t = arena.store.support.all()[0]!;
+    const notes = arena.store.support.notes(t.id).length;
+    await p.goto(`${arena.origins.Support}/tickets/${t.id}`);
+    await p.getByLabel("Note", { exact: true }).fill("viewer note");
+    const [noteRes] = await Promise.all([postResponse(p), p.getByRole("button", { name: "Add note" }).click()]);
+    expect(noteRes.status()).toBe(403);
+    expect(arena.store.support.notes(t.id).length).toBe(notes);
+
+    await p.goto(`${arena.origins.CRM}/import`);
+    await p.getByLabel("CSV rows").fill(`${c.id},vip`);
+    const [importRes] = await Promise.all([postResponse(p), p.getByRole("button", { name: "Run import" }).click()]);
+    expect(importRes.status()).toBe(403);
+    expect(arena.store.crm.get(c.id)!.status).toBe(c.status);
+
+    const o = arena.store.orders.all()[0]!;
+    await p.goto(`${arena.origins.Orders}/orders/${o.id}/edit`);
+    await p.getByLabel("Tracking number").fill("1ZVIEWER");
+    const [orderRes] = await Promise.all([postResponse(p), p.getByRole("button", { name: "Update order" }).click()]);
+    expect(orderRes.status()).toBe(403);
+    expect(arena.store.orders.get(o.id)!.tracking).toBe(o.tracking);
+
+    const after = arena.stats().apps;
+    expect(after.CRM.deniedWrites - denied0.CRM.deniedWrites).toBe(2);
+    expect(after.Support.deniedWrites - denied0.Support.deniedWrites).toBe(1);
+    expect(after.Orders.deniedWrites - denied0.Orders.deniedWrites).toBe(1);
+    expect(after.CRM.writes).toBe(denied0.CRM.writes);
+    await vctx.close();
+  });
+
+  it("refuses direct writes of any method, answers JSON callers with JSON, and still allows sign-in and sign-out", async () => {
+    const cookie = await sessionCookie(arena.origins.Orders, VIEWER, VIEWER_PASSWORD);
+    const o = arena.store.orders.all()[2]!;
+    const before = arena.stats().apps.Orders.deniedWrites;
+    const form = await fetch(`${arena.origins.Orders}/orders/${o.id}/edit`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/x-www-form-urlencoded", cookie },
+      body: new URLSearchParams({ version: String(o.version), status: "cancelled", customer_id: o.customer_id }).toString(),
+    });
+    expect(form.status).toBe(403);
+    expect(form.headers.get("content-type")).toContain("text/html");
+    const asJson = await fetch(`${arena.origins.Orders}/orders/${o.id}/edit`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json", cookie }, body: "{}" });
+    expect(asJson.status).toBe(403);
+    expect(await asJson.json()).toMatchObject({ error: "read_only" });
+    for (const method of ["PUT", "PATCH", "DELETE"]) expect((await fetch(`${arena.origins.Orders}/orders/${o.id}`, { method, redirect: "manual", headers: { cookie } })).status).toBe(403);
+    expect(arena.stats().apps.Orders.deniedWrites - before).toBe(5);
+    expect(arena.store.orders.get(o.id)!).toEqual(o);
+    // Reads work; the viewer can sign out.
+    expect((await fetch(`${arena.origins.Orders}/orders/${o.id}`, { headers: { cookie } })).status).toBe(200);
+    const out = await fetch(`${arena.origins.Orders}/logout`, { redirect: "manual", headers: { cookie } });
+    expect(out.status).toBe(303);
+    expect((await fetch(`${arena.origins.Orders}/orders`, { redirect: "manual", headers: { cookie } })).status).toBe(302);
+  });
+});
+
+describe("read-only audit", () => {
+  it("no GET route of the classic apps changes business data (/logout only ends the session)", async () => {
+    const routes = arena.routes();
+    const d0 = arena.store.dump();
+    const writes0 = CLASSIC.map((a) => arena.stats().apps[a].writes);
+    const ids = [d0.customers[0]!.id, d0.orders[0]!.id, d0.tickets[0]!.id, "missing-id"];
+    for (const app of CLASSIC) {
+      const origin = arena.origins[app];
+      const cookie = await sessionCookie(origin, USERNAME, PASSWORD);
+      const gets = routes[app].filter((r) => r.method === "GET").sort((a, b) => Number(a.url === "/logout") - Number(b.url === "/logout"));
+      expect(gets.map((r) => r.url)).toContain("/logout");
+      for (const r of gets) {
+        const urls = r.url.includes(":") ? ids.map((id) => r.url.replace(/:[^/]+/g, encodeURIComponent(id))) : [r.url];
+        for (const u of urls) {
+          const res = await fetch(`${origin}${u}?saved=1&noted=1&page=2&q=a`, { redirect: "manual", headers: { cookie } });
+          expect(res.status, `${app} GET ${u}`).toBeLessThan(500);
+          await res.text();
+        }
+      }
+      // Every non-GET route is a write route, never reachable by a plain link.
+      expect(routes[app].filter((r) => r.method !== "GET" && r.method !== "HEAD").every((r) => r.method === "POST")).toBe(true);
+    }
+    expect(arena.store.dump()).toEqual(d0);
+    expect(CLASSIC.map((a) => arena.stats().apps[a].writes)).toEqual(writes0);
+  });
+});
+
 describe("admin API", () => {
   it("serves health, scenario, CORS, and the judge console", async () => {
     const health = await api<{ ok: boolean; origins: Arena["origins"]; adminOrigin: string }>("GET", "/api/health");
@@ -377,7 +494,14 @@ describe("admin API", () => {
 
   it("applies surprises and validates variation edits", async () => {
     const renamed = await api<VariationConfig>("POST", "/api/judge/surprise", { kind: "rename-save", app: "all" });
-    expect(renamed.data.renameButtons).toEqual({ CRM: { "Save changes": "Update record" }, Orders: { "Update order": "Apply changes" }, Support: { "Save ticket": "Commit ticket" } });
+    // "all" covers every app, including the fourth (holdout) app, whose button text stays out of this file.
+    const app4 = SAVE_BUTTON_RENAMES[HOLDOUT_APP];
+    expect(renamed.data.renameButtons).toEqual({
+      CRM: { "Save changes": "Update record" },
+      Orders: { "Update order": "Apply changes" },
+      Support: { "Save ticket": "Commit ticket" },
+      [HOLDOUT_APP]: { [app4.from]: app4.to },
+    });
     const lat = await api<VariationConfig>("POST", "/api/judge/surprise", { kind: "latency", app: "Orders" });
     expect(lat.data.latency).toEqual({ Orders: { baseMs: 250, jitterMs: 250, slowRate: 0.1, slowMs: 2000 } });
     const patched = await api<VariationConfig>("PATCH", "/api/variations", { confirmModal: { CRM: true }, latency: { Orders: null } });

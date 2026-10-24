@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-24T21:19:08.299Z",
+  "label": "ab2-new",
+  "records": 500,
+  "workers": 16,
+  "trials": 1,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 16069,
+  "results": [
+    {
+      "runId": "run_20261024211852_e35c72",
+      "status": "completed",
+      "wallMs": 16069,
+      "firstVerifiedMs": 8831,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.979,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

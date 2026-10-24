@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BrowserManager, BrowserWorker, runSegment, VerificationFailedError, WriteUncertainError, type RecordScope } from "@overclock/browser-runtime";
+import { BrowserManager, BrowserWorker, readBatch, runSegment, VerificationFailedError, WriteUncertainError, type RecordScope } from "@overclock/browser-runtime";
 import { startMiniApp, type MiniApp } from "../fixtures/mini-app";
 import { loc, node } from "../fixtures/ir";
 
@@ -85,6 +85,73 @@ describe("browser runtime (hand-written IR)", () => {
     await w.close();
   });
 
+  it("reads a last-page table in one round of calls with the same result as the full path", async () => {
+    const w = await worker();
+    const next = (strategies: Parameters<typeof loc>) => ({ next: loc(...strategies), maxPages: 10 });
+    const scan = async (url: string, target: ReturnType<typeof loc>, pagination: ReturnType<typeof next>) => {
+      const r = await runSegment(w, {
+        taskId: `t-${url}`,
+        app: "mini",
+        scope: scope({}),
+        allowedOrigins: new Set([app.origin]),
+        locatorOverrides: new Map(),
+        nodes: [node({ id: "open", type: "navigate", app: "mini", url: { value: url } }), node({ id: "scan", type: "extract", app: "mini", table: { target, columns: { id: "ID", status: "Status" }, key: "id", linkColumns: ["id"], pagination } })],
+      });
+      return r.outputs.scan as { rows: { id: string }[]; pages: number };
+    };
+    const table = loc({ kind: "role", role: "table" });
+    const nextLink = next([{ kind: "role", role: "link", name: "Next page" }, { kind: "text", text: "Next page", exact: true }]);
+    // Last page: "Next page" is a disabled span, so the role strategy matches nothing and the text strategy one element.
+    const quick = await scan("/items?page=3", table, nextLink);
+    expect(quick.pages).toBe(1);
+    expect(quick.rows.map((x) => x.id)).toEqual(["I-21", "I-22", "I-23"]);
+    // A scoped locator never takes the quick path: the full path must agree.
+    const full = await scan("/items?page=3", { ...table, scope: { kind: "css", selector: "body" } }, nextLink);
+    expect(full).toEqual(quick);
+    // An enabled "next" still pages through to the end.
+    const first = await scan("/items", table, nextLink);
+    expect(first.pages).toBe(3);
+    expect(first.rows).toHaveLength(23);
+    // An ambiguous first strategy (every cell matches) is left to the full path, which skips it.
+    const ambiguous = await scan("/items?page=3", table, next([{ kind: "css", selector: "td" }, { kind: "text", text: "Next page", exact: true }]));
+    expect(ambiguous).toEqual(quick);
+    await w.close();
+  });
+
+  it("waits for a client-rendered table that fills after load, but not for an empty server-rendered one", async () => {
+    const scan = (id: string, url: string) => [
+      node({ id: `${id}_open`, type: "navigate", app: "mini", url: { value: url } }),
+      node({ id, type: "extract", app: "mini", table: { target: loc({ kind: "role", role: "table" }), columns: { id: "ID", status: "Status" }, key: "id", linkColumns: [] } }),
+    ];
+    const w = await worker();
+    const t0 = performance.now();
+    const live = await runSegment(w, { taskId: "t-js", app: "mini", nodes: scan("live", "/items-js?delay=400"), scope: scope({}), allowedOrigins: new Set([app.origin]), locatorOverrides: new Map() });
+    expect((live.outputs.live as { rows: unknown[] }).rows).toHaveLength(5);
+    expect(performance.now() - t0).toBeGreaterThan(400);
+    const t1 = performance.now();
+    const empty = await runSegment(w, { taskId: "t-empty", app: "mini", nodes: scan("none", "/items?page=99"), scope: scope({}), allowedOrigins: new Set([app.origin]), locatorOverrides: new Map() });
+    expect((empty.outputs.none as { rows: unknown[] }).rows).toEqual([]);
+    // An empty table on a settled server-rendered page is final at once (it used to wait 1.5 s).
+    expect(performance.now() - t1).toBeLessThan(800);
+    await w.close();
+  });
+
+  it("reads XPath-anchored fields in one call only when each matches exactly one element", async () => {
+    const w = await worker();
+    const page = await w.context.newPage();
+    await page.goto(`${app.origin}/items/I-3`);
+    const x = (xpath: string) => loc({ kind: "css", selector: `xpath=${xpath}` });
+    const got = await readBatch(page, [
+      { loc: x('//dt[normalize-space()="Status"]/following-sibling::dd[1]'), attr: "text" }, // unique
+      { loc: x("//dd"), attr: "text" }, // two matches: resolved the full way
+      { loc: x('//dt[normalize-space()="Nope"]'), attr: "text" }, // no match
+      { loc: x('//dt[normalize-space()="Status"]/text()'), attr: "text" }, // a text node, not an element
+      { loc: loc({ kind: "role", role: "link", name: "Edit" }), attr: "href" }, // not an XPath: not batched
+    ]);
+    expect(got).toEqual([app.items.get("I-3")!.status, undefined, undefined, undefined, undefined]);
+    await w.close();
+  });
+
   it("reports an after-commit 500 as uncertain, and read-back shows it committed", async () => {
     const w = await worker();
     app.failNextWrite = "after-commit-500";
@@ -121,6 +188,30 @@ describe("browser runtime (hand-written IR)", () => {
       nodes: [node({ id: "evil", type: "navigate", app: "mini", url: { value: "https://example.com/" } })],
     }).catch((e) => e);
     expect(String(offList)).toMatch(/outside the allowlist/);
+    await w.close();
+  });
+
+  it("blocks state-changing GETs on read-only execution pages, but not legitimate reads or write pages", async () => {
+    // An execution context (no blockMutations): pages are read-only only while they run a read fragment.
+    const w = await worker();
+    const page = await w.context.newPage();
+    const before = app.logouts;
+    browser.setReadOnly(page, true);
+    expect((await page.goto(`${app.origin}/items`))?.status()).toBe(200);
+    expect((await page.goto(`${app.origin}/items/I-1`))?.status()).toBe(200);
+    const risky = await page.goto(`${app.origin}/logout`).catch((e: Error) => e);
+    expect(risky).toBeInstanceOf(Error);
+    // A script on a legitimately loaded read-only page can't reach it either.
+    const reader = await w.context.newPage();
+    browser.setReadOnly(reader, true);
+    expect((await reader.goto(`${app.origin}/items`))?.status()).toBe(200);
+    await reader.evaluate((u) => fetch(u).then(() => "sent", () => "blocked"), `${app.origin}/logout`);
+    expect(app.logouts).toBe(before);
+    expect(browser.guardStats.get(w.context)!.blockedRiskyGets).toBe(2);
+    // A write segment's page follows the plan's own navigation unchanged.
+    browser.setReadOnly(page, false);
+    expect((await page.goto(`${app.origin}/logout`))?.status()).toBe(200);
+    expect(app.logouts).toBe(before + 1);
     await w.close();
   });
 });

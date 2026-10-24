@@ -6,13 +6,22 @@ export function segmentMap(view: RunView): Map<string, SegmentTemplate> {
   return new Map((view.program?.segments ?? []).map((s) => [s.id, s]));
 }
 
-/** Tasks whose segment performs a write; null until the program (and so segment kinds) is known. */
-export function writeTaskCount(view: RunView): number | null {
+/**
+ * Write tasks (segment kind "write") that will actually write: SKIPPED/CANCELLED ones are
+ * excluded so a guard that legitimately skips a write does not count against "verified".
+ * Null until the program (and so segment kinds) is known.
+ */
+export function writeTaskCount(view: RunView): { active: number; skipped: number } | null {
   if (!view.program) return null;
   const segs = segmentMap(view);
-  let n = 0;
-  for (const t of Object.values(view.tasks)) if (segs.get(t.segmentId)?.kind === "write") n++;
-  return n;
+  let active = 0;
+  let skipped = 0;
+  for (const t of Object.values(view.tasks)) {
+    if (segs.get(t.segmentId)?.kind !== "write") continue;
+    if (t.state === "SKIPPED" || t.state === "CANCELLED") skipped++;
+    else active++;
+  }
+  return { active, skipped };
 }
 
 export interface Interval {

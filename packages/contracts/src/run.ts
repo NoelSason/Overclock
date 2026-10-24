@@ -34,6 +34,12 @@ export const RunConfigSchema = z.object({
   thumbnails: z.boolean().default(true),
   /** cold = ignore cached app models / compiled programs; warm = reuse when fingerprints match. */
   cache: z.enum(["cold", "warm"]).default("cold"),
+  /**
+   * Knowledge policy (Overclock Network). When omitted it is derived from `cache` and stays
+   * backward compatible: cold -> "strict-cold", warm -> "local-only". Network policies require
+   * OVERCLOCK_NETWORK_ENABLED=true on the engine.
+   */
+  knowledge: z.enum(["strict-cold", "local-only", "network-read", "network-read-and-contribute"]).optional(),
   budgetUsd: z.number().positive().optional(),
   label: z.string().optional(),
   /** Ablation switches (benchmarks). */
@@ -167,7 +173,14 @@ export const RunSummary = z.object({
   unconfirmed: z.number(),
   skipped: z.number(),
   needsApproval: z.number(),
+  /** Unique input records whose outcome is VERIFIED or SKIPPED (see countInputRecordsVerified). */
   recordsVerified: z.number(),
+  /**
+   * How recordsVerified was counted. "input-records": unique input records only, so it never
+   * exceeds `records`. Absent in summaries recorded before that rule, which also counted records
+   * that later phases derive (a customer to hold) and can exceed `records`.
+   */
+  recordsAccounting: z.enum(["input-records"]).optional(),
   recoveries: z.number(),
   modelCalls: z.number(),
   inputTokens: z.number(),
@@ -183,15 +196,67 @@ export const RunSummary = z.object({
   overlapMs: z.number().default(0),
   recoveryMs: z.number().default(0),
   stageMs: z.record(z.string(), z.number()).default({}),
+  knowledge: z.string().optional(),
+  network: z
+    .object({
+      lookups: z.number(),
+      hits: z.number(),
+      outcome: z.string().optional(),
+      capabilityId: z.string().optional(),
+      version: z.number().optional(),
+      lookupMs: z.number(),
+      fetchMs: z.number(),
+      rebindMs: z.number(),
+      published: z.boolean(),
+      repairs: z.number(),
+    })
+    .optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 
 /** Per-record outcome the engine reports (what it claims, with evidence). */
 export const RecordOutcome = z.object({
   recordKey: z.string(),
+  /** `input`: a record of the run's input. `derived`: produced by a later phase (e.g. customers to hold). */
+  scope: z.enum(["input", "derived"]).optional(),
   status: VerificationStatus,
   writes: z.number(),
   receipts: z.array(z.string()),
   notes: z.array(z.string()),
 });
 export type RecordOutcome = z.infer<typeof RecordOutcome>;
+
+/**
+ * Unique input records whose outcome is VERIFIED or SKIPPED. Outcomes of records that a later
+ * phase derives (for example customers to hold) are not input records and are not counted, so the
+ * count never exceeds the number of input records. Whether a VERIFIED or SKIPPED claim is right is
+ * for the independent checker to say, not this count.
+ */
+export function countInputRecordsVerified(outcomes: readonly RecordOutcome[]): number {
+  const keys = new Set<string>();
+  for (const o of outcomes) if (o.scope !== "derived" && (o.status === "VERIFIED" || o.status === "SKIPPED")) keys.add(o.recordKey);
+  return keys.size;
+}
+
+/**
+ * The text that defines a task's operation identity. Only presentation is normalized: Unicode
+ * form (NFC), line endings, trailing whitespace on each line, and leading/trailing blank space.
+ * Every literal, number, threshold, and word is kept, so "approved" and "rejected", or "2 or more"
+ * and "3 or more", are different operations. Never use a sanitized or placeholder form of the goal
+ * (as shown in published capability descriptions) to decide whether a plan may be reused.
+ */
+export function canonicalGoalText(goal: string): string {
+  return goal
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+$/u, ""))
+    .join("\n")
+    .trim();
+}
+
+/** Record field names as they enter an operation identity: unique and sorted. */
+export function canonicalRecordFields(fields: readonly string[]): string[] {
+  return [...new Set(fields)].sort();
+}
+

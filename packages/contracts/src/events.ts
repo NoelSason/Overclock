@@ -22,7 +22,9 @@ export type EventPayload =
   | E<"run.created", { config: RunConfig }>
   | E<"run.status", { status: RunStatus; reason?: string }>
   | E<"run.completed", { summary: RunSummary }>
-  | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
+  /** Adversarial review of a plan before its writes may run: one event per round, then a rejection if it fails closed. */
+  | E<"review", { subject: string; round: number; status: "passed" | "risks" | "unavailable" | "rejected"; highRisks: number; reason?: string; ms?: number }>
+  | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache" | "network-import"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
   | E<"agent.started", { agentId: string; role: AgentRole; label: string; model?: string; app?: string }>
   | E<"agent.artifact", { agentId: string; artifact: ArtifactSummary }>
   | E<"agent.finished", { agentId: string; ok: boolean; ms: number; error?: string }>
@@ -40,7 +42,7 @@ export type EventPayload =
   | E<"lock.conflict", { taskId: string; resource: string; holder: string }>
   | E<"recovery", { taskId: string; level: number; phase: "started" | "succeeded" | "failed" | "escalated"; reason: string; detail?: string; ms?: number; propagatedTo?: number }>
   | E<"invalidation", { taskId: string; recordKey: string; reason: string; invalidated: string[] }>
-  | E<"model.call", { provider: "anthropic" | "typesafe"; model: string; purpose: string; ms: number; inputTokens: number; outputTokens: number; costUsd: number; ok: boolean; error?: string }>
+  | E<"model.call", { provider: "anthropic" | "typesafe"; model: string; purpose: string; ms: number; inputTokens: number; outputTokens: number; costUsd: number; ok: boolean; error?: string; speed?: "standard" | "fast"; ttftMs?: number | null }>
   | E<"concurrency", { app: string; limit: number; reason: string }>
   | E<"reopt.decision", { switched: boolean; reason: string; remainingMs: number; alternativeMs: number | null; alternative?: string }>
   | E<"approval.requested", { approvalId: string; taskId: string; nodeId: string; description: string }>
@@ -50,6 +52,12 @@ export type EventPayload =
   | E<"stage", { stage: StageName; phase: "start" | "end"; detail?: string }>
   /** A scout loaded and observed a page (live discovery progress). */
   | E<"scout.page", { agentId: string; app: string; url: string; routePattern: string; loadMs: number; controls: number }>
+  /** Overclock Network: capability lookup / import / publication / repair / live updates. */
+  | E<"network.lookup", { origins: string[]; outcome: string; source: string; candidates: number; ms: number; capabilityId?: string; version?: number; /** First 16 hex characters of this runtime's public network identity. */ identity?: string }>
+  | E<"network.import", { capabilityId: string; version: number; outcome: string; bound: number; unbound: number; rebindMs: number; fetchMs: number; source: string; avoided?: { modelCalls: number; discoveryMs: number; estimated: true }; publisher?: string; writeCanary?: boolean; relabeled?: { key: string; from: string; to: string; evidence: string }[]; refused?: string[] }>
+  | E<"network.publish", { capabilityId: string; version: number; state: string; ms: number; redactions: number; bytes: number; rejected?: string }>
+  | E<"network.repair", { capabilityId: string; jobId: string; phase: "reported" | "claimed" | "waiting" | "proposed" | "validated" | "promoted" | "fallback" | "released" | "lost-lease"; fencingToken?: number; ms?: number; detail?: string }>
+  | E<"network.update", { capabilityId: string; version: number; state: string; propagationMs?: number }>
   /** Incrementally compiled executable fragment lifecycle. */
   | E<"fragment", { fragmentId: string; phaseId: string; segmentIds: string[]; state: FragmentState; label: string; reason?: string; effect?: string }>;
 

@@ -43,25 +43,29 @@ export class SessionManager {
 
   private async login(apps: { name: string; origin: string }[]): Promise<StorageState | undefined> {
     const ctx = await this.browser.newContext({ allowedOrigins: apps.map((a) => a.origin) });
-    try {
-      for (const app of apps) {
-        const page = await ctx.newPage();
-        await page.goto(app.origin, { waitUntil: "domcontentloaded" });
-        const password = page.locator("input[type=password]");
-        if ((await password.count()) === 0) {
-          await page.close();
-          continue;
-        }
-        const creds = this.credentialsFor(app.name, app.origin);
-        if (!creds) throw new Error(`No credentials configured for ${app.name}; it requires login`);
-        const user = page.locator("input[type=email], input[type=text], input[name*=user i], input[name*=email i]").first();
-        await user.fill(creds.username);
-        await password.first().fill(creds.password);
-        await Promise.all([page.waitForLoadState("domcontentloaded"), password.first().press("Enter")]);
-        await page.waitForLoadState("domcontentloaded");
-        if ((await page.locator("input[type=password]").count()) > 0) throw new Error(`Login to ${app.name} failed`);
+    const loginTo = async (app: { name: string; origin: string }) => {
+      const page = await ctx.newPage();
+      await page.goto(app.origin, { waitUntil: "domcontentloaded" });
+      const password = page.locator("input[type=password]");
+      if ((await password.count()) === 0) {
         await page.close();
+        return;
       }
+      const creds = this.credentialsFor(app.name, app.origin);
+      if (!creds) throw new Error(`No credentials configured for ${app.name}; it requires login`);
+      const user = page.locator("input[type=email], input[type=text], input[name*=user i], input[name*=email i]").first();
+      await user.fill(creds.username);
+      await password.first().fill(creds.password);
+      await Promise.all([page.waitForLoadState("domcontentloaded"), password.first().press("Enter")]);
+      await page.waitForLoadState("domcontentloaded");
+      if ((await page.locator("input[type=password]").count()) > 0) throw new Error(`Login to ${app.name} failed`);
+      await page.close();
+    };
+    try {
+      // One page per app, concurrently: each origin sets its own session cookie in the shared
+      // context. The first failure in app order is reported, so the error doesn't depend on timing.
+      const results = await Promise.allSettled(apps.map(loginTo));
+      for (const r of results) if (r.status === "rejected") throw r.reason;
       return await ctx.storageState();
     } finally {
       await ctx.close();

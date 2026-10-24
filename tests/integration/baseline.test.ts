@@ -41,7 +41,7 @@ class ScriptedModel implements SequentialModel {
     const out = this.script({ user: req.user, key, step, call: this.prompts.length });
     if (out instanceof Error) throw out;
     // Validate the scripted step against the real schema so the fake can't drift from it.
-    return { data: req.schema.parse(out), ms: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, model: "scripted-model" };
+    return { data: req.schema.parse(out), ms: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, model: "scripted-model", speed: "standard" };
   }
 }
 
@@ -300,6 +300,7 @@ describe.skipIf(!LIVE)("sequential baseline (live Claude)", () => {
         stopReason: result.stopReason ?? null,
         episodes: result.episodes.map((e) => ({ key: e.recordKey, outcome: e.outcome, steps: e.steps, writes: e.writes, summary: e.summary, error: e.error })),
         mismatches: check.mismatches,
+        batchNotesChars: result.batchNotes.length,
         batchNotes: result.batchNotes,
       };
       console.log(`[baseline live] ${JSON.stringify(report, null, 2)}`);

@@ -1,8 +1,9 @@
-import type { Locator, Page, Response } from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import type { ActionNode, Condition, ExtractField, ExtractTable, SemanticLocator } from "@overclock/contracts";
 import { evaluate, evaluateBool, looseEquals, resolveValue, toStr, type Scope } from "@overclock/compiler";
 import { AssertionFailedError, HiddenTargetError, LocatorNotFoundError, NavigationError, OriginBlockedError, PreconditionFailedError, RuntimeError, UnexpectedDialogError, WriteRejectedError, WriteUncertainError } from "./errors";
-import { resolveLocator } from "./locate";
+import { settle } from "./browser";
+import { resolveLocator, strategyToLocator } from "./locate";
 
 export interface RecordScope {
   key: string;
@@ -60,9 +61,29 @@ export async function openDialogText(page: Page): Promise<string | null> {
     .catch(() => null);
 }
 
-async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number }> {
+/**
+ * Match count of a locator and whether its single match is visible, in one page call. Visible
+ * follows Playwright's definition: a non-empty bounding box and no `visibility: hidden`. Also
+ * whether that element is a checkbox or radio, which decides how a fill sets it.
+ */
+function uniqueVisible(els: Element[]): { n: number; visible: boolean; checkable?: boolean } {
+  if (els.length !== 1) return { n: els.length, visible: false };
+  const el = els[0]!;
+  const r = el.getBoundingClientRect();
+  return { n: 1, visible: r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden", checkable: el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") };
+}
+
+async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number; checkable?: boolean }> {
   const loc = env.locatorOverrides.get(node.id) ?? node.target;
   if (!loc) throw new RuntimeError(`Node ${node.id} (${node.type}) has no target`, node.id);
+  // Fast path, one browser call: the top-ranked strategy matches exactly one visible element, the
+  // element resolveLocator and the visibility check below would accept. The action itself still
+  // runs Playwright's actionability checks. Anything else takes the full path.
+  if (!loc.scope && loc.strategies[0]) {
+    const first = strategyToLocator(env.page, loc.strategies[0]);
+    const quick = await first.evaluateAll(uniqueVisible).catch(() => null);
+    if (quick?.n === 1 && quick.visible) return { locator: first, tier: 0, checkable: quick.checkable === true };
+  }
   try {
     const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
     if (!(await r.locator.isVisible())) {
@@ -85,21 +106,77 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
   }
 }
 
-async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
-  if (attr === "href") return (await locator.getAttribute("href")) ?? "";
-  if (attr === "value") {
-    return locator.evaluate((el) => {
+type ReadAttr = "text" | "value" | "href";
+interface ReadArgs {
+  attrs: ReadAttr[];
+  /** Batch mode: one XPath per target (null: not batched). */
+  paths?: (string | null)[];
+}
+
+/**
+ * In-page reader, self-contained because Playwright runs it in the page. Two call shapes:
+ * `locator.evaluateAll(readTargets, { attrs: [attr] })` reads the elements a locator matched, and
+ * `page.evaluate(readTargets, { attrs, paths })` resolves several XPaths in one call, the way
+ * Playwright's XPath engine does (document.evaluate, element nodes only, no shadow roots). Each
+ * target yields its match count, and its value only when exactly one element matched. The text of
+ * a titled region (section, article, role=region) is its content without headings and form
+ * chrome: the same value perception records as a region fact.
+ */
+function readTargets(a: Element[] | ReadArgs, b?: ReadArgs): { n: number; v?: string }[] {
+  const read = (el: Element, attr: ReadAttr): string => {
+    if (attr === "href") return el.getAttribute("href") ?? "";
+    if (attr === "value") {
       if (el instanceof HTMLSelectElement) return el.value;
       if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) return String(el.checked);
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
       return (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "";
-    });
-  }
-  return locator.evaluate((el) => {
+    }
     if (el instanceof HTMLSelectElement) return el.selectedOptions[0]?.textContent?.trim() ?? el.value;
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
+    if (el.matches("section,article,[role=region]")) {
+      const c = el.cloneNode(true) as HTMLElement;
+      for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
+      const parts: string[] = [];
+      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) {
+        const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (t) parts.push(t);
+      }
+      return parts.join(" ");
+    }
     return ((el as HTMLElement).innerText ?? el.textContent ?? "").trim();
+  };
+  if (Array.isArray(a)) return [a.length === 1 ? { n: 1, v: read(a[0]!, b!.attrs[0]!) } : { n: a.length }];
+  return (a.paths ?? []).map((path, i) => {
+    if (!path) return { n: -1 };
+    const els: Element[] = [];
+    const it = document.evaluate(path, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    for (let node = it.iterateNext(); node; node = it.iterateNext()) if (node.nodeType === Node.ELEMENT_NODE) els.push(node as Element);
+    return els.length === 1 ? { n: 1, v: read(els[0]!, a.attrs[i]!) } : { n: els.length };
   });
+}
+
+/** Read a control's value (see readTargets). The locator must match one element (resolveLocator's result). */
+export async function readControl(locator: Locator, attr: ReadAttr): Promise<string> {
+  const [r] = await locator.evaluateAll(readTargets, { attrs: [attr] });
+  if (r?.n !== 1) throw new LocatorNotFoundError(`Expected one element to read, found ${r?.n ?? 0}`, undefined);
+  return r.v ?? "";
+}
+
+/**
+ * Reads several controls in one page call where possible: each target whose top-ranked strategy
+ * is an XPath (label-anchored facts) and has no scope. A value comes back only for a target whose
+ * XPath matched exactly one element, the element resolveLocator would pick on its first probe;
+ * every other target is undefined, and the caller resolves it the full way.
+ */
+export async function readBatch(page: Page, targets: { loc: SemanticLocator; attr: ReadAttr }[]): Promise<(string | undefined)[]> {
+  const paths = targets.map(({ loc }) => {
+    const s = loc.strategies[0];
+    return !loc.scope && s?.kind === "css" && s.selector.startsWith("xpath=") ? s.selector.slice("xpath=".length) : null;
+  });
+  if (!paths.some((p) => p !== null)) return targets.map(() => undefined);
+  const results = await page.evaluate(readTargets, { attrs: targets.map((t) => t.attr), paths }).catch(() => null);
+  return targets.map((_, i) => (results?.[i]?.n === 1 ? (results[i]!.v ?? "") : undefined));
 }
 
 function parseValue(raw: string, parse: ExtractField["parse"]): unknown {
@@ -175,27 +252,44 @@ type WriteSignal = { kind: "response"; status: number } | { kind: "error"; messa
 async function waitForWrite(env: ActionEnv, node: ActionNode, act: () => Promise<void>): Promise<number> {
   const origin = env.origin.replace(/\/$/, "");
   let settled = false;
-  const respP: Promise<WriteSignal> = env.page
-    .waitForResponse((r) => r.request().method() !== "GET" && r.url().startsWith(origin), { timeout: node.timeoutMs })
-    .then((r): WriteSignal => ({ kind: "response", status: r.status() }))
-    .catch((e: Error): WriteSignal => ({ kind: "error", message: e.message }));
-  // A request that fails at the network layer (including our own mutation guard) never yields a response.
-  const failedP: Promise<WriteSignal> = env.page
-    .waitForEvent("requestfailed", { predicate: (r) => r.method() !== "GET" && r.url().startsWith(origin), timeout: node.timeoutMs })
-    .then((r): WriteSignal => ({ kind: "failed", reason: r.failure()?.errorText ?? "request failed" }))
-    .catch(() => new Promise<WriteSignal>(() => undefined));
-  await act();
-  const dialogP: Promise<WriteSignal> = (async () => {
-    while (!settled) {
-      await new Promise((r) => setTimeout(r, 120));
-      if (settled) break;
-      const text = await openDialogText(env.page);
-      if (text) return { kind: "dialog", text } as WriteSignal;
-    }
-    return respP;
-  })();
-  const first = await Promise.race([respP, dialogP, failedP]);
-  settled = true;
+  let stopListening = () => undefined as void;
+  // Page listeners and one timer, removed as soon as the write settles. (Playwright waiters
+  // lingered until their timeout after every write, and each timeout built an error with a stack
+  // trace on the engine's main thread.) A request that fails at the network layer, including one
+  // our own mutation guard blocks, never yields a response.
+  const signalP = new Promise<WriteSignal>((resolve) => {
+    const onResponse = (r: Response) => {
+      if (r.request().method() !== "GET" && r.url().startsWith(origin)) resolve({ kind: "response", status: r.status() });
+    };
+    const onFailed = (r: Request) => {
+      if (r.method() !== "GET" && r.url().startsWith(origin)) resolve({ kind: "failed", reason: r.failure()?.errorText ?? "request failed" });
+    };
+    const timer = setTimeout(() => resolve({ kind: "error", message: `Timeout ${node.timeoutMs}ms exceeded while waiting for the write response` }), node.timeoutMs);
+    env.page.on("response", onResponse);
+    env.page.on("requestfailed", onFailed);
+    stopListening = () => {
+      clearTimeout(timer);
+      env.page.off("response", onResponse);
+      env.page.off("requestfailed", onFailed);
+    };
+  });
+  let first: WriteSignal;
+  try {
+    await act();
+    const dialogP: Promise<WriteSignal> = (async () => {
+      while (!settled) {
+        await new Promise((r) => setTimeout(r, 120));
+        if (settled) break;
+        const text = await openDialogText(env.page);
+        if (text) return { kind: "dialog", text } as WriteSignal;
+      }
+      return signalP;
+    })();
+    first = await Promise.race([signalP, dialogP]);
+  } finally {
+    settled = true;
+    stopListening();
+  }
   if (first.kind === "failed") {
     if (/BLOCKED_BY_CLIENT/i.test(first.reason)) throw new WriteRejectedError("Write blocked by the execution guard; not sent", node.id, 0);
     throw new WriteUncertainError(`Write request failed at the network layer (${first.reason}); commit state unknown`, node.id, null);
@@ -222,10 +316,27 @@ async function extractFields(env: ActionEnv, node: ActionNode, fields: ExtractFi
   const start = performance.now();
   const out: Record<string, unknown> = {};
   let worstTier = 0;
-  for (const f of fields) {
+  const locs = fields.map((f) => env.locatorOverrides.get(`${node.id}#${f.name}`) ?? f.target);
+  // Fast path: every field with a top-ranked XPath read in one page call (see readBatch).
+  const batched = await readBatch(env.page, fields.map((f, i) => ({ loc: locs[i]!, attr: f.attr })));
+  for (const [i, f] of fields.entries()) {
     try {
-      const override = env.locatorOverrides.get(`${node.id}#${f.name}`);
-      const r = await resolveLocator(env.page, override ?? f.target, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
+      const loc = locs[i]!;
+      if (batched[i] !== undefined) {
+        out[f.name] = parseValue(batched[i]!, f.parse);
+        continue;
+      }
+      // Next fastest, one browser call: the top-ranked strategy (not an XPath) matches exactly
+      // one element, the one resolveLocator would pick on its first probe. Anything else (no
+      // match yet, several, a scoped locator) takes the full path below.
+      if (!loc.scope && loc.strategies[0]) {
+        const [quick] = (await strategyToLocator(env.page, loc.strategies[0]).evaluateAll(readTargets, { attrs: [f.attr] }).catch(() => null)) ?? [];
+        if (quick?.n === 1) {
+          out[f.name] = parseValue(quick.v ?? "", f.parse);
+          continue;
+        }
+      }
+      const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
       worstTier = Math.max(worstTier, r.strategyIndex);
       out[f.name] = parseValue(await readControl(r.locator, f.attr), f.parse);
     } catch (err) {
@@ -245,66 +356,94 @@ interface TablePage {
   rows: Record<string, string>[];
 }
 
-async function readTablePage(table: Locator, spec: ExtractTable): Promise<TablePage> {
-  return table.evaluate(
-    (el, args) => {
-      const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-      const tableEl = el.tagName === "TABLE" ? (el as HTMLTableElement) : (el.querySelector("table") as HTMLTableElement | null);
-      if (!tableEl) return { missing: Object.values(args.columns), rows: [] };
-      let headerCells = Array.from(tableEl.querySelectorAll("thead th"));
-      if (headerCells.length === 0) headerCells = Array.from(tableEl.querySelectorAll("tr:first-child th, tr:first-child td"));
-      const headers = headerCells.map((h) => norm((h as HTMLElement).innerText || h.textContent || ""));
-      const idx: Record<string, number> = {};
-      const missing: string[] = [];
-      for (const [name, header] of Object.entries(args.columns)) {
-        const i = headers.indexOf(norm(header));
-        if (i < 0) missing.push(header);
-        else idx[name] = i;
+interface TableArgs {
+  columns: Record<string, string>;
+  links: string[];
+}
+
+/**
+ * In-page table reader, self-contained because Playwright runs it in the page. Two call shapes:
+ * `locator.evaluate(readTable, args)` reads the one element a resolved locator points at, and
+ * `locator.evaluateAll(readTable, args)` reads the elements a strategy matched, yielding their
+ * count and, only when exactly one matched, its rows.
+ */
+function readTable(a: Element | Element[], args: TableArgs): { n: number; page?: TablePage } {
+  const els = Array.isArray(a) ? a : [a];
+  if (els.length !== 1) return { n: els.length };
+  const el = els[0]!;
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const tableEl = el.tagName === "TABLE" ? (el as HTMLTableElement) : (el.querySelector("table") as HTMLTableElement | null);
+  if (!tableEl) return { n: 1, page: { missing: Object.values(args.columns), rows: [] } };
+  let headerCells = Array.from(tableEl.querySelectorAll("thead th"));
+  if (headerCells.length === 0) headerCells = Array.from(tableEl.querySelectorAll("tr:first-child th, tr:first-child td"));
+  const headers = headerCells.map((h) => norm((h as HTMLElement).innerText || h.textContent || ""));
+  const idx: Record<string, number> = {};
+  const missing: string[] = [];
+  for (const [name, header] of Object.entries(args.columns)) {
+    const i = headers.indexOf(norm(header));
+    if (i < 0) missing.push(header);
+    else idx[name] = i;
+  }
+  const bodyRows = tableEl.tBodies.length ? Array.from(tableEl.tBodies).flatMap((b) => Array.from(b.rows)) : Array.from(tableEl.rows).slice(1);
+  const rows = bodyRows
+    .filter((tr) => tr.querySelectorAll("td").length > 0)
+    .map((tr) => {
+      const cells = Array.from(tr.querySelectorAll("td,th"));
+      const row: Record<string, string> = {};
+      for (const [name, i] of Object.entries(idx)) {
+        const cell = cells[i] as HTMLElement | undefined;
+        row[name] = (cell?.innerText ?? cell?.textContent ?? "").trim();
+        if (args.links.includes(name)) row[name + "Href"] = cell?.querySelector("a")?.getAttribute("href") ?? "";
       }
-      const bodyRows = tableEl.tBodies.length ? Array.from(tableEl.tBodies).flatMap((b) => Array.from(b.rows)) : Array.from(tableEl.rows).slice(1);
-      const rows = bodyRows
-        .filter((tr) => tr.querySelectorAll("td").length > 0)
-        .map((tr) => {
-          const cells = Array.from(tr.querySelectorAll("td,th"));
-          const row: Record<string, string> = {};
-          for (const [name, i] of Object.entries(idx)) {
-            const cell = cells[i] as HTMLElement | undefined;
-            row[name] = (cell?.innerText ?? cell?.textContent ?? "").trim();
-            if (args.links.includes(name)) row[name + "Href"] = cell?.querySelector("a")?.getAttribute("href") ?? "";
-          }
-          return row;
-        });
-      return { missing, rows };
-    },
-    { columns: spec.columns, links: spec.linkColumns },
-  );
+      return row;
+    });
+  return { n: 1, page: { missing, rows } };
+}
+
+/** In-page: a strategy's match count and, for exactly one match, the disabled check extractTable makes on "next". */
+function nextState(els: Element[]): { n: number; disabled?: boolean } {
+  if (els.length !== 1) return { n: els.length };
+  const e = els[0]!;
+  return { n: 1, disabled: e.hasAttribute("disabled") || e.getAttribute("aria-disabled") === "true" || e.classList.contains("disabled") };
+}
+
+async function readTablePage(table: Locator, spec: ExtractTable): Promise<TablePage> {
+  return (await table.evaluate(readTable, { columns: spec.columns, links: spec.linkColumns })).page!;
+}
+
+/**
+ * The common single-page case in one round of page calls: the table's top strategy is read in the
+ * same call that matches it, while every strategy of the "next" control is matched at the same
+ * time (all through Playwright's own selector engines). It returns rows only for what the full
+ * path would decide on its first probes without waiting: the table's top strategy matched exactly
+ * one element, the table has rows and every column, and "next" resolves (first strategy with
+ * exactly one match, every earlier one with none) to a disabled control. Anything else (an empty
+ * or still-rendering table, an ambiguous or missing control, a scoped locator, a further page)
+ * returns null, and the caller takes the full path unchanged.
+ */
+async function singlePageTable(page: Page, loc: SemanticLocator, spec: ExtractTable, nextLoc: SemanticLocator | undefined): Promise<TablePage | null> {
+  const top = loc.strategies[0];
+  if (!top || loc.scope || (nextLoc && (nextLoc.scope || nextLoc.strategies.length === 0))) return null;
+  const args: TableArgs = { columns: spec.columns, links: spec.linkColumns };
+  const [table, ...next] = await Promise.all([
+    strategyToLocator(page, top).evaluateAll(readTable, args).catch(() => null),
+    ...(nextLoc?.strategies ?? []).map((s) => strategyToLocator(page, s).evaluateAll(nextState).catch(() => null)),
+  ]);
+  if (table?.n !== 1 || !table.page || table.page.rows.length === 0 || table.page.missing.length) return null;
+  if (nextLoc) {
+    const first = next.findIndex((r) => r === null || r.n !== 0);
+    if (first < 0 || next[first]?.n !== 1 || next[first]?.disabled !== true) return null;
+  }
+  return table.page;
 }
 
 async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable): Promise<ActionOutcome> {
   const start = performance.now();
   const loc = env.locatorOverrides.get(node.id) ?? spec.target;
-  const resolved = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 3000), nodeId: node.id });
   const all: Record<string, string>[] = [];
   const seen = new Set<string>();
-  let pages = 0;
-  let tier = resolved.strategyIndex;
-  let table = resolved.locator;
-  for (;;) {
-    let page = await readTablePage(table, spec);
-    if (page.rows.length === 0) {
-      // Client-rendered tables may populate after load: poll for rows, then confirm the count is stable.
-      const until = performance.now() + 1500;
-      while (page.rows.length === 0 && performance.now() < until) {
-        await env.page.waitForTimeout(60);
-        page = await readTablePage(table, spec);
-      }
-      if (page.rows.length > 0) {
-        await env.page.waitForTimeout(80);
-        page = await readTablePage(table, spec);
-      }
-    }
-    if (page.missing.length) throw new LocatorNotFoundError(`Table columns not found: ${page.missing.join(", ")}`, node.id, spec.target.controlId);
-    for (const row of page.rows) {
+  const keep = (rows: Record<string, string>[]) => {
+    for (const row of rows) {
       const k = spec.key ? row[spec.key] : undefined;
       if (k !== undefined) {
         if (seen.has(k)) continue;
@@ -312,6 +451,28 @@ async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable
       }
       all.push(row);
     }
+  };
+  const nextLoc = spec.pagination && spec.pagination.maxPages > 1 ? (env.locatorOverrides.get(`${node.id}#next`) ?? spec.pagination.next) : undefined;
+  const quick = await singlePageTable(env.page, loc, spec, nextLoc);
+  if (quick) {
+    keep(quick.rows);
+    return { ms: performance.now() - start, locatorTier: 0, output: { rows: all, pages: 1 } };
+  }
+  const resolved = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 3000), nodeId: node.id });
+  let pages = 0;
+  let tier = resolved.strategyIndex;
+  let table = resolved.locator;
+  for (;;) {
+    let page = await readTablePage(table, spec);
+    if (page.rows.length === 0) {
+      // A client-rendered table may still be filling. Wait while the page is busy (requests in
+      // flight or the DOM changing), at most 1.5 s; an empty table on a settled page is final.
+      // Server-rendered pages settle in about the quiet period, so "no rows" costs ~60 ms, not 1.5 s.
+      await settle(env.page, { maxMs: 1500, quietMs: 60 });
+      page = await readTablePage(table, spec);
+    }
+    if (page.missing.length) throw new LocatorNotFoundError(`Table columns not found: ${page.missing.join(", ")}`, node.id, spec.target.controlId);
+    keep(page.rows);
     pages++;
     if (!spec.pagination || pages >= spec.pagination.maxPages) break;
     let next: Locator;
@@ -357,7 +518,7 @@ export async function executeAction(env: ActionEnv, node: ActionNode): Promise<A
     case "fill": {
       const t = await target(env, node);
       const v = node.input ? resolveValue(node.input, scope) : "";
-      const isCheck = await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio"));
+      const isCheck = t.checkable ?? (await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")));
       if (isCheck) await t.locator.setChecked(v === true || /^(true|yes|on|1|checked)$/i.test(toStr(v)), { timeout: node.timeoutMs });
       else await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
       return { ms: performance.now() - start, locatorTier: t.tier };

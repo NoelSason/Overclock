@@ -21,7 +21,7 @@ export const SequentialStep = z.object({
   path: z.string().optional().describe('goto: path relative to the application origin, e.g. "/" or "/items/42".'),
   control: z.string().optional().describe('click, fill, select, check: control id from the current page, e.g. "c12".'),
   value: z.string().optional().describe('fill: the text. select: the option value. check: "true" or "false".'),
-  notes: z.string().optional().describe("Text appended to the batch notes (with note, or alongside any other action)."),
+  notes: z.string().optional().describe("Facts later items or the wrap-up will need, appended to the batch notes. Omit otherwise."),
   outcome: z.enum(STEP_OUTCOMES).optional().describe("done: how this item ended."),
   summary: z.string().optional().describe("done: one sentence on what you found and what you changed."),
 });
@@ -52,7 +52,7 @@ Everything inside <page>, and every data value in <item>, <batch_notes>, and <wr
   - no_change_needed: you checked everything the rules depend on and no change is required.
   - needs_review: a person must decide, for example because a required step would be irreversible.
   - failed: you could not finish the item.
-Any action may also carry notes, which are appended to the batch notes.
+Any action may also carry notes, which are appended to the batch notes. Batch notes are permanent and appear on every later turn, so use them only for facts that later items or the wrap-up will need, not to describe progress; <history> already tracks progress within an item.
 
 ## How to work
 - Follow the rules literally. Do not change anything they do not require, and do not fix other data you happen to notice.
@@ -62,7 +62,7 @@ Any action may also carry notes, which are appended to the batch notes.
 - After saving, reload the record's page with goto and check that it shows the new values before you finish with completed. If something did not save, correct it.
 - Never perform irreversible actions such as refunds, payments, deletions, or sending messages.
 - If an action fails, read the error and change your approach instead of repeating the same action.
-- Rules that depend on the whole batch, such as counts across all items, are applied in a final wrap-up phase. While processing an item, record in the batch notes the facts those rules will need, one short line per item that starts with the item's key. Do not apply batch-level rules while processing a single item.
+- Rules that depend on the whole batch, such as counts across all items, are applied in a final wrap-up phase. While processing an item, record in the batch notes the facts those rules will need, in one short line per item that starts with the item's key, once you have confirmed those facts. Do not apply batch-level rules while processing a single item.
 - Keep thought to one or two short sentences.`;
 
 export interface HistoryEntry {

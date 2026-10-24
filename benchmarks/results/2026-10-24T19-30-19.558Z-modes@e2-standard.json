@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "suite": "modes@e2-standard",
+  "createdAt": 1792870219579,
+  "machine": {
+    "platform": "darwin",
+    "cpus": 16,
+    "memoryGb": 128,
+    "node": "v24.13.0"
+  },
+  "budgetUsd": 2,
+  "spentUsd": 0.149367,
+  "runs": [
+    {
+      "suite": "modes@e2-standard",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-order-reconcile-s4242-n25",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": "run_20261024193019_38ec7c",
+      "startedAt": 1792870219586,
+      "summary": {
+        "runId": "run_20261024193019_38ec7c",
+        "mode": "overclock",
+        "status": "completed",
+        "wallMs": 53495,
+        "discoveryMs": 1760,
+        "compileMs": 50430,
+        "executionMs": 46758,
+        "records": 25,
+        "tasks": 252,
+        "verified": 22,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 14,
+        "needsApproval": 0,
+        "recordsVerified": 25,
+        "recordsAccounting": "input-records",
+        "recoveries": 0,
+        "modelCalls": 5,
+        "inputTokens": 27561,
+        "outputTokens": 8546,
+        "modelCostUsd": 0.149367,
+        "workerUtilization": 0.014,
+        "maxConcurrency": 16,
+        "strategy": "per-record",
+        "firstActionMs": 6784.5,
+        "firstVerifiedMs": 52230.6,
+        "overlapMs": 45334,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 1760,
+          "planning": 32957,
+          "execution": 46757,
+          "critique": 17473
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t1-order-reconcile-s4242-n25",
+        "totalRecords": 25,
+        "correctRecords": 25,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792870273093
+      },
+      "wallMs": 53495,
+      "discoveryMs": 1760,
+      "compileMs": 50430,
+      "executionMs": 46758,
+      "correctPerMin": 28.040003738667167,
+      "modelCalls": 5,
+      "inputTokens": 27561,
+      "outputTokens": 8546,
+      "costUsd": 0.149367,
+      "workerUtilization": 0.014,
+      "maxConcurrency": 16,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 6784.5,
+      "firstVerifiedMs": 52230.6,
+      "overlapMs": 45334,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Reconcile these 25 customer orders across CRM, Orders, and Support. Update mismatched records and verify every correction.\n\nRules, for each order in the list:\n1. Customer identity. Find the CRM customers whose email equals the order's customer email (the Orders app is the source of truth for the email).\n   - Exactly one match whose ID differs from the order's Customer ID: change the order's Customer ID to that customer's ID.\n   - More than one match: leave the Customer ID unchanged and flag the order for review with the reason \"Duplicate customer\".\n   - No match: leave the Customer ID unchanged and flag the order for review with the reason \"Unknown customer\".\n2. Support ticket (only if a ticket exists for the order; at most one does):\n   - Order status refunded: the ticket must have category refund and status resolved. If either differs, set both and add the internal note \"Reconciled: refund confirmed for <order ID>\".\n   - Otherwise, order delivered and ticket category shipping with status open or pending: set the status to resolved and add the internal note \"Reconciled: delivered <order ID>\".\n   - Otherwise, ticket category damage with a status other than escalated: set the status to escalated and the owner to Tier 2. No note.\n   - Any other ticket: leave it unchanged.\n3. Account holds. For every CRM customer matched in rule 1 (exactly one match) who has 2 or more refunded orders in this list, set the CRM status to on_hold, unless the customer is vip.\nDo not change anything that these rules do not require. Never issue refunds.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "records": [
+          {
+            "orderId": "ORD-50064"
+          },
+          {
+            "orderId": "ORD-50066"
+          },
+          {
+            "orderId": "ORD-50071"
+          },
+          {
+            "orderId": "ORD-50073"
+          },
+          {
+            "orderId": "ORD-50077"
+          },
+          {
+            "orderId": "ORD-50084"
+          },
+          {
+            "orderId": "ORD-50088"
+          },
+          {
+            "orderId": "ORD-50092"
+          },
+          {
+            "orderId": "ORD-50099"
+          },
+          {
+            "orderId": "ORD-50103"
+          },
+          {
+            "orderId": "ORD-50106"
+          },
+          {
+            "orderId": "ORD-50108"
+          },
+          {
+            "orderId": "ORD-50113"
+          },
+          {
+            "orderId": "ORD-50118"
+          },
+          {
+            "orderId": "ORD-50124"
+          },
+          {
+            "orderId": "ORD-50130"
+          },
+          {
+            "orderId": "ORD-50135"
+          },
+          {
+            "orderId": "ORD-50138"
+          },
+          {
+            "orderId": "ORD-50144"
+          },
+          {
+            "orderId": "ORD-50146"
+          },
+          {
+            "orderId": "ORD-50148"
+          },
+          {
+            "orderId": "ORD-50149"
+          },
+          {
+            "orderId": "ORD-50154"
+          },
+          {
+            "orderId": "ORD-50160"
+          },
+          {
+            "orderId": "ORD-50161"
+          }
+        ],
+        "label": "e2-standard/overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    }
+  ],
+  "notes": [
+    "Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e2-standard --budget 2",
+    "Code version: 88f4d66 (uncommitted changes, tree digest 07856e0fffaa).",
+    "Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available."
+  ]
+}

@@ -54,12 +54,12 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
 export function Panel({ title, subtitle, actions, children, className, bodyClassName, id }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string; id?: string }) {
   return (
     <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className={cx("flex min-w-0 flex-col rounded-lg border border-line bg-panel", className)}>
-      <header className="flex min-h-10 items-center gap-2 border-b border-line px-3 py-2">
-        <h2 id={id ? `${id}-title` : undefined} className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+      <header className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-2">
+        <h2 id={id ? `${id}-title` : undefined} className="shrink-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
           {title}
         </h2>
-        {subtitle && <span className="truncate text-xs text-dim">{subtitle}</span>}
-        <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+        {subtitle && <span className="min-w-0 flex-1 basis-32 truncate text-xs text-dim">{subtitle}</span>}
+        {actions && <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{actions}</div>}
       </header>
       <div className={cx("min-h-0 flex-1", bodyClassName ?? "p-3")}>{children}</div>
     </section>
@@ -67,7 +67,7 @@ export function Panel({ title, subtitle, actions, children, className, bodyClass
 }
 
 /** A labelled metric. `value` is display text; `raw` is the machine-readable value for tests. */
-export function Stat({ label, value, sub, testId, raw, tone, className }: { label: string; value: ReactNode; sub?: ReactNode; testId?: string; raw?: number | string | null; tone?: "ok" | "accent" | "warn" | "bad"; className?: string }) {
+export function Stat({ label, value, sub, testId, raw, tone, className }: { label: ReactNode; value: ReactNode; sub?: ReactNode; testId?: string; raw?: number | string | null; tone?: "ok" | "accent" | "warn" | "bad"; className?: string }) {
   const toneClass = tone === "ok" ? "text-ok" : tone === "accent" ? "text-accent-soft" : tone === "warn" ? "text-warn" : tone === "bad" ? "text-bad" : "text-fg";
   return (
     <div className={cx("min-w-0", className)}>

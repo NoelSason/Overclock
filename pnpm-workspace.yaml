@@ -1,9 +1,13 @@
 packages:
   - apps/*
   - services/*
+  - services/network/validation-worker
   - packages/*
 allowBuilds:
+  '@google/genai': false
+  bufferutil: false
   esbuild: true
+  protobufjs: false
 minimumReleaseAgeExclude:
   - '@anthropic-ai/sdk@1.3.0'
   - '@next/env@16.4.3'

@@ -1,5 +1,5 @@
 import type { VariationConfig } from "@overclock/contracts";
-import type { AppName } from "./variations";
+import type { ClassicApp } from "../data/apps";
 
 /**
  * CSS for the three apps. Each product has its own palette, type, and layout; the `theme`
@@ -193,9 +193,9 @@ const SUPPORT = `
 .login-card .brand small{color:var(--muted)}
 `;
 
-const APP_CSS: Record<AppName, string> = { CRM, Orders: ORDERS, Support: SUPPORT };
+const APP_CSS: Record<ClassicApp, string> = { CRM, Orders: ORDERS, Support: SUPPORT };
 
-export function appCss(app: AppName): string {
+export function appCss(app: ClassicApp): string {
   return BASE + APP_CSS[app] + DENSE + CONTRAST;
 }
 

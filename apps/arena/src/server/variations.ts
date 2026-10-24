@@ -1,16 +1,13 @@
 import { VariationConfig } from "@overclock/contracts";
+import { APP_NAMES, type AppName } from "../data/apps";
+import { HOLDOUT_APP, HOLDOUT_SAVE_RENAME } from "../holdout/meta";
 
 /**
  * Live UI/infra variations. The judge changes these mid-run; every app request reads the
  * current config, so a change applies from the next request on.
  */
 
-export type AppName = "CRM" | "Orders" | "Support";
-export const APP_NAMES: readonly AppName[] = ["CRM", "Orders", "Support"];
-
-export function isAppName(v: unknown): v is AppName {
-  return v === "CRM" || v === "Orders" || v === "Support";
-}
+export { APP_NAMES, CLASSIC_APPS, isAppName, type AppName, type ClassicApp } from "../data/apps";
 
 export const SURPRISE_KINDS = [
   "rename-save",
@@ -34,6 +31,7 @@ export const SAVE_BUTTON_RENAMES: Record<AppName, { from: string; to: string }> 
   CRM: { from: "Save changes", to: "Update record" },
   Orders: { from: "Update order", to: "Apply changes" },
   Support: { from: "Save ticket", to: "Commit ticket" },
+  [HOLDOUT_APP]: { ...HOLDOUT_SAVE_RENAME },
 };
 
 const PER_APP_KEYS = ["renameButtons", "shuffleFields", "confirmModal", "announcementModal", "pageSize", "editInTab", "latency", "failures", "concurrencyLimit"] as const;
@@ -63,7 +61,7 @@ export function deepMerge(base: unknown, patch: unknown): unknown {
 export class VariationStore {
   private cfg: VariationConfig = defaultVariations();
   /** Bumped whenever an app's announcement is switched on, so it reappears for existing sessions. */
-  private readonly epochs: Record<AppName, number> = { CRM: 0, Orders: 0, Support: 0 };
+  private readonly epochs = Object.fromEntries(APP_NAMES.map((a) => [a, 0])) as Record<AppName, number>;
 
   get(): VariationConfig {
     return this.cfg;

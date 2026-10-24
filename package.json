@@ -24,7 +24,18 @@
     "benchmark:overclock": "tsx packages/benchmarks/src/cli.ts --mode overclock",
     "benchmark:all": "tsx packages/benchmarks/src/cli.ts --suite all",
     "benchmark:ablations": "tsx packages/benchmarks/src/cli.ts --suite ablations",
-    "demo:reset": "tsx apps/cli/src/main.ts reset --seed 4242 --records 100"
+    "demo:reset": "tsx apps/cli/src/main.ts reset --seed 4242 --records 100",
+    "benchmark:staged": "tsx packages/benchmarks/src/cli.ts --mode staged",
+    "benchmark:report": "tsx packages/benchmarks/src/cli.ts --report",
+    "test:network": "vitest run --config tests/network/vitest.config.ts",
+    "test:network-capability": "vitest run --config tests/network-capability/vitest.config.ts",
+    "network:dev": "tsx scripts/network-dev.ts",
+    "network:generate": "tsx scripts/network-generate.ts",
+    "network:test": "vitest run --config tests/network/vitest.config.ts",
+    "network:deploy": "tsx scripts/network-deploy.ts",
+    "network:probe": "tsx scripts/network-probe.ts",
+    "network:authorize": "tsx scripts/network-authorize.ts",
+    "network:demo": "tsx scripts/network-demo.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
@@ -49,6 +60,10 @@
     "@overclock/engine": "workspace:*",
     "@overclock/arena": "workspace:*",
     "playwright": "1.64.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@overclock/network-contracts": "workspace:*",
+    "@overclock/network-client": "workspace:*",
+    "@overclock/network-capability": "workspace:*",
+    "@overclock/external-baselines": "workspace:*"
   }
 }
