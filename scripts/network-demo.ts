@@ -1,7 +1,7 @@
 /**
  * Overclock Network: runtime A discovers and publishes, runtime B imports, rebinds, and executes.
  *
- *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--compare-cold] [--keep]
+ *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--no-cold-arm] [--keep]
  *
  * Needs the arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev` starts one). The
  * script publishes the module to a separate `overclock-demo` database and wipes it first, so
@@ -19,8 +19,9 @@
  * With --keep, both engines stay up after the report (Ctrl+C stops them), so their runs can be
  * opened in a dashboard started with NEXT_PUBLIC_OVERCLOCK_URL=http://127.0.0.1:4010 (or 4020).
  *
- * With --compare-cold, B then repeats its scenario (reloaded, same seed and variation) with the
- * strict-cold policy, so network-warm and strict-cold are compared on identical data.
+ * 4. Unless --no-cold-arm: a third fresh runtime C (:4030, own data dir, network disabled) runs
+ *    B's scenario (reloaded, same seed and variation) strict-cold, so network-warm and strict-cold
+ *    are compared on identical data. Speedups are reported only when both arms are correct.
  *
  * The script exits 1 unless every acceptance check passes: both runs complete and the arena's
  * independent checker finds every record correct with no duplicate or collateral writes; B
@@ -66,13 +67,13 @@ async function enroll(admin: NetworkClient, label: string, role: PublisherRole, 
   return c;
 }
 
-function startEngine(label: string, port: number): ChildProcess {
+function startEngine(label: string, port: number, network = true): ChildProcess {
   const env = {
     ...process.env,
     OVERCLOCK_ENGINE_PORT: String(port),
     OVERCLOCK_DATA_DIR: join(DEMO_DIR, label),
     OVERCLOCK_RUNTIME_LABEL: label,
-    OVERCLOCK_NETWORK_ENABLED: "true",
+    OVERCLOCK_NETWORK_ENABLED: network ? "true" : "false",
     OVERCLOCK_NETWORK_ENDPOINT: ENDPOINT,
     OVERCLOCK_NETWORK_DATABASE: DATABASE,
     OVERCLOCK_NETWORK_PUBLISH_ENABLED: "true",
@@ -107,6 +108,22 @@ function plannerCalls(events: Events): number {
   return events.filter((e) => e.type === "model.call" && e.purpose.startsWith("planner.")).length;
 }
 
+/** Where a run's time and model spend went: calls by purpose, streaming fallbacks, recoveries. */
+function diagnose(events: Events) {
+  const calls: Record<string, { calls: number; ms: number; costUsd: number }> = {};
+  for (const e of events) {
+    if (e.type !== "model.call") continue;
+    const c = (calls[e.purpose] ??= { calls: 0, ms: 0, costUsd: 0 });
+    c.calls++;
+    c.ms += e.ms;
+    c.costUsd = Math.round((c.costUsd + e.costUsd) * 1e6) / 1e6;
+  }
+  const fallbacks = events.flatMap((e) => (e.type === "log" && e.message.startsWith("streaming fallback") ? [e.message.slice(0, 600)] : []));
+  const recoveries = events.filter((e) => e.type === "recovery" && e.phase === "succeeded").length;
+  const policy = events.find((e) => e.type === "policy.decision");
+  return { modelCallsByPurpose: calls, fallbacks, recoveries, policy: policy?.type === "policy.decision" ? `${policy.intelligence}: ${policy.reason.slice(0, 200)}` : null };
+}
+
 function groundTruthOk(o: ReturnType<typeof brief>): boolean {
   return o.status === "completed" && o.checker.accuracy === 1 && o.checker.correct === o.checker.total && o.checker.total === o.records && o.checker.duplicateWrites === 0 && o.checker.collateralWrites === 0;
 }
@@ -136,7 +153,7 @@ async function main(): Promise<void> {
   const seed = Number(argValue(argv, "--seed") ?? 4242);
   const variation = argValue(argv, "--variation");
   const mode = (argValue(argv, "--mode") ?? "overclock") as RunConfigInput["mode"];
-  const compareCold = argv.includes("--compare-cold");
+  const coldArm = !argv.includes("--no-cold-arm");
   const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
@@ -160,11 +177,13 @@ async function main(): Promise<void> {
 
   const a = startEngine("runtime-a", 4010);
   const b = startEngine("runtime-b", 4020);
+  const c = coldArm ? startEngine("runtime-c", 4030, false) : null;
   const engineA = new Overclock({ endpoint: "http://127.0.0.1:4010", timeoutMs: 60_000 });
   const engineB = new Overclock({ endpoint: "http://127.0.0.1:4020", timeoutMs: 60_000 });
+  const engineC = new Overclock({ endpoint: "http://127.0.0.1:4030", timeoutMs: 60_000 });
   const browser = new BrowserManager({ headless: true });
   try {
-    await Promise.all([engineReady(engineA), engineReady(engineB)]);
+    await Promise.all([engineReady(engineA), engineReady(engineB), ...(coldArm ? [engineReady(engineC)] : [])]);
 
     // The validator runs as a service: it picks up every PROPOSED version for the arena's apps.
     const health = (await arena.health()) as { origins: Record<string, string> };
@@ -195,6 +214,7 @@ async function main(): Promise<void> {
     const pub = eventsA.events.find((e) => e.type === "network.publish");
     if (!pub || pub.type !== "network.publish" || pub.rejected) throw new Error(`A did not publish: ${pub && pub.type === "network.publish" ? pub.rejected : "no network.publish event"}`);
     const versionId = `${pub.capabilityId}@${pub.version}`;
+    const publishMs = pub.ms;
     console.log(`A proposed ${versionId} (${pub.bytes} bytes, ${pub.redactions} redactions, ${pub.ms} ms)`);
 
     // 2. Independent validation, then promotion by the admin.
@@ -206,7 +226,8 @@ async function main(): Promise<void> {
     const tPromote = performance.now();
     await admin.promote(versionId);
     await waitFor(() => admin.versionInfo(versionId)?.state === "ACTIVE", 10_000, "ACTIVE state");
-    console.log(`admin promoted ${versionId} to ACTIVE in ${Math.round(performance.now() - tPromote)} ms`);
+    const promoteMs = Math.round(performance.now() - tPromote);
+    console.log(`admin promoted ${versionId} to ACTIVE in ${promoteMs} ms`);
 
     // 3. Runtime B: new records (and optionally a UI change), import + rebind + execute.
     const scenarioB = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
@@ -222,15 +243,20 @@ async function main(): Promise<void> {
     const plannerA = plannerCalls(eventsA.events);
     const plannerB = plannerCalls(eventsB);
 
-    let outCold: ReturnType<typeof brief> | null = null;
-    if (compareCold) {
-      await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
-      console.log(`\nB again, same scenario${variation ? " and variation" : ""}, strict-cold (no network, no local cache)`);
-      const resCold = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "strict-cold", thumbnails: false }));
-      outCold = brief("runtime-b strict-cold", resCold, await arena.check());
-      console.log(JSON.stringify(outCold, null, 2));
+    let outC: ReturnType<typeof brief> | null = null;
+    let diagC: ReturnType<typeof diagnose> | null = null;
+    if (coldArm) {
+      const scenarioC = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
+      if (scenarioC.scenarioId !== scenarioB.scenarioId || JSON.stringify(scenarioC.records) !== JSON.stringify(scenarioB.records)) throw new Error("C's scenario differs from B's");
+      console.log(`\nC: same scenario as B${variation ? " and variation" : ""}, fresh runtime, strict-cold (network disabled, empty local cache)`);
+      const resC = await engineC.execute(configFromScenario(scenarioC, { mode, knowledge: "strict-cold", thumbnails: false }));
+      outC = brief("runtime-c", resC, await arena.check());
+      diagC = diagnose((await engineC.events(resC.runId, 0, 10_000)).events);
+      console.log(JSON.stringify(outC, null, 2));
     }
     if (variation) await arena.resetVariations();
+    const diagA = diagnose(eventsA.events);
+    const diagB = diagnose(eventsB);
 
     const checks = [
       { check: "A passes the independent ground-truth check", ok: groundTruthOk(outA), detail: JSON.stringify(outA.checker) },
@@ -246,21 +272,41 @@ async function main(): Promise<void> {
         detail: `policy ${policyB?.type === "policy.decision" ? policyB.intelligence : "?"}, selected ${selectedB?.type === "candidate.selected" ? selectedB.candidateId : "?"}`,
       },
       { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
+      ...(outC ? [{ check: "C (strict-cold comparison arm) passes the independent ground-truth check", ok: groundTruthOk(outC), detail: JSON.stringify(outC.checker) }] : []),
     ];
     console.log("\nacceptance checks");
     for (const c of checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${c.check}: ${c.detail}`);
     const passed = checks.every((c) => c.ok);
-    const report = { at: new Date().toISOString(), passed, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, plannerCalls: { a: plannerA, b: plannerB }, a: outA, b: outB, bStrictCold: outCold };
+    const ratio = (x: number, y: number) => Math.round((x / Math.max(y, 1e-9)) * 100) / 100;
+    const comparison =
+      outC && groundTruthOk(outB) && groundTruthOk(outC)
+        ? { wallSpeedup: ratio(outC.wallMs, outB.wallMs), timeToFirstVerifiedSpeedup: outC.firstVerifiedMs && outB.firstVerifiedMs ? ratio(outC.firstVerifiedMs, outB.firstVerifiedMs) : null, modelCalls: { strictCold: outC.modelCalls, networkWarm: outB.modelCalls }, costUsd: { strictCold: outC.modelCostUsd, networkWarm: outB.modelCostUsd } }
+        : { note: outC ? "not reported: at least one arm failed its ground-truth check" : "cold arm skipped" };
+    const overhead = {
+      aLookupMs: outA.network?.lookupMs ?? null,
+      aPublishMs: publishMs,
+      // Assigned in the worker callback, which TypeScript cannot see.
+      validationMs: (validation as { ms: number } | null)?.ms ?? null,
+      promoteMs: promoteMs,
+      bLookupMs: outB.network?.lookupMs ?? null,
+      bFetchMs: outB.network?.fetchMs ?? null,
+      bRebindMs: outB.network?.rebindMs ?? null,
+    };
+    console.log(`\noverhead: ${JSON.stringify(overhead)}`);
+    console.log(`B vs C: ${JSON.stringify(comparison)}`);
+    for (const [k, d] of [["A", diagA], ["B", diagB], ["C", diagC]] as const) if (d) console.log(`${k} model calls: ${JSON.stringify(d.modelCallsByPurpose)}; fallbacks ${d.fallbacks.length}; recoveries ${d.recoveries}`);
+    const report = { at: new Date().toISOString(), passed, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     console.log(`\nreport: ${join(DEMO_DIR, "report.json")}`);
     if (!passed) process.exitCode = 1;
     if (keep) {
-      console.log("\nengines still running: A http://127.0.0.1:4010, B http://127.0.0.1:4020 (Ctrl+C stops them)");
+      console.log(`\nengines still running: A http://127.0.0.1:4010, B http://127.0.0.1:4020${c ? ", C http://127.0.0.1:4030" : ""} (Ctrl+C stops them)`);
       await new Promise<void>((resolve) => process.once("SIGINT", () => resolve()));
     }
   } finally {
     a.kill("SIGTERM");
     b.kill("SIGTERM");
+    c?.kill("SIGTERM");
     await browser.close();
     await validator.close();
     await admin.close();
