@@ -61,28 +61,18 @@ export async function openDialogText(page: Page): Promise<string | null> {
     .catch(() => null);
 }
 
-/**
- * Match count of a locator and whether its single match is visible, in one page call. Visible
- * follows Playwright's definition: a non-empty bounding box and no `visibility: hidden`. Also
- * whether that element is a checkbox or radio, which decides how a fill sets it.
- */
-function uniqueVisible(els: Element[]): { n: number; visible: boolean; checkable?: boolean } {
-  if (els.length !== 1) return { n: els.length, visible: false };
-  const el = els[0]!;
-  const r = el.getBoundingClientRect();
-  return { n: 1, visible: r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden", checkable: el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") };
-}
-
-async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number; checkable?: boolean }> {
+async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number }> {
   const loc = env.locatorOverrides.get(node.id) ?? node.target;
   if (!loc) throw new RuntimeError(`Node ${node.id} (${node.type}) has no target`, node.id);
   // Fast path, one browser call: the top-ranked strategy matches exactly one visible element, the
-  // element resolveLocator and the visibility check below would accept. The action itself still
-  // runs Playwright's actionability checks. Anything else takes the full path.
+  // element resolveLocator and the visibility check below would accept (a strict isVisible throws
+  // on several matches and is false for none). It runs in Playwright's utility world, where the
+  // action itself runs too, so the page doesn't set up Playwright's selector engine a second time
+  // in its main world (about 10 ms per page). The action still runs Playwright's actionability
+  // checks. Anything else takes the full path.
   if (!loc.scope && loc.strategies[0]) {
     const first = strategyToLocator(env.page, loc.strategies[0]);
-    const quick = await first.evaluateAll(uniqueVisible).catch(() => null);
-    if (quick?.n === 1 && quick.visible) return { locator: first, tier: 0, checkable: quick.checkable === true };
+    if (await first.isVisible().catch(() => false)) return { locator: first, tier: 0 };
   }
   try {
     const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
@@ -518,9 +508,15 @@ export async function executeAction(env: ActionEnv, node: ActionNode): Promise<A
     case "fill": {
       const t = await target(env, node);
       const v = node.input ? resolveValue(node.input, scope) : "";
-      const isCheck = t.checkable ?? (await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")));
-      if (isCheck) await t.locator.setChecked(v === true || /^(true|yes|on|1|checked)$/i.test(toStr(v)), { timeout: node.timeoutMs });
-      else await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
+      // Text first: Playwright refuses to fill a checkbox or radio at once, changing nothing, and
+      // only then is it asked what the element is, so most fills need no extra page call.
+      try {
+        await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
+      } catch (err) {
+        const isCheck = await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")).catch(() => false);
+        if (!isCheck) throw err;
+        await t.locator.setChecked(v === true || /^(true|yes|on|1|checked)$/i.test(toStr(v)), { timeout: node.timeoutMs });
+      }
       return { ms: performance.now() - start, locatorTier: t.tier };
     }
     case "select": {

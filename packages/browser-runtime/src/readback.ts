@@ -71,13 +71,24 @@ export async function countMatchingEntries(region: Locator, expected: string): P
 }
 
 /**
- * In-page entry counter, self-contained because Playwright runs it in the page. Two call shapes:
- * `locator.evaluate(entryCount, expected)` counts in the one element a resolved locator points
- * at, and `locator.evaluateAll(entryCount, expected)` counts only when a strategy matched exactly
- * one element (n is the match count either way).
+ * In-page entry counter, self-contained because Playwright runs it in the page. Three call
+ * shapes: `locator.evaluate(entryCount, expected)` counts in the one element a resolved locator
+ * points at; `locator.evaluateAll(entryCount, expected)` and `page.evaluate(entryCount, { path,
+ * exp })` (an XPath resolved the way Playwright's XPath engine does: document.evaluate, element
+ * nodes only) count only when exactly one element matched. n is the match count.
  */
-function entryCount(a: Element | Element[], exp: string): { n: number; matches?: number; entries?: number } {
-  const els = Array.isArray(a) ? a : [a];
+function entryCount(a: Element | Element[] | { path: string; exp: string }, b?: string): { n: number; matches?: number; entries?: number } {
+  let els: Element[];
+  let exp: string;
+  if (Array.isArray(a) || a instanceof Element) {
+    els = Array.isArray(a) ? a : [a];
+    exp = b!;
+  } else {
+    els = [];
+    const it = document.evaluate(a.path, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    for (let node = it.iterateNext(); node; node = it.iterateNext()) if (node.nodeType === Node.ELEMENT_NODE) els.push(node as Element);
+    exp = a.exp;
+  }
   if (els.length !== 1) return { n: els.length };
   const el = els[0]!;
   const norm = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
@@ -128,9 +139,12 @@ export async function readBack(env: ActionEnv, spec: VerificationSpec, opts: { t
     const expected = normalize(resolveValue(f.equals, scope));
     if (f.match === "entry") {
       let counted: { matches: number; entries: number } | null = null;
-      // One call when the top-ranked strategy matches exactly one region (resolveLocator's first probe).
+      // One call when the top-ranked strategy matches exactly one region (resolveLocator's first
+      // probe). An XPath is resolved with a plain page evaluation, as readBatch does, so the page
+      // doesn't set up Playwright's selector engine; other strategies go through Playwright's.
       const top = f.target.strategies[0];
-      const quick = top && !f.target.scope ? await strategyToLocator(env.page, top).evaluateAll(entryCount, toStr(expected)).catch(() => null) : null;
+      const xpath = top?.kind === "css" && top.selector.startsWith("xpath=") ? top.selector.slice("xpath=".length) : null;
+      const quick = !top || f.target.scope ? null : xpath ? await env.page.evaluate(entryCount, { path: xpath, exp: toStr(expected) }).catch(() => null) : await strategyToLocator(env.page, top).evaluateAll(entryCount, toStr(expected)).catch(() => null);
       if (quick?.n === 1) counted = { matches: quick.matches ?? 0, entries: quick.entries ?? 0 };
       else {
         try {
