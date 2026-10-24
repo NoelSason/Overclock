@@ -133,6 +133,8 @@ export class NetworkClient implements INetworkClient {
   private everConnected = false;
   private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
   private rebuildAttempt = 0;
+  /** Increments per DbConnection; callbacks from a replaced connection are ignored. */
+  private generation = 0;
   private firstConnect: Deferred<void> | null = null;
 
   /** Origin -> applied waiter. Present once watchOrigins was requested for the origin. */
@@ -240,22 +242,24 @@ export class NetworkClient implements INetworkClient {
   }
 
   private build(): DbConnection {
+    const gen = ++this.generation;
+    const current = () => gen === this.generation && !this.closed;
     const conn = DbConnection.builder()
       .withUri(this.config.endpoint)
       .withDatabaseName(this.config.database)
       .withToken(this.token)
       .withAutomaticReconnect({ minDelayMs: this.opts.reconnectMinDelayMs, maxDelayMs: this.opts.reconnectMaxDelayMs })
-      .onConnect((_c, identity, token) => this.handleConnected(identity, token))
-      .onAutomaticReconnect((_c, identity, token) => this.handleConnected(identity, token))
-      .onDisconnect((_ctx, _err, nextAttempt) => this.handleDisconnected(nextAttempt))
-      .onConnectError((_ctx, err, nextAttempt) => this.handleConnectError(err, nextAttempt))
+      .onConnect((_c, identity, token) => current() && this.handleConnected(identity, token))
+      .onAutomaticReconnect((_c, identity, token) => current() && this.handleConnected(identity, token))
+      .onDisconnect((_ctx, _err, nextAttempt) => current() && this.handleDisconnected(nextAttempt))
+      .onConnectError((_ctx, err, nextAttempt) => current() && this.handleConnectError(err, nextAttempt))
       .build();
-    this.attach(conn);
+    this.attach(conn, current);
     return conn;
   }
 
   /** Register row callbacks and (re)subscribe everything this client watches on `conn`. */
-  private attach(conn: DbConnection): void {
+  private attach(conn: DbConnection, current: () => boolean): void {
     conn.db.capabilityVersions.onInsert((ctx, row) => this.handleVersion(ctx, row));
     conn.db.capabilityVersions.onUpdate((ctx, _old, row) => this.handleVersion(ctx, row));
     conn.db.repairJobs.onInsert((ctx, row) => this.handleJob(ctx, row));
@@ -270,8 +274,8 @@ export class NetworkClient implements INetworkClient {
 
     conn
       .subscriptionBuilder()
-      .onApplied(() => this.baseApplied.resolve())
-      .onError((ctx) => this.baseApplied.reject(ctx.event))
+      .onApplied(() => current() && this.baseApplied.resolve())
+      .onError((ctx) => current() && this.baseApplied.reject(ctx.event))
       .subscribe([tables.myPublisher]);
 
     const origins = [...this.watched.keys()];

@@ -7,10 +7,11 @@ verified execution programs instead of reasoning about every action.
 
 > **Status (2026-10-24, Cal Hacks build).** The compiler, scheduler, browser runtime,
 > recovery ladder, arena, benchmark harness, SDK, CLI, and dashboard are implemented, and most
-> of them have automated tests. Mode E (the streaming pipeline) has just landed in code and has
-> not been run end to end yet. The Overclock Network (SpacetimeDB) is in progress and is not
-> wired into the engine. **No benchmark results exist yet.** See [Feature status](#feature-status)
-> and [`PROGRESS.md`](PROGRESS.md).
+> of them have automated tests. Mode E (the streaming pipeline, with online access-path
+> substitution) has just landed in code and has not been run end to end yet. The Overclock
+> Network (SpacetimeDB) has a tested capability layer but is not wired into the engine.
+> **No benchmark results exist yet.** See [Feature status](#feature-status) and
+> [`PROGRESS.md`](PROGRESS.md).
 
 ## The problem
 
@@ -240,6 +241,8 @@ Each run spends model money. `OVERCLOCK_BENCH_BUDGET_USD` caps benchmark spend (
 | `pnpm test:adversarial` | Recovery L0/L1 against a fixture app with every UI surprise; refusal to guess; repair dedupe. | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:e2e` | Dashboard against a synthetic, test-only replay server (Playwright). | none |
 | `pnpm typecheck` | TypeScript across the workspace and the dashboard. | none |
+| `npx vitest run -c tests/network-capability/vitest.config.ts` | Capability export, sanitizer, static analysis, rebinding, and the validation worker, against the arena in-process. | none |
+| `npx vitest run --config tests/network/vitest.config.ts` | Network client and SpacetimeDB module against a real local SpacetimeDB (ephemeral database, deleted afterwards). Needs the `spacetime` CLI. | none |
 
 Setting `OVERCLOCK_LIVE=1` enables tests that call Claude and Jev, so they spend money.
 
@@ -268,8 +271,8 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 - Mode E is new code with no end-to-end test or recorded run yet. It also writes the local
   program cache but never reads it, so a warm-cache mode E run repeats discovery and planning.
-- Online access-path substitution and online strategy re-optimization are not wired into the
-  engine. The `accessPaths` and `onlineReoptimization` ablation switches have no effect yet.
+- Online access-path substitution is wired into mode E only and has no test. No other online
+  re-optimization exists, so the `onlineReoptimization` switch only turns access paths off.
 - The Overclock Network is not connected to the engine. The `network-read` and
   `network-read-and-contribute` knowledge policies are accepted but behave like a cold run.
 - Approving an irreversible step records the decision but doesn't re-run the step: the task
@@ -308,8 +311,8 @@ written or not wired in. **Proposed** means design only.
 | Mode A sequential baseline | Working (tested) | `tests/integration/baseline.test.ts` (scripted model) |
 | Modes B, C, D (staged swarm) | Partial | Implemented; no automated end-to-end test |
 | Mode E streaming pipeline | In progress | `services/engine/src/streaming.ts`; not yet run |
-| Access-path substitution | In progress | `packages/optimizer/src/accessPaths.ts`; not wired |
-| Online strategy re-optimization | Proposed | Event type and ablation flag only |
+| Access-path substitution | In progress | `services/engine/src/accessPaths.ts`, wired into mode E; no test |
+| Other online strategy re-optimization | Proposed | Not implemented |
 | Approvals for irreversible steps | Partial | Request works; approved steps don't resume |
 | Event log, SQLite store, restart recovery, SSE resume | Working (tested) | `tests/integration/engine-api.test.ts` |
 | Cold-start metrics (`firstVerifiedMs`, `overlapMs`) | Working (tested) | Replayed scripted events in `engine-api.test.ts` |
@@ -318,8 +321,8 @@ written or not wired in. **Proposed** means design only.
 | Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts` (1 stale failure), `tests/unit/arena-oracle.test.ts` |
 | Benchmark harness, suites, report, holdout freeze gate | Working (tested) | `tests/unit/benchmark.test.ts` |
 | Benchmark results | Pending | `benchmarks/results/` is empty |
-| Network contracts and SpacetimeDB module | In progress | `packages/network-contracts`, `services/network/spacetimedb` |
-| Capability export, sanitizer, rebinding, network client, validation worker | In progress | Code exists; no tests yet |
+| Capability export, sanitizer, static analysis, rebinding, validation worker | In progress (tested) | `tests/network-capability/` (23 tests passed on 2026-10-24) |
+| SpacetimeDB module and network client | In progress | `tests/network/` against a real local SpacetimeDB; not run for this report |
 | Engine integration with the network | Proposed | Not wired |
 
 ## Cal Hacks context and tech stack

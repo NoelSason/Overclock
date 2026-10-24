@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_CAPABILITY_BYTES, type CapabilityChange } from "@overclock/network-contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -318,7 +318,6 @@ describe("lookup sources and artifact cache", () => {
     const first = await reader.fetchArtifact(versionId);
     expect(first.source).toBe("network");
     const hash = reader.activeVersion(capabilityId)!.contentHash;
-    const { writeFileSync } = await import("node:fs");
     writeFileSync(join(reader.config.dataDir, "capabilities", `${hash}.json`), '{"tampered":true}');
     const again = await reader.fetchArtifact(versionId);
     expect(again.source).toBe("network");

@@ -30,7 +30,7 @@ Statuses reflect the repository on 2026-10-24. [`PROGRESS.md`](../PROGRESS.md) t
 | `apps/arena` | Three web apps, a judge console, variations, ground-truth checker, and a holdout app. | Working (tested) |
 | `packages/benchmarks` | Mode A baseline, suites, harness, statistics, report generator. | Working (tested) |
 | `packages/external-baselines` | Optional Stagehand baseline judged by the same checker. | Partial |
-| `packages/network-*`, `services/network/*` | Overclock Network. See [`NETWORK.md`](NETWORK.md). | In progress |
+| `packages/network-*`, `services/network/*`, `scripts/network-*.ts` | Overclock Network. See [`NETWORK.md`](NETWORK.md). | In progress (capability layer tested; not wired into the engine) |
 
 ## Data flow
 
@@ -75,8 +75,8 @@ Replay is idempotent: events with `seq` at or below the last applied one are ign
 | Models | `model.call` (provider, model, purpose, latency, tokens, cost, success) |
 | Network | `network.lookup`, `network.import`, `network.publish`, `network.repair`, `network.update` |
 
-Two event types exist in the contract but no engine code emits them yet: `reopt.decision` and
-the `network.*` family. Stage intervals may overlap. That overlap is what mode E produces and
+Only mode E's access-path controller emits `reopt.decision`, and no engine code emits the
+`network.*` family yet. Stage intervals may overlap. That overlap is what mode E produces and
 what `overlapMs` measures.
 
 **Storage.** `EngineStore` keeps one SQLite file per runtime (`node:sqlite`, WAL mode,
@@ -304,7 +304,8 @@ screenshot) exists in the recovery engine but the engine does not enable it.
 
 **Status:** cost model and selection Working (tested) in `tests/unit/optimizer.test.ts`;
 online latency updates and AIMD Partial (wired in the executor, untested there); access-path
-substitution In progress; strategy re-optimization Proposed.
+substitution In progress (wired into mode E, untested); other strategy re-optimization
+Proposed.
 
 ### Expected cost
 
@@ -336,15 +337,28 @@ is invalid.
 ### Online optimization
 
 - **Latency updates and AIMD** run during every execution today.
-- **Access-path substitution (In progress).** `findAccessPathCandidates` finds per-record
-  detail-read segments (navigate to `/entity/{key}`, then extract facts) that a paginated
-  list table could serve, when the table's rows link to the same detail route and its
-  columns carry the same facts. The executor has a `substitute` hook that completes a ready
-  read task from scanned rows without a browser. By design the switch happens only when
-  measured costs favor the scan and scanned values match detail reads that already ran. The
-  engine does not pass a `substitute` provider yet.
-- **Strategy re-optimization (Proposed).** The `reopt.decision` event and the
-  `onlineReoptimization` ablation flag exist; nothing implements them.
+- **Access-path substitution (In progress).** This is the query-optimizer idea applied to
+  browser reads. In mode E, `AccessPathController` (`services/engine/src/accessPaths.ts`)
+  watches every released fragment:
+  1. `findAccessPathCandidates` flags per-record detail-read segments (navigate to
+     `/entity/{key}`, then extract facts) that a list table could serve, when the table's rows
+     link to the same detail route and its columns carry the same facts.
+  2. After at least one detail read has completed, and at most every 1.5 s, it compares the
+     measured cost of the remaining detail reads with the estimated cost of scanning the list
+     pages at the app's current concurrency limit. It switches only when at least 5 records
+     remain and the detail reads cost more than 1.2 times the scan.
+  3. The scan runs through the normal scheduler as an optimizer-generated read fragment, with
+     no model call.
+  4. Before serving anything from the scan, it compares the scanned rows with up to 3 detail
+     reads that already ran. Any difference, or no overlap to compare, disables the
+     substitution.
+  5. Once proven, the executor's `substitute` hook completes unstarted detail-read tasks from
+     the scanned rows without a browser.
+
+  Every decision, including "keep detail reads", is emitted as `reopt.decision` with its
+  numbers. The `accessPaths` and `onlineReoptimization` ablation switches both disable it.
+- **Other strategy re-optimization (Proposed).** Switching a running program to a different
+  candidate strategy is not implemented.
 
 ## Cold-start pipelines
 
@@ -416,6 +430,8 @@ run end to end. It works as follows:
    runs first, and when it succeeds the fragment fans out to every record. While it runs, its
    page is read-only at the network layer.
 7. **Write fragments.** A write fragment enters with a `deferred` gate.
+   While reads run, the access-path controller may replace remaining per-record detail reads
+   with a shared list scan (see [Online optimization](#online-optimization)).
 8. **Whole-plan validation.** When the stream ends, the full plan is lowered and validated with
    the same checks the staged path runs.
 9. **Write gates.** Writes stay deferred until every one of these holds:
@@ -461,8 +477,10 @@ The engine doesn't call the network yet. Runs with `knowledge: "network-read"` o
   the `all` benchmark suite measure no cache reuse for mode E.
 - **No executor tests.** The executor, staged swarm, crawler, effect classification, critique,
   and dry run run only in live runs.
-- **Access paths and re-optimization** are not wired in. Their ablation rungs measure nothing
-  until they are.
+- **Access paths are new.** Access-path substitution is wired into mode E only and has no
+  test. Online re-optimization beyond access paths doesn't exist, so the
+  `overclock-no-online-reopt` ablation rung measures the same thing as
+  `overclock-no-access-paths`.
 - **Approvals don't resume.** Approving an irreversible step calls `scheduler.retry`, which
   ignores tasks already in a terminal state, so the approved step never runs.
 - **Competition is narrow.** Only two strategy directives exist. Bulk-import operations are
@@ -483,8 +501,8 @@ The engine doesn't call the network yet. Runs with `knowledge: "network-read"` o
 | Time to first verified action is measured | `firstVerifiedMs` comes from the first `VERIFIED` receipt. `tests/integration/engine-api.test.ts` ("rebuilds a completed run's view identical to the live reducer state") and `tests/unit/benchmark.test.ts` (harness records it). | Working (tested) |
 | Holdout evaluated after a code freeze | The harness refuses holdout scenarios unless `OVERCLOCK_HOLDOUT_FROZEN` names a freeze identifier, and records it. `tests/unit/benchmark.test.ts` ("refuses holdout runs without a code-freeze identifier and records it when given"). Run with `OVERCLOCK_HOLDOUT_FROZEN=<freeze-id> pnpm exec tsx packages/benchmarks/src/cli.ts --suite holdout` (spends money). | Gate tested; holdout not yet evaluated |
 | Judge-induced UI change triggers recovery without duplicate writes | `pnpm test:adversarial`: for a renamed save button, reordered fields, a confirmation modal, an announcement modal, a field in a hidden tab, a renamed label, and all at once, record 1 is repaired at L0/L1 with 0 model calls, record 2 reuses the repair with no observation, and the app sees exactly 2 writes. The arena checker counts duplicate writes (`tests/unit/arena-oracle.test.ts`). | Tested on a fixture app; engine + arena + live surprise not yet automated |
-| Two independent runtimes transfer a capability via SpacetimeDB | No test yet (`tests/network/` is empty). | Not yet automated |
-| Network-disabled operation | The engine has no network dependency today, and every test runs without SpacetimeDB. `DisabledNetworkClient` answers every lookup with "no capability". A test that a network-enabled engine falls back when SpacetimeDB is unreachable doesn't exist. | Holds today by construction; fallback not yet automated |
+| Two independent runtimes transfer a capability via SpacetimeDB | Client level: `tests/network/registry.test.ts` ("B receives the promoted version live, then fetches and verifies the artifact") uses separate publisher, validator, admin, and reader identities against a real local SpacetimeDB, with a synthetic capability. Run with `npx vitest run --config tests/network/vitest.config.ts` (needs the `spacetime` CLI). Engine level (runtime B executes with less discovery): no test. | Client level tested (not run for this report); engine level not yet automated |
+| Network-disabled operation | The engine has no network dependency today, and every engine test runs without SpacetimeDB. `tests/network/disabled.test.ts` ("returns NO_CAPABILITY instantly and throws NetworkDisabledError elsewhere") covers the disabled client. A test that a network-enabled engine falls back when SpacetimeDB is unreachable doesn't exist. | Disabled client tested (not run for this report); engine fallback not yet automated |
 | A–E produce comparable records | Every mode writes the same `BenchmarkRunRecord`. The harness checks seed, template, record count, and dataset hash before each run. `tests/unit/benchmark.test.ts` ("separates cold, warm, holdout, record-count, and condition groups", "computes speedups only between matched groups", "fails a run when the arena serves a different dataset for the same key"). | Harness tested; no records yet |
 | The compiler rejects unsafe programs | `tests/unit/compiler.test.ts` | Working (tested) |
 | Uncertain writes are reconciled, not repeated | `tests/integration/runtime.test.ts` ("reports an after-commit 500 as uncertain, and read-back shows it committed"). Executor reconciliation itself has no test. | Runtime tested; executor not yet automated |

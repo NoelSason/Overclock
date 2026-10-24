@@ -39,7 +39,8 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
   /** Transitive upstream segments (computed on demand; the graph is small). */
   const upstreamOf = (id: string): Set<string> => {
     const out = new Set<string>();
-    const stack = [...byId.get(id)!.dependsOn];
+    // Released (external) segments are not in this scope: they have no known upstream here.
+    const stack = [...(byId.get(id)?.dependsOn ?? [])];
     while (stack.length) {
       const d = stack.pop()!;
       if (out.has(d)) continue;
