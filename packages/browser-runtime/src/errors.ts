@@ -20,6 +20,17 @@ export class LocatorNotFoundError extends RuntimeError {
   }
 }
 
+/** The target exists but is not visible (e.g. inside an inactive tab panel or collapsed section). */
+export class HiddenTargetError extends RuntimeError {
+  constructor(
+    message: string,
+    nodeId: string | undefined,
+    readonly controlId?: string,
+  ) {
+    super(message, nodeId);
+  }
+}
+
 export class AmbiguousLocatorError extends RuntimeError {
   constructor(
     message: string,

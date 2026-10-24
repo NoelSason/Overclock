@@ -1,7 +1,7 @@
 import type { Locator, Page, Response } from "playwright";
 import type { ActionNode, Condition, ExtractField, ExtractTable, SemanticLocator } from "@overclock/contracts";
 import { evaluate, evaluateBool, looseEquals, resolveValue, toStr, type Scope } from "@overclock/compiler";
-import { AssertionFailedError, LocatorNotFoundError, NavigationError, OriginBlockedError, PreconditionFailedError, RuntimeError, UnexpectedDialogError, WriteRejectedError, WriteUncertainError } from "./errors";
+import { AssertionFailedError, HiddenTargetError, LocatorNotFoundError, NavigationError, OriginBlockedError, PreconditionFailedError, RuntimeError, UnexpectedDialogError, WriteRejectedError, WriteUncertainError } from "./errors";
 import { resolveLocator } from "./locate";
 
 export interface RecordScope {
@@ -65,8 +65,18 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
   if (!loc) throw new RuntimeError(`Node ${node.id} (${node.type}) has no target`, node.id);
   try {
     const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
+    if (!(await r.locator.isVisible())) {
+      // Give late-rendering pages a brief moment before declaring the control hidden.
+      const visible = await r.locator.waitFor({ state: "visible", timeout: 400 }).then(() => true, () => false);
+      if (!visible) {
+        const dialog = await openDialogText(env.page);
+        if (dialog) throw new UnexpectedDialogError(`A dialog is blocking the page: ${dialog.slice(0, 120)}`, node.id, dialog);
+        throw new HiddenTargetError(`Target is present but hidden: ${loc.controlId ?? node.id}`, node.id, loc.controlId);
+      }
+    }
     return { locator: r.locator, tier: r.strategyIndex };
   } catch (err) {
+    if (err instanceof HiddenTargetError || err instanceof UnexpectedDialogError) throw err;
     if (err instanceof LocatorNotFoundError) {
       const dialog = await openDialogText(env.page);
       if (dialog) throw new UnexpectedDialogError(`A dialog is blocking the page: ${dialog.slice(0, 120)}`, node.id, dialog);
@@ -335,7 +345,9 @@ export async function executeAction(env: ActionEnv, node: ActionNode): Promise<A
     case "fill": {
       const t = await target(env, node);
       const v = node.input ? resolveValue(node.input, scope) : "";
-      await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
+      const isCheck = await t.locator.evaluate((el) => el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio"));
+      if (isCheck) await t.locator.setChecked(v === true || /^(true|yes|on|1|checked)$/i.test(toStr(v)), { timeout: node.timeoutMs });
+      else await t.locator.fill(toStr(v), { timeout: node.timeoutMs });
       return { ms: performance.now() - start, locatorTier: t.tier };
     }
     case "select": {

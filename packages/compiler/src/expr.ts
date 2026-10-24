@@ -328,6 +328,7 @@ export const FUNCTIONS: Record<string, Fn> = {
   endsWith: { min: 2, max: 2, impl: ([s, p]) => asStr(s).endsWith(asStr(p)) },
   equalsIgnoreCase: { min: 2, max: 2, impl: ([a, b]) => asStr(a).trim().toLowerCase() === asStr(b).trim().toLowerCase() },
   concat: { min: 1, max: 20, impl: (args) => args.map(asStr).join("") },
+  encode: { min: 1, max: 1, impl: ([s]) => encodeURIComponent(asStr(s)) },
   join: { min: 1, max: 2, impl: ([l, sep], ctx) => guardList(asList(l), ctx).map(asStr).join(sep === undefined ? "," : asStr(sep)) },
   split: { min: 2, max: 2, impl: ([s, sep]) => asStr(s).split(asStr(sep)).map((x) => x.trim()) },
   replace: { min: 3, max: 3, impl: ([s, a, b]) => asStr(s).split(asStr(a)).join(asStr(b)) },

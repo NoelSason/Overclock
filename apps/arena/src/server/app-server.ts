@@ -86,7 +86,7 @@ export async function createAppServer(ctx: ServerContext, app: AppName, register
   const brand = BRANDS[app];
   const sessions = new Map<string, Session>();
   const newsCookie = `${brand.cookie}_news`;
-  const f = Fastify({ logger: false, disableRequestLogging: true });
+  const f = Fastify({ logger: false });
   await f.register(formbody);
   await f.register(cookie);
 

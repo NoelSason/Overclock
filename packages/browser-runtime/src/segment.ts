@@ -1,7 +1,7 @@
 import type { ActionNode, SemanticLocator } from "@overclock/contracts";
 import { evaluateBool } from "@overclock/compiler";
 import { checkPostconditions, checkPreconditions, executeAction, exprScope, type ActionEnv, type ActionOutcome, type RecordScope } from "./actions";
-import { AmbiguousLocatorError, ApprovalRequiredError, CancelledError, LocatorNotFoundError, RuntimeError, UnexpectedDialogError } from "./errors";
+import { AmbiguousLocatorError, ApprovalRequiredError, CancelledError, HiddenTargetError, LocatorNotFoundError, RuntimeError, UnexpectedDialogError } from "./errors";
 import { resolveLocator } from "./locate";
 import { readBack, type ReadBackResult } from "./readback";
 import type { BrowserWorker } from "./worker";
@@ -128,7 +128,7 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
         outcome = await executeAction(env, node);
         break;
       } catch (err) {
-        const repairable = err instanceof LocatorNotFoundError || err instanceof AmbiguousLocatorError || err instanceof UnexpectedDialogError;
+        const repairable = err instanceof LocatorNotFoundError || err instanceof AmbiguousLocatorError || err instanceof UnexpectedDialogError || err instanceof HiddenTargetError;
         if (!repairable || !hooks.repair || attempt >= MAX_REPAIRS_PER_NODE) {
           hooks.onAction?.({ taskId: input.taskId, nodeId: node.id, actionType: node.type, ms: 0, ok: false, modelCalls, detail: (err as Error).message.slice(0, 200) });
           throw err;

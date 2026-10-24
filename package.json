@@ -48,6 +48,7 @@
     "@overclock/benchmarks": "workspace:*",
     "@overclock/engine": "workspace:*",
     "@overclock/arena": "workspace:*",
-    "playwright": "1.64.1"
+    "playwright": "1.64.1",
+    "zod": "4.6.7"
   }
 }

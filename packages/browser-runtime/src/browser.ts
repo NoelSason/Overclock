@@ -44,6 +44,9 @@ export class BrowserManager {
       // Keep service workers out of the picture so routing sees every request.
       serviceWorkers: "block",
     });
+    // esbuild (via tsx) may wrap nested functions in __name(...) when serializing page.evaluate
+    // callbacks; define it in every document so evaluated code runs unchanged.
+    await context.addInitScript({ content: "globalThis.__name = globalThis.__name || ((fn) => fn);" });
     const stats: GuardStats = { blockedOrigins: 0, blockedMutations: 0, requests: 0 };
     this.guardStats.set(context, stats);
     const allowed = new Set(opts.allowedOrigins.map((o) => new URL(o).origin));

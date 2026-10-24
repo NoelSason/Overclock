@@ -93,6 +93,8 @@ export const AppControl = z.object({
   name: z.string(),
   label: z.string().optional(),
   type: z.string().optional(),
+  /** Form parameter name (the input's name attribute), for GET forms that map to URLs. */
+  param: z.string().optional(),
   options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   kind: z.enum(["input", "select", "button", "link", "table", "fact", "checkbox", "textarea", "tab", "pagination"]),
   formId: z.string().optional(),
@@ -100,8 +102,10 @@ export const AppControl = z.object({
   tabPanel: z.string().optional(),
   locator: SemanticLocator,
   effectGuess: Effect.optional(),
-  /** For tables: headers; for facts: the label. */
+  /** For tables: headers; for facts: the label; for links: the href. */
   detail: z.string().optional(),
+  /** A sample value observed during exploration (untrusted page data). */
+  sample: z.string().optional(),
 });
 export type AppControl = z.infer<typeof AppControl>;
 
