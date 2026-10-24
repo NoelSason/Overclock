@@ -456,6 +456,9 @@ The engine doesn't call the network yet. Runs with `knowledge: "network-read"` o
 ## Limitations
 
 - **Mode E is unproven.** The streaming pipeline has no automated test and no recorded run.
+- **Mode E ignores the warm cache.** It writes the local program cache but never reads it, so a
+  warm-cache mode E run repeats discovery and planning. Until this changes, the warm repeats in
+  the `all` benchmark suite measure no cache reuse for mode E.
 - **No executor tests.** The executor, staged swarm, crawler, effect classification, critique,
   and dry run run only in live runs.
 - **Access paths and re-optimization** are not wired in. Their ablation rungs measure nothing

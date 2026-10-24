@@ -104,18 +104,20 @@ function absoluteOrigin(url: string): { scheme: string; origin: string | null } 
 // ---------------------------------------------------------------------------------------------
 
 /** Obvious credential shapes. Matching any of these in a payload rejects it outright. */
+// Every quantifier is bounded so matching stays linear in the input length: reducers scan
+// strings up to MAX_CAPABILITY_BYTES, and an unbounded pattern can go quadratic on long runs.
 const SECRET_PATTERNS: readonly RegExp[] = [
-  /\bbearer\s+[a-z0-9._~+/=-]{8,}/i,
-  /\bsk-[a-z0-9_-]{12,}/i,
-  /\b(?:password|passwd|pwd)\s*=(?!=)/i,
-  /\b(?:set-)?cookie\s*[:=]\s*[^\s;"]+=/i,
-  /\b(?:session(?:id)?|sessid|sid|csrf(?:token)?|xsrf-token)\s*=\s*[a-z0-9%._~+/-]{8,}/i,
-  /\bauthorization\s*:\s*\S+/i,
-  /\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s"]{6,}/i,
+  /\bbearer\s{1,8}[a-z0-9._~+/=-]{8}/i,
+  /\bsk-[a-z0-9_-]{12}/i,
+  /\b(?:password|passwd|pwd)\s{0,8}=(?!=)/i,
+  /\b(?:set-)?cookie\s{0,8}[:=]\s{0,8}[^\s;"=]{1,256}=/i,
+  /\b(?:session(?:id)?|sessid|sid|csrf(?:token)?|xsrf-token)\s{0,8}=\s{0,8}[a-z0-9%._~+/-]{8}/i,
+  /\bauthorization\s{0,8}:\s{0,8}\S/i,
+  /\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret)\s{0,8}[:=]\s{0,8}[^\s"]{6}/i,
   /\bAKIA[0-9A-Z]{16}\b/,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-  /\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{6,}/,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /\bgh[pousr]_[A-Za-z0-9]{20}/,
+  /\beyJ[a-zA-Z0-9_-]{10,2048}\.[a-zA-Z0-9_-]{10,2048}\.[a-zA-Z0-9_-]{6}/,
+  /-----BEGIN [A-Z ]{0,32}PRIVATE KEY-----/,
 ];
 
 export function findSecret(s: string): string | null {
@@ -131,10 +133,11 @@ export function findSecret(s: string): string | null {
  * their host, collapse whitespace, cap the length.
  */
 export function sanitizeText(raw: string, max = 200): string {
-  let s = raw.replace(/[\u0000-\u001f\u007f]+/g, " ");
+  // Only the first few times `max` characters can survive, so never scan more than that.
+  let s = raw.slice(0, Math.max(512, max * 4)).replace(/[\u0000-\u001f\u007f]+/g, " ");
   for (const re of SECRET_PATTERNS) s = s.replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), "[redacted]");
-  s = s.replace(/\b[a-z][a-z0-9+.-]*:\/\/([^\s/?#"'<>]+)[^\s"'<>]*/gi, (_m, host: string) => host.replace(/^[^@]*@/, ""));
-  s = s.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "[email]");
+  s = s.replace(/\b[a-z][a-z0-9+.-]{0,31}:\/\/([^\s/?#"'<>]{1,255})[^\s"'<>]*/gi, (_m, host: string) => host.replace(/^[^@]*@/, ""));
+  s = s.replace(/\b[a-z0-9._%+-]{1,64}@[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){0,8}\.[a-z]{2,24}\b/gi, "[email]");
   s = s.replace(/\d{6,}/g, "[number]");
   s = s.replace(/\s+/g, " ").trim();
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
@@ -349,10 +352,10 @@ export function checkPayload(payload: string, isRegistered: (origin: string) => 
   };
 }
 
-const URL_IN_TEXT = /\b([a-z][a-z0-9+.-]*):\/\/([^\s"'<>\\/?#]+)/gi;
+const URL_IN_TEXT = /\b([a-z][a-z0-9+.-]{0,31}):\/\/([^\s"'<>\\/?#]{1,255})/gi;
 
 function checkString(s: string, allowed: ReadonlySet<string>): void {
-  if (/(?:java|vb)script\s*:/i.test(s) || /\bdata\s*:\s*text\/html/i.test(s)) {
+  if (/(?:java|vb)script\s{0,16}:/i.test(s) || /\bdata\s{0,16}:\s{0,16}text\/html/i.test(s)) {
     throw new SenderError("payload contains a script URL");
   }
   const secret = findSecret(s);

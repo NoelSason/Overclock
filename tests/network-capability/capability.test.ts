@@ -135,18 +135,19 @@ describe("sanitizer", () => {
   });
 
   it("redacts emails, phones, ids, sample data, positional locators, unknown fields, and notes in descriptors", () => {
-    const dirty = structuredClone(cap) as PortableCapability & { controls: (PortableCapability["controls"][number] & { sample?: string })[] };
+    const dirty = structuredClone(cap);
     const c0 = dirty.controls.find((c) => c.key === "Orders:/orders/:id/edit:input:review_reason")!;
     c0.name = "Reason for jane.doe@example.com";
     c0.label = "Call (555) 234-5678 about ORD-50012";
-    c0.sample = "Duplicate customer";
+    // An unknown field (e.g. a sample value smuggled next to the schema fields).
+    Object.assign(c0, { sample: "Duplicate customer" });
     c0.strategies.push({ kind: "css", selector: "main > div:nth-of-type(2) > form > input:nth-of-type(3)" }, { kind: "testId", id: "reason-ORD-50012" });
     const sel = dirty.controls.find((c) => c.key === "Orders:/orders/:id/edit:select:status")!;
     sel.options = [{ value: "c-1", label: "jane.doe@example.com" }];
     (dirty.procedure.plan.phases[1]!.steps[0] as DslStep).note = "Customer C-1001 asked for this";
     dirty.pages[0]!.pathTemplate = `${dirty.pages[0]!.pathTemplate}?q=ORD-50012`;
     dirty.intent.description = "orders for jane.doe@example.com";
-    const s = sanitizeCapability(withArtifactHash(dirty as PortableCapability), { records: env.records });
+    const s = sanitizeCapability(withArtifactHash(dirty), { records: env.records });
     expect(s.rejected).toEqual([]);
     expect(s.ok).toBe(true);
     const out = JSON.stringify(s.capability);

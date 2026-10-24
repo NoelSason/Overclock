@@ -266,7 +266,8 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Known limitations
 
-- Mode E is new code with no end-to-end test or recorded run yet.
+- Mode E is new code with no end-to-end test or recorded run yet. It also writes the local
+  program cache but never reads it, so a warm-cache mode E run repeats discovery and planning.
 - Online access-path substitution and online strategy re-optimization are not wired into the
   engine. The `accessPaths` and `onlineReoptimization` ablation switches have no effect yet.
 - The Overclock Network is not connected to the engine. The `network-read` and
