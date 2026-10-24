@@ -49,7 +49,10 @@ export class IncrementalCompiler {
 
   constructor(private readonly o: IncrementalOptions) {}
 
-  /** Register a phase from its streamed header. Returns the PhaseInfo for the scheduler. */
+  /**
+   * Register a phase from its streamed header. Returns the PhaseInfo for the scheduler, which owns
+   * `segmentIds` from then on (released segments are added through scheduler.addSegments).
+   */
   addPhase(raw: Record<string, unknown>): PhaseInfo | null {
     const id = String(raw.id ?? "");
     if (!id || this.phases.has(id)) return null;
@@ -171,7 +174,6 @@ export class IncrementalCompiler {
       const seg: CompiledSegment = { ...s, id: stableId, dependsOn: deps as string[], phaseId: ps.header.id };
       ps.frozen.push(seg);
       for (const n of seg.nodes) ps.nodeSeg.set(n.id, stableId);
-      ps.info.segmentIds.push(stableId);
       const rel: ReleasedFragment = { phaseId: ps.header.id, segment: seg, pure, write };
       released.push(rel);
       this.releasedOrder.push(rel);

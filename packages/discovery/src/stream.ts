@@ -48,6 +48,17 @@ export class PlanStreamWatcher {
     try {
       this.scan();
     } catch (err) {
+      // Only parser bugs land here; skip the offending character so the stream stays in sync.
+      this.pos++;
+      this.h.onError?.(err as Error);
+    }
+  }
+
+  /** Handler failures must never desynchronize the parser. */
+  private safe(fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
       this.h.onError?.(err as Error);
     }
   }
@@ -111,15 +122,18 @@ export class PlanStreamWatcher {
           if (!f) break;
           const p = f.path;
           if (f.type === "object" && p.length === 4 && p[0] === "phases" && typeof p[1] === "number" && p[2] === "steps" && typeof p[3] === "number") {
-            this.h.onStep?.(p[1], p[3], JSON.parse(s.slice(f.start, this.pos + 1)) as Record<string, unknown>);
+            const step = JSON.parse(s.slice(f.start, this.pos + 1)) as Record<string, unknown>;
+            const [pi, si] = [p[1], p[3]];
+            this.safe(() => this.h.onStep?.(pi, si, step));
           } else if (f.type === "object" && p.length === 2 && p[0] === "phases" && typeof p[1] === "number") {
             const phase = JSON.parse(s.slice(f.start, this.pos + 1)) as Record<string, unknown>;
-            if (!this.headerSent.has(p[1])) {
+            const pi = p[1];
+            if (!this.headerSent.has(pi)) {
               const { steps: _s, ...header } = phase;
-              this.headerSent.add(p[1]);
-              this.h.onPhaseHeader?.(p[1], header);
+              this.headerSent.add(pi);
+              this.safe(() => this.h.onPhaseHeader?.(pi, header));
             }
-            this.h.onPhaseEnd?.(p[1], phase);
+            this.safe(() => this.h.onPhaseEnd?.(pi, phase));
           }
           this.expectKey = false;
           break;
@@ -144,7 +158,7 @@ export class PlanStreamWatcher {
       const header = JSON.parse(partial) as Record<string, unknown>;
       if (!("id" in header) || !("kind" in header)) return; // fields arrive later; the phase end will report them
       this.headerSent.add(index);
-      this.h.onPhaseHeader?.(index, header);
+      this.safe(() => this.h.onPhaseHeader?.(index, header));
     } catch {
       // incomplete header (unexpected key order); reported at phase end instead
     }

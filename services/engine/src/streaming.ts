@@ -172,7 +172,7 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
       release(phaseId, ic.sealPhase(phaseId).released);
       executor.scheduler.sealPhase(phaseId);
     },
-    onError: (err) => emit({ type: "log", level: "warn", message: `plan stream parse: ${err.message}` }),
+    onError: (err) => emit({ type: "log", level: "warn", message: `streamed step handling failed: ${err.message.slice(0, 200)}` }),
   });
 
   const directive = directives[0]!;
@@ -182,6 +182,7 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     const r = await ctx.stage("planning", "streaming planner", () => ctx.agent(`workflow-scout:${directive.name}`, "planner", `Workflow Scout · ${directive.name} (streaming)`, { model: d.claude.modelFor("planner") }, () => generatePlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, signal: d.signal, onText: (delta) => watcher.push(delta) })));
     plan = r.data;
     repaired = r.repaired;
+    d.saveArtifact(`workflow-scout:${directive.name}`, "plan", "Raw planner stream", `${watcher.text.length} characters streamed`, { text: watcher.text.slice(0, 200_000) }, { chars: watcher.text.length });
     emit({ type: "candidate.proposed", candidateId: "stream-1", name: plan.strategy.name, summary: plan.strategy.summary, agentId: `workflow-scout:${directive.name}` });
     d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${plan.strategy.name}`, `${plan.phases.length} phase(s), ${plan.phases.reduce((x, p) => x + p.steps.length, 0)} steps, streamed; first text after ${r.firstTextMs ? Math.round(r.firstTextMs) : "?"} ms; ${ic.releasedOrder.length} fragment(s) released during the stream`, { plan }, { phases: plan.phases.length, fragments: ic.releasedOrder.length });
   } catch (err) {

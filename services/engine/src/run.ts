@@ -41,8 +41,11 @@ export class RunController implements RunHandle {
   private summary: RunSummary | null = null;
   private done = false;
   private artifactSeq = 0;
+  /** App-model controls seen by this run (for recovery's structural matching). */
+  readonly controlIndex = new Map<string, import("@overclock/contracts").AppControl>();
   readonly claude: ClaudeProvider;
   readonly jev: JevProvider;
+  private recoveryStats?: () => unknown;
 
   constructor(
     readonly config: RunConfig,
@@ -72,6 +75,9 @@ export class RunController implements RunHandle {
 
   saveArtifact(agentId: string, kind: ArtifactSummary["kind"], title: string, summary: string, data: unknown, stats?: Record<string, number | string>): string {
     const artifactId = `a${++this.artifactSeq}-${kind}`;
+    if (kind === "app-model" && data && typeof data === "object" && "controls" in data) {
+      for (const [id, c] of Object.entries((data as { controls: Record<string, import("@overclock/contracts").AppControl> }).controls)) this.controlIndex.set(id, c);
+    }
     this.artifacts.set(artifactId, data);
     this.store?.saveArtifact(this.runId, artifactId, kind, title, data);
     this.emit({ type: "agent.artifact", agentId, artifact: { artifactId, kind, title, summary, stats } });
@@ -136,6 +142,7 @@ export class RunController implements RunHandle {
       jev: this.jev.usable ? this.jev : undefined,
       claude: this.claude.available ? this.claude : undefined,
       emit: (e) => this.emit(e),
+      lookupControl: (id) => this.controlIndex.get(id),
       onRepairStart: (seg) => this.executor?.scheduler.suspendSegment(seg, "model-assisted repair in progress"),
       onRepairEnd: (seg) => {
         this.executor?.scheduler.resumeSegment(seg);
@@ -143,6 +150,7 @@ export class RunController implements RunHandle {
       },
     });
 
+    this.recoveryStats = () => recovery.stats();
     if (mode === "overclock" && this.config.ablation.streaming !== false) {
       await runStreamingPipeline({ run: this, swarmDeps, executeState, recovery, setExecutor: (e) => (this.executor = e), setProgram: (p) => (this.programSummary = p) });
     } else {
@@ -264,7 +272,7 @@ export class RunController implements RunHandle {
     return { runId: this.runId, status: this.viewState.status, summary: this.summary, outcomes: this.outcomesList.length ? this.outcomesList : (this.executor?.outcomes() ?? []), verificationSemantics: VERIFICATION_SEMANTICS };
   }
   metrics(): unknown {
-    return { summary: this.summary, derived: deriveMetrics(this.viewState), spans: this.tracer.summary(), latency: this.latency.snapshot(), ledger: this.ledger.totals(), recovery: (this.executor as unknown as { recoveryStats?: unknown })?.recoveryStats };
+    return { summary: this.summary, derived: deriveMetrics(this.viewState), spans: this.tracer.summary(), latency: this.latency.snapshot(), ledger: this.ledger.totals(), recovery: this.recoveryStats?.() };
   }
   trace(): unknown {
     return this.tracer.toOtlpJson();

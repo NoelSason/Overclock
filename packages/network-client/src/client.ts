@@ -534,6 +534,12 @@ export class NetworkClient implements INetworkClient {
     return v ? toCandidate(v, this.successfulReuses(v.versionId)) : null;
   }
 
+  /** Cached registry metadata for any version of a watched origin (not only the active one). */
+  versionInfo(versionId: string): CapabilityCandidate | null {
+    const v = this.conn?.db.capabilityVersions.versionId.find(versionId);
+    return v ? toCandidate(v, this.successfulReuses(v.versionId)) : null;
+  }
+
   repairJob(jobId: string): RepairJobView | null {
     const row = this.conn?.db.repairJobs.jobId.find(jobId);
     return row ? toRepairJobView(row) : null;

@@ -26,6 +26,9 @@ import type { Tracer } from "@overclock/telemetry";
 
 export interface RepairProvider {
   repair(args: Parameters<NonNullable<SegmentHooks["repair"]>>[0] & { taskId: string; segmentId?: string }): Promise<RepairResult | null>;
+  /** Reports later reuse of a learned repair (repair propagation accounting). */
+  noteReuse?(info: Parameters<NonNullable<SegmentHooks["onReuse"]>>[0]): void;
+  stats?(): unknown;
 }
 
 export interface ExecutorOptions {
@@ -204,9 +207,19 @@ export class Executor {
     }
   }
 
+  /** Workers being created (async); counted synchronously so pool growth can't overshoot. */
+  private spawning = 0;
+  private spawned = 0;
+
   private async spawnWorker(): Promise<void> {
-    const id = `w${this.pool.length + 1}`;
-    const ctx = await this.o.browser.newContext({ allowedOrigins: this.o.apps.map((a) => a.origin), storageState: this.o.storageState });
+    this.spawning++;
+    const id = `w${++this.spawned}`;
+    let ctx;
+    try {
+      ctx = await this.o.browser.newContext({ allowedOrigins: this.o.apps.map((a) => a.origin), storageState: this.o.storageState });
+    } finally {
+      this.spawning--;
+    }
     const worker = new BrowserWorker(id, ctx, new Map(this.o.apps.map((a) => [a.name, a.origin])), (w, state, info) => this.o.emit({ type: "worker.state", workerId: w.id, state, taskId: info.taskId, app: info.app, op: info.op, label: info.label }));
     const aw: ActiveWorker = { worker, busy: false, lastThumb: 0, thumbs: 0 };
     this.pool.push(aw);
@@ -221,7 +234,7 @@ export class Executor {
     let want = 0;
     for (const a of apps) want += Math.min(this.capFor(a), this.scheduler.readyCount(a) + this.scheduler.activeCount(a));
     want = Math.min(this.o.workers.max, want);
-    while (this.pool.length < want) void this.spawnWorker();
+    for (let have = this.pool.length + this.spawning; have < want; have++) void this.spawnWorker();
   }
 
   private async drainInline(): Promise<void> {
@@ -369,6 +382,7 @@ export class Executor {
           }
         : undefined,
       approve: async () => this.approvedTasks.has(t.taskId),
+      onReuse: this.o.recovery?.noteReuse ? (i) => this.o.recovery!.noteReuse!(i) : undefined,
     };
     try {
       const r = await runSegment(w, { taskId: t.taskId, segmentId: seg.id, app, nodes: seg.nodes, scope: t.record.scope, allowedOrigins: new Set(this.o.apps.map((a) => new URL(a.origin).origin)), locatorOverrides: overrides }, hooks);

@@ -67,7 +67,12 @@ describe("export", () => {
     expect(json).not.toMatch(/ORD-\d+|C-\d{3,}|TCK-\d+|@example\.|nth-of-type|exampleUrl|sample/);
     for (const c of cap.controls) for (const s of c.strategies) if (s.kind === "css") expect(s.selector).toMatch(/^xpath=\/\/(dt|tr\/th)\[normalize-space\(\)=/);
     const keys = cap.controls.map((c) => c.key);
-    expect(keys).toEqual(expect.arrayContaining(["Orders:/orders:table:table", "Orders:/orders/:id:fact:review_review_reason", "Orders:/orders/:id/edit:select:status", "Orders:/orders/:id/edit:input:review_reason", "Orders:/orders/:id/edit:button:update_order", "Support:/tickets:table:table"]));
+    expect(keys).toEqual(expect.arrayContaining(["Orders:/orders/:id:fact:review_review_reason", "Orders:/orders/:id/edit:select:status", "Orders:/orders/:id/edit:input:review_reason", "Orders:/orders/:id/edit:button:update_order"]));
+    // Tables are keyed by a data-free name (perception may name them by caption or by headers).
+    const ordersTable = cap.controls.find((c) => c.app === "Orders" && c.routeFamily === "/orders" && c.kind === "table")!;
+    const ticketsTable = cap.controls.find((c) => c.app === "Support" && c.routeFamily === "/tickets" && c.kind === "table")!;
+    expect(ordersTable.key).toMatch(/^Orders:\/orders:table:[a-z_]+$/);
+    expect(ticketsTable.key).toMatch(/^Support:\/tickets:table:[a-z_]+$/);
     for (const r of controlRefs(cap.procedure.plan)) expect(keys).toContain(r.ref);
     const status = cap.controls.find((c) => c.key === "Orders:/orders/:id/edit:select:status")!;
     expect(status.options?.map((o) => o.value)).toEqual(["processing", "shipped", "delivered", "refunded", "cancelled"]);
@@ -75,15 +80,15 @@ describe("export", () => {
     const save = cap.controls.find((c) => c.key === "Orders:/orders/:id/edit:button:update_order")!;
     expect(save.effect).toBe("remote-write");
     expect(save.formSignature).toBe(status.formSignature);
-    const table = cap.controls.find((c) => c.key === "Orders:/orders:table:table")!;
-    expect(table.name).toBe("table"); // caption "8 orders · showing 1–8" carries counts
-    expect(table.headers?.map((h) => h.toLowerCase())).toEqual(["order id", "customer id", "customer email", "status", "total", "placed"]);
+    // The caption ("8 orders · showing 1–8") carries counts: never part of the name or key.
+    expect(ordersTable.name).not.toMatch(/\d/);
+    expect(ordersTable.headers?.map((h) => h.toLowerCase())).toEqual(["order id", "customer id", "customer email", "status", "total", "placed"]);
 
     const pages = Object.fromEntries(cap.pages.map((p) => [`${p.app} ${p.routeFamily}`, p]));
     expect(Object.keys(pages).sort()).toEqual(["Orders /orders", "Orders /orders/:id", "Orders /orders/:id/edit", "Support /tickets"]);
     expect(pages["Orders /orders/:id"]!.pathTemplate).toBe("/orders/{orderId}");
     expect(pages["Orders /orders/:id/edit"]!.pathTemplate).toBe("/orders/{orderId}/edit");
-    expect(pages["Orders /orders/:id"]!.reachVia).toEqual({ routeFamily: "/orders", tableKey: "Orders:/orders:table:table" });
+    expect(pages["Orders /orders/:id"]!.reachVia).toEqual({ routeFamily: "/orders", tableKey: ordersTable.key });
     expect(pages["Orders /orders/:id/edit"]!.reachVia?.routeFamily).toBe("/orders/:id");
     for (const p of cap.pages) {
       expect(p.pageFingerprint).toMatch(/^[0-9a-f]{12}$/);
@@ -216,7 +221,7 @@ describe("static analysis", () => {
       ["undeclared effect", tamper((c) => (c.requirements.expectedEffects = [])), "undeclared-effect"],
       ["missing verification", tamper((c) => (stepById<"submit">(c, "save").verify.fields = [])), "missing-verification"],
       ["missing guard", tamper((c) => (stepById<"submit">(c, "save").guards = [])), "missing-guard"],
-      ["control on another app", tamper((c) => (stepById<"fill">(c, "set_reason").control = "Support:/tickets:table:table")), "control-app-mismatch"],
+      ["control on another app", tamper((c) => (stepById<"fill">(c, "set_reason").control = c.controls.find((x) => x.app === "Support")!.key)), "control-app-mismatch"],
     ];
     for (const [name, bad, code] of cases) {
       const a = analyzeCapability(bad);
