@@ -1,0 +1,17 @@
+{
+  "name": "@overclock/recovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@overclock/contracts": "workspace:*",
+    "@overclock/perception": "workspace:*",
+    "@overclock/models": "workspace:*",
+    "@overclock/compiler": "workspace:*",
+    "@overclock/telemetry": "workspace:*",
+    "playwright": "1.64.1"
+  }
+}

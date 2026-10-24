@@ -1,0 +1,20 @@
+{
+  "name": "@overclock/benchmarks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@overclock/contracts": "workspace:*",
+    "@overclock/sdk": "workspace:*",
+    "@overclock/telemetry": "workspace:*",
+    "@overclock/models": "workspace:*",
+    "@overclock/browser-runtime": "workspace:*",
+    "@overclock/perception": "workspace:*",
+    "@overclock/compiler": "workspace:*",
+    "@overclock/arena": "workspace:*",
+    "playwright": "1.64.1"
+  }
+}

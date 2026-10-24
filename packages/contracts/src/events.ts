@@ -1,0 +1,67 @@
+import type { CostEstimate, ExecutionMode, PassReport, RunConfig, RunStatus, RunSummary, SegmentTemplate, PhaseTemplate, TaskState, VerificationStatus, WorkerState } from "./run";
+
+/**
+ * Append-only execution history. Every event is persisted before it is broadcast, and the
+ * dashboard reconstructs run state by replaying events through the shared reducer.
+ */
+
+export type AgentRole = "ui-scout" | "workflow-scout" | "dependency-scout" | "optimization-scout" | "adversarial-verifier" | "planner" | "repair";
+
+export interface ArtifactSummary {
+  artifactId: string;
+  kind: "app-model" | "plan-candidates" | "risk-report" | "dependency-report" | "cost-estimates" | "dry-run" | "effect-classification" | "plan" | "patch";
+  title: string;
+  /** Short human summary; full artifact is fetched from /runs/:id/artifacts/:artifactId. */
+  summary: string;
+  stats?: Record<string, number | string> | undefined;
+}
+
+type E<T extends string, P> = { type: T } & P;
+
+export type EventPayload =
+  | E<"run.created", { config: RunConfig }>
+  | E<"run.status", { status: RunStatus; reason?: string }>
+  | E<"run.completed", { summary: RunSummary }>
+  | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
+  | E<"agent.started", { agentId: string; role: AgentRole; label: string; model?: string; app?: string }>
+  | E<"agent.artifact", { agentId: string; artifact: ArtifactSummary }>
+  | E<"agent.finished", { agentId: string; ok: boolean; ms: number; error?: string }>
+  | E<"candidate.proposed", { candidateId: string; name: string; summary: string; agentId: string }>
+  | E<"candidate.evaluated", { candidateId: string; estimate: CostEstimate | null; valid: boolean; issues: string[] }>
+  | E<"candidate.selected", { candidateId: string; reason: string; ranking: { candidateId: string; totalMs: number | null }[] }>
+  | E<"program.compiled", { programId: string; strategy: string; phases: PhaseTemplate[]; segments: SegmentTemplate[]; passes: PassReport[]; nodeCount: number; compileMs: number }>
+  | E<"program.patched", { programId: string; segmentIds: string[]; reason: string; level: number }>
+  | E<"tasks.created", { tasks: { taskId: string; segmentId: string; phaseId: string; recordKey: string }[] }>
+  | E<"task.state", { taskId: string; state: TaskState; workerId?: string; attempt?: number; error?: string; ms?: number }>
+  | E<"worker.state", { workerId: string; state: WorkerState; taskId?: string; app?: string; op?: string; label?: string }>
+  | E<"worker.thumb", { workerId: string; url: string }>
+  | E<"action", { taskId: string; nodeId: string; actionType: string; ms: number; ok: boolean; modelCalls: number; locatorTier?: number; detail?: string }>
+  | E<"receipt", { taskId: string; recordKey: string; status: VerificationStatus; nodeId: string; fields: { name: string; expected: unknown; actual: unknown }[] }>
+  | E<"lock.conflict", { taskId: string; resource: string; holder: string }>
+  | E<"recovery", { taskId: string; level: number; phase: "started" | "succeeded" | "failed" | "escalated"; reason: string; detail?: string; ms?: number; propagatedTo?: number }>
+  | E<"invalidation", { taskId: string; recordKey: string; reason: string; invalidated: string[] }>
+  | E<"model.call", { provider: "anthropic" | "typesafe"; model: string; purpose: string; ms: number; inputTokens: number; outputTokens: number; costUsd: number; ok: boolean; error?: string }>
+  | E<"concurrency", { app: string; limit: number; reason: string }>
+  | E<"reopt.decision", { switched: boolean; reason: string; remainingMs: number; alternativeMs: number | null; alternative?: string }>
+  | E<"approval.requested", { approvalId: string; taskId: string; nodeId: string; description: string }>
+  | E<"approval.resolved", { approvalId: string; approved: boolean }>
+  | E<"log", { level: "debug" | "info" | "warn" | "error"; message: string }>;
+
+export type EventType = EventPayload["type"];
+
+export type RunEvent = EventPayload & {
+  runId: string;
+  seq: number;
+  /** Wall clock (ms since epoch). */
+  ts: number;
+  /** Monotonic ms since run start. */
+  t: number;
+};
+
+export type EventOf<T extends EventType> = Extract<RunEvent, { type: T }>;
+
+export interface EventSink {
+  emit(event: EventPayload): RunEvent;
+}
+
+export type { ExecutionMode };
