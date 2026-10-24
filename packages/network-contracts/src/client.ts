@@ -82,6 +82,8 @@ export interface INetworkClient {
   activeVersion(capabilityId: string): CapabilityCandidate | null;
   /** Cached metadata for any version of a watched origin (not only the active one). */
   versionInfo(versionId: string): CapabilityCandidate | null;
+  /** Cached versions of watched origins currently in `state` (e.g. a validator's PROPOSED backlog). */
+  versionsInState(state: PublicationState): CapabilityCandidate[];
 
   reportFailure(sig: FailureSignature): Promise<{ jobId: string; existing: boolean }>;
   claimRepair(jobId: string, leaseMs: number): Promise<RepairLease>;

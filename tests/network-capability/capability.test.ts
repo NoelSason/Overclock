@@ -151,7 +151,8 @@ describe("sanitizer", () => {
     expect(s.rejected).toEqual([]);
     expect(s.ok).toBe(true);
     const out = JSON.stringify(s.capability);
-    expect(out).not.toMatch(/jane|555|ORD-50012|C-1001|nth-of-type|Duplicate customer|"sample"/);
+    // The phone pattern must not match ephemeral ports such as 127.0.0.1:55598.
+    expect(out).not.toMatch(/jane|\(555\)|234-5678|ORD-50012|C-1001|nth-of-type|Duplicate customer|"sample"/);
     const c = s.capability.controls.find((x) => x.key === c0.key)!;
     expect(c.name).toBe("Reason for {email}");
     expect(c.label).toBe("Call {phone} about {id}");

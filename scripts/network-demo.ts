@@ -142,6 +142,21 @@ async function main(): Promise<void> {
   try {
     await Promise.all([engineReady(engineA), engineReady(engineB)]);
 
+    // The validator runs as a service: it picks up every PROPOSED version for the arena's apps.
+    const health = (await arena.health()) as { origins: Record<string, string> };
+    const apps = Object.entries(health.origins).map(([name, origin]) => ({ name, origin }));
+    const sessions = new SessionManager(browser, () => ({ username: process.env.ARENA_USERNAME || "operator", password: process.env.ARENA_PASSWORD || "overclock-arena" }));
+    let validation: { versionId: string; outcome: string; category: string; ms: number } | null = null;
+    const worker = await startValidationWorker({
+      client: validator,
+      browser,
+      apps,
+      environment: "demo-validator",
+      storageStateFor: (x) => sessions.storageStateFor(x),
+      onResult: (r) => (validation = { versionId: r.result.versionId, outcome: r.result.outcome, category: r.result.category, ms: Math.round(r.ms) }),
+      onSkip: (v, reason) => console.log(`validator skipped ${v}: ${reason}`),
+    });
+
     // 1. Runtime A: cold discovery, execution, verification, publication.
     await arena.resetVariations();
     const scenarioA = await arena.loadScenario({ seed, template: "t1-order-reconcile", records });
@@ -156,12 +171,7 @@ async function main(): Promise<void> {
     console.log(`A proposed ${versionId} (${pub.bytes} bytes, ${pub.redactions} redactions, ${pub.ms} ms)`);
 
     // 2. Independent validation, then promotion by the admin.
-    const health = (await arena.health()) as { origins: Record<string, string> };
-    const apps = Object.entries(health.origins).map(([name, origin]) => ({ name, origin }));
-    const sessions = new SessionManager(browser, () => ({ username: process.env.ARENA_USERNAME || "operator", password: process.env.ARENA_PASSWORD || "overclock-arena" }));
-    let validation: { outcome: string; category: string; ms: number } | null = null;
-    const worker = await startValidationWorker({ client: validator, browser, apps, environment: "demo-validator", storageStateFor: (x) => sessions.storageStateFor(x), onResult: (r) => (validation = { outcome: r.result.outcome, category: r.result.category, ms: Math.round(r.ms) }) });
-    await waitFor(() => validation !== null, 120_000, "validation");
+    await waitFor(() => validation?.versionId === versionId, 180_000, "validation");
     await worker.stop();
     console.log(`validator: ${JSON.stringify(validation)}`);
     if (validation!.outcome !== "pass") throw new Error("validation failed; not promoting");

@@ -83,6 +83,10 @@ export class DisabledNetworkClient implements INetworkClient {
   versionInfo(_versionId: string): CapabilityCandidate | null {
     return null;
   }
+  versionsInState(_state: PublicationState): CapabilityCandidate[] {
+    return [];
+  }
+
 
   async reportFailure(_sig: FailureSignature): Promise<{ jobId: string; existing: boolean }> {
     this.fail("reportFailure");

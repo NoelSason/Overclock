@@ -88,6 +88,8 @@ export async function startValidationWorker(opts: ValidationWorkerOptions): Prom
     pump();
   };
   const unsubscribe = client.onCapabilityChange(onChange);
+  // The first sync of an origin is state, not a change: queue proposals that already exist.
+  for (const v of client.versionsInState("PROPOSED")) onChange({ capabilityId: v.capabilityId, versionId: v.versionId, version: v.version, state: "PROPOSED", committedAt: v.updatedAt, receivedAt: Date.now() });
 
   return {
     get processed() {

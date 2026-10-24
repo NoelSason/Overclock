@@ -564,6 +564,14 @@ export class NetworkClient implements INetworkClient {
     return v ? toCandidate(v, this.successfulReuses(v.versionId)) : null;
   }
 
+  versionsInState(state: PublicationState): CapabilityCandidate[] {
+    const conn = this.conn;
+    if (conn === null) return [];
+    const out: CapabilityCandidate[] = [];
+    for (const v of conn.db.capabilityVersions.iter()) if (v.state === state) out.push(toCandidate(v, this.successfulReuses(v.versionId)));
+    return out.sort((a, b) => a.updatedAt - b.updatedAt);
+  }
+
   repairJob(jobId: string): RepairJobView | null {
     const row = this.conn?.db.repairJobs.jobId.find(jobId);
     return row ? toRepairJobView(row) : null;
