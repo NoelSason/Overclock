@@ -24,6 +24,7 @@ import {
   generateReport,
   isFailedRun,
   median,
+  onlyLabels,
   p95,
   percentile,
   planMode,
@@ -291,6 +292,15 @@ describe("benchmark planning", () => {
     expect(plan.every((r) => r.overrides.thumbnails === false)).toBe(true);
     expect(planSuite("all", { ...opts, includeSequential100: true, includeExternal: true })).toHaveLength(40 + 1 + 6);
     expect(planSuite("all", { ...opts, conditions: ["local"] }).every((r) => r.condition === "local")).toBe(true);
+  });
+
+  it("keeps only the requested labels and renumbers warm-run dependencies", () => {
+    const plan = onlyLabels(planSuite("all", opts), ["overclock", "compiled-single"]);
+    expect(new Set(plan.map((r) => r.label))).toEqual(new Set(["overclock", "compiled-single"]));
+    expect(plan.map((r) => r.index)).toEqual(plan.map((_, i) => i));
+    for (const w of plan.filter((r) => r.cache === "warm")) {
+      expect(plan[w.after!]).toMatchObject({ label: "overclock", cache: "cold", condition: w.condition, trial: w.trial });
+    }
   });
 
   it("plans ablations with the ladder and the removal rungs", () => {

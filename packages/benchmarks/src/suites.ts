@@ -272,6 +272,17 @@ function rotate<T>(xs: readonly T[], k: number): T[] {
   return [...xs.slice(s), ...xs.slice(0, s)];
 }
 
+/**
+ * Keep only runs with these labels, in plan order, renumbered. A warm run keeps its dependency on
+ * its cold run (same label, so it is kept too).
+ */
+export function onlyLabels(plan: readonly PlannedRun[], labels: readonly string[]): PlannedRun[] {
+  const keep = new Set(labels);
+  const kept = plan.filter((r) => keep.has(r.label));
+  const renumber = new Map(kept.map((r, i) => [r.index, i]));
+  return kept.map((r, i) => ({ ...r, index: i, after: r.after === undefined ? undefined : renumber.get(r.after) }));
+}
+
 /** `--mode <m>`: `trials` cold runs of one mode under each requested condition (default local). */
 export function planMode(mode: ModeName, opts: PlanOptions): PlannedRun[] {
   checkCounts(opts);

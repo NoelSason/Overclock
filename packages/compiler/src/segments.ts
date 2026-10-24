@@ -21,6 +21,9 @@ function label(app: string | undefined, nodes: ActionNode[]): string {
   return `${app ?? "compute"} · ${ops.join(" → ")}`;
 }
 
+/** Node types that never change page or app state: a page they ran on can be re-opened safely. */
+export const PURE_TYPES: ReadonlySet<string> = new Set(["navigate", "extract", "compute", "assert", "waitFor", "branch", "checkpoint"]);
+
 /**
  * Pass 5 (navigation grouping): partition a scope's nodes into segments — maximal page chains on
  * one app that a single worker executes back to back. Invariants:
@@ -28,7 +31,10 @@ function label(app: string | undefined, nodes: ActionNode[]): string {
  *    reconciliation never repeats an earlier, already-committed write);
  *  - a node joins the open segment of its app only if it continues that page chain and every
  *    other dependency is already upstream of the segment (the segment graph stays acyclic);
- *  - pure computations at join points become browser-free compute segments.
+ *  - pure computations at join points become browser-free compute segments;
+ *  - a page action that cannot join its chain without a cycle (it needs a decision computed from
+ *    that same chain's reads) starts a new segment that re-opens the page, provided only reads
+ *    ran on the page since it was opened.
  */
 export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n: ActionNode) => number, external: ReadonlyMap<string, string> = new Map()): CompiledSegment[] {
   const scopeIds = new Set(nodes.map((n) => n.id));
@@ -103,7 +109,18 @@ export function formSegments(phaseId: string, nodes: ActionNode[], estimate: (n:
     if (!target && n.app && n.type !== "navigate") {
       // A page action that cannot join its page's chain would run on a page no worker loaded.
       const pageDep = deps.map((d) => (segOf.has(d) ? byId.get(segOf.get(d)!) : undefined)).find((s) => s?.app === n.app);
-      if (pageDep && !pageDep.closed) throw new Error(`Cannot place ${n.id}: its page chain on ${n.app} would form a cycle`);
+      if (pageDep && !pageDep.closed) {
+        const nav = [...pageDep.nodes].reverse().find((x) => x.type === "navigate");
+        const since = nav ? pageDep.nodes.slice(pageDep.nodes.indexOf(nav) + 1) : [];
+        if (!nav || !since.every((x) => PURE_TYPES.has(x.type))) throw new Error(`Cannot place ${n.id}: its page chain on ${n.app} would form a cycle`);
+        const renav: ActionNode = { ...nav, id: `${n.id}__renav`, dependsOn: [...nav.dependsOn], description: `re-open page for ${n.id}` };
+        target = newSeg(renav, depSegs);
+        target.nodeIds.push(renav.id);
+        target.nodes.push(renav);
+        target.kind = "read";
+        target.estimatedMs += estimate(renav);
+        segOf.set(renav.id, target.id);
+      }
     }
     const seg = target ?? newSeg(n, depSegs);
     seg.nodeIds.push(n.id);

@@ -1,6 +1,6 @@
 import type { ActionNode, AppBinding, AppModel, DslPhase, DslPlan, DslStep } from "@overclock/contracts";
 import { dependencyAnalysis, verificationPlacement } from "./passes";
-import { formSegments, type CompiledSegment, type PhaseInfo } from "./segments";
+import { formSegments, PURE_TYPES, type CompiledSegment, type PhaseInfo } from "./segments";
 import { lowerPlan, type Issue } from "./lower";
 import { validateProgram } from "./validate";
 import type { NodeEstimator } from "./compile";
@@ -23,7 +23,6 @@ export interface ReleasedFragment {
   write: boolean;
 }
 
-const PURE_TYPES = new Set(["navigate", "extract", "compute", "assert", "waitFor", "branch", "checkpoint"]);
 const isWrite = (n: ActionNode) => n.effect === "remote-write" || n.effect === "irreversible";
 
 interface PhaseState {

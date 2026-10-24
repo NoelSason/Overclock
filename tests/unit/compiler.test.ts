@@ -76,6 +76,38 @@ describe("lowering and validation", () => {
     expect(body.find((n) => n.id === "save")!.preconditions).toHaveLength(0);
   });
 
+  it("re-opens a page when acting on it needs a decision computed from that page's own reads", () => {
+    // Seen live: open the ticket, read it, read the order elsewhere, decide from both, then act on
+    // the ticket page. Joining the ticket chain would make it depend on itself.
+    const cyc: DslStep[] = [
+      { id: "open_order", op: "goto", app: "Orders", url: "/orders/{$rec.orderId}" },
+      { id: "read_order", op: "extract", fields: [{ name: "status", control: "orders.detail.status", parse: "string" }] },
+      { id: "open_ticket", op: "goto", app: "Support", url: "/tickets/{$rec.ticketId}" },
+      { id: "read_ticket", op: "extract", fields: [{ name: "status", control: "support.detail.status", parse: "string" }] },
+      { id: "decide", op: "compute", assign: [{ name: "go", expr: "$out.read_order.status == 'refunded' && $out.read_ticket.status != 'resolved'" }] },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "'resolved'", when: "$out.decide.go" },
+      {
+        id: "save",
+        op: "submit",
+        control: "support.edit.submit",
+        when: "$out.decide.go",
+        writes: ["app:support:ticket:{$rec.ticketId}"],
+        guards: [],
+        verify: { url: "/tickets/{$rec.ticketId}", fields: [{ name: "status", control: "support.detail.status", equals: "'resolved'" }] },
+        irreversible: false,
+      },
+    ];
+    const { program, issues } = lower(plan(cyc));
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const c = compileProgram(program);
+    const write = [...c.segments.values()].find((x) => x.kind === "write")!;
+    expect(write.nodeIds[0]).toBe("set_status__renav");
+    expect(write.nodes[0]!.type).toBe("navigate");
+    expect(write.nodes[0]!.url).toEqual(program.nodes[0]!.body!.find((n) => n.id === "open_ticket")!.url);
+    const decideSeg = [...c.segments.values()].find((x) => x.nodeIds.includes("decide"))!;
+    expect(write.dependsOn).toContain(decideSeg.id);
+  });
+
   it("rejects controls that were never observed", () => {
     const bad = steps.map((s) => (s.id === "set_status" ? { ...s, control: "support.edit.priority" } : s));
     expect(lower(plan(bad as DslStep[])).issues.some((i) => i.code === "unknown-control")).toBe(true);

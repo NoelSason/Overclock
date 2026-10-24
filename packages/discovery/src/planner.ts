@@ -38,6 +38,8 @@ export const PLANNER_SYSTEM = `You are the Workflow Scout of Overclock, an execu
 # Quality bar
 - Reference only control ids that appear in <observed_apps>, exactly as written. Use the right app for each control. Choose select values from the listed options.
 - Read every value a decision needs before deciding; decide in compute steps; write only when the rules require a change.
+- When comparing values that come from different applications (emails, names, ids), normalize both sides the same way (lower(trim(x))).
+- When a decision counts or matches rows of a search or list table, read every page (paginateNext) unless the page shows that all results fit.
 - Minimise page loads: read each entity once; don't reload a page you're already on; prefer list or search pages that show all needed columns over opening many detail pages when the strategy directive allows. The runtime parallelises across records automatically, so don't try to batch records yourself unless the strategy says so.
 - Batch-level rules (counting across all records) go in a later foreach phase over a list computed from $phase.<per-record phase> with countBy/filterBy/pluck/entries/unique, keyed by the entity id.
 - outcomes: list the business outcomes to verify. assumptions/risks: short and specific.`;

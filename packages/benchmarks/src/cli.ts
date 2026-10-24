@@ -17,6 +17,7 @@ import {
   isConditionName,
   MODE_NAMES,
   planMode,
+  onlyLabels,
   planSuite,
   SUITE_NAMES,
   type ConditionName,
@@ -51,6 +52,8 @@ const USAGE = `Usage: tsx packages/benchmarks/src/cli.ts (--mode <m> | --suite <
   --label <tag>       tag this invocation; results go to suite "<suite>@<tag>"
   --include-sequential-100   also run sequential at 100 records in the all suite
   --no-external       do not run the external baseline even when its package is present
+  --only <labels>     run only these labels of the plan (comma-separated); results pool with the
+                      rest of the suite's runs from other invocations
   --dry               print the planned runs and counts without executing anything
   --spawn             start pnpm arena and pnpm engine, wait for health, stop them at the end
 `;
@@ -280,6 +283,7 @@ async function main(argv: string[]): Promise<number> {
       label: { type: "string" },
       "include-sequential-100": { type: "boolean", default: false },
       "no-external": { type: "boolean", default: false },
+      only: { type: "string" },
       dry: { type: "boolean", default: false },
       spawn: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -340,6 +344,12 @@ async function main(argv: string[]): Promise<number> {
     const suite = values.suite ?? "";
     if (!(SUITE_NAMES as readonly string[]).includes(suite)) throw new UsageError(`--suite must be one of ${SUITE_NAMES.join(", ")}; got "${suite}"`);
     plan = planSuite(suite as SuiteName, planOpts);
+  }
+  if (values.only) {
+    const labels = values.only.split(",").map((x) => x.trim()).filter(Boolean);
+    const unknown = labels.filter((l) => !plan.some((r) => r.label === l));
+    if (unknown.length) throw new UsageError(`--only names labels that are not in this plan: ${unknown.join(", ")}`);
+    plan = onlyLabels(plan, labels);
   }
   const suiteName = plan[0]?.suite ?? values.suite ?? "modes";
   const freezeId = process.env[HOLDOUT_FREEZE_ENV]?.trim() || undefined;
