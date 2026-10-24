@@ -196,6 +196,18 @@ function codeVersion(root: string): string | undefined {
   }
 }
 
+/**
+ * First argument passed to the adapter's `runExternal`: the run config (goal, applications, records,
+ * exactly what the engine gets) plus the arena operator login and an abort signal. This satisfies
+ * both `runExternal(config, scenario)` and the adapter's own `ExternalRunInput` shape.
+ */
+type ExternalInput = RunConfigInput & { records: Record<string, unknown>[]; credentials: { username: string; password: string }; signal: AbortSignal };
+
+/** Arena operator login, from the same env vars and defaults the arena uses. Never logged. */
+function arenaCredentials(): { username: string; password: string } {
+  return { username: process.env.ARENA_USERNAME || "operator", password: process.env.ARENA_PASSWORD || "overclock-arena" };
+}
+
 /** Load the optional external baseline adapter from packages/external-baselines. */
 async function loadExternal(root: string): Promise<{ runner?: ExternalRunner; note: string }> {
   const dir = join(root, "packages", "external-baselines");
@@ -207,8 +219,11 @@ async function loadExternal(root: string): Promise<{ runner?: ExternalRunner; no
     const fn = isRecord(mod) ? mod.runExternal : undefined;
     if (typeof fn !== "function") return { note: "External baseline skipped: packages/external-baselines does not export runExternal." };
     // Checked to be a function above; its return value is validated on every call.
-    const runExternal = fn as (config: RunConfigInput, scenario: PublicScenario) => unknown;
-    return { runner: async (config, scenario) => parseExternalResult(await runExternal(config, scenario)), note: "External baseline: runExternal from packages/external-baselines." };
+    const runExternal = fn as (input: ExternalInput, scenario: PublicScenario) => unknown;
+    return {
+      runner: async (config, scenario, signal) => parseExternalResult(await runExternal({ ...config, records: config.records ?? scenario.records, credentials: arenaCredentials(), signal }, scenario)),
+      note: "External baseline: runExternal from packages/external-baselines.",
+    };
   } catch (err) {
     return { note: `External baseline skipped: packages/external-baselines failed to load (${errMessage(err)}).` };
   }

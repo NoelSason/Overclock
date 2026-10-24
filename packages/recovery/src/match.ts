@@ -151,8 +151,11 @@ export function decide(ranked: Candidate[]): Decision {
   const margin = best.score - (second?.score ?? 0);
   const shortlist = ranked.filter((c) => c.score >= Math.max(0.05, best.score - 0.35)).slice(0, 6);
   if (best.score >= ACCEPT_SCORE && margin >= ACCEPT_MARGIN) return { pick: best, shortlist, reason: `${best.control.id} ${JSON.stringify(best.control.label ?? best.control.name)} score ${best.score.toFixed(2)} (${best.signals.join(", ")}), margin ${margin.toFixed(2)}` };
-  if (best.score < ACCEPT_SCORE) return { shortlist, reason: `best match ${JSON.stringify(best.control.label ?? best.control.name)} scores only ${best.score.toFixed(2)}` };
-  return { shortlist, reason: `ambiguous: ${shortlist.map((c) => `${JSON.stringify(c.control.label ?? c.control.name)} ${c.score.toFixed(2)}`).join(" vs ")}` };
+  if (second && margin < ACCEPT_MARGIN) {
+    const tied = shortlist.filter((c) => best.score - c.score < ACCEPT_MARGIN);
+    return { shortlist, reason: `ambiguous: ${tied.map((c) => `${c.control.id} ${JSON.stringify(c.control.label ?? c.control.name)} ${c.score.toFixed(2)}`).join(" vs ")}` };
+  }
+  return { shortlist, reason: `best match ${JSON.stringify(best.control.label ?? best.control.name)} scores only ${best.score.toFixed(2)} (${best.signals.join(", ") || "no signals"})` };
 }
 
 /** Facts (label/value pairs) that could stand in for an extract field. */

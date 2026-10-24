@@ -47,9 +47,12 @@ export interface ExternalResult {
   inputTokens: number;
   outputTokens: number;
   error?: string | undefined;
+  /** Optional self-description (e.g. "stagehand 3.7.3, claude-haiku-5-5"), recorded in the notes. */
+  describe?: string | undefined;
 }
 
-export type ExternalRunner = (config: RunConfigInput, scenario: PublicScenario) => Promise<ExternalResult>;
+/** Runs the external baseline on the scenario. `signal` aborts it on timeout or interrupt. */
+export type ExternalRunner = (config: RunConfigInput, scenario: PublicScenario, signal: AbortSignal) => Promise<ExternalResult>;
 
 /** Validate an external adapter's return value; throws with the offending field on bad input. */
 export function parseExternalResult(v: unknown): ExternalResult {
@@ -73,6 +76,7 @@ export function parseExternalResult(v: unknown): ExternalResult {
     inputTokens: num("inputTokens"),
     outputTokens: num("outputTokens"),
     error: typeof o.error === "string" ? o.error : undefined,
+    describe: [o.framework, o.frameworkVersion, o.model].filter((x): x is string => typeof x === "string" && x.length > 0).join(" ") || undefined,
   };
 }
 
@@ -374,13 +378,19 @@ export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, op
       // 3. Execute, then collect the checker result (and engine result/metrics) immediately.
       if (run.kind === "external" && deps.external) {
         c.startedAt = now();
-        const out = await race(deps.external(config, scenario), opts.runTimeoutMs, opts.signal);
-        c.endedAt = now();
+        const stop = new AbortController();
+        const pending = deps.external(config, scenario, stop.signal);
+        const out = await race(pending, opts.runTimeoutMs, opts.signal);
         if (out.kind === "done") c.external = parseExternalResult(out.value);
         else {
-          c.error = out.kind === "timeout" ? `timed out after ${Math.round(opts.runTimeoutMs / 1000)} s (external runs cannot be cancelled)` : "interrupted";
+          c.error = out.kind === "timeout" ? `timed out after ${Math.round(opts.runTimeoutMs / 1000)} s; run aborted` : "interrupted; run aborted";
           c.interrupted = out.kind === "aborted";
+          stop.abort();
+          // Let the adapter stop touching the arena before the checker reads it.
+          await race(pending.catch(() => undefined), graceMs, undefined);
         }
+        c.endedAt = now();
+        if (c.external?.describe && !file.notes.some((n) => n === `External baseline: ${c.external?.describe}.`)) file.notes.push(`External baseline: ${c.external.describe}.`);
         try {
           c.check = await deps.arena.check();
         } catch (err) {

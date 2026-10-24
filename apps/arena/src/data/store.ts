@@ -1,11 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { HOLDOUT_DB_FILE } from "../holdout/meta";
+import { emptyHoldout } from "../holdout/model";
+import { HoldoutStore } from "../holdout/store";
 import type { Customer, CustomerStatus, Dataset, Note, Order, Ticket } from "./model";
 
 /**
- * Persistent storage for the three arena applications. Each application owns a separate
- * SQLite database file; nothing joins across them, exactly like three unrelated SaaS tools.
+ * Persistent storage for the four arena applications. Each application owns a separate
+ * SQLite database file; nothing joins across them, exactly like unrelated SaaS tools.
  */
 
 export interface ListQuery {
@@ -235,12 +238,14 @@ export class ArenaStore {
   readonly crm: CrmStore;
   readonly orders: OrdersStore;
   readonly support: SupportStore;
+  readonly holdout: HoldoutStore;
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true });
     this.crm = new CrmStore(open(join(dir, "crm.db")));
     this.orders = new OrdersStore(open(join(dir, "orders.db")));
     this.support = new SupportStore(open(join(dir, "support.db")));
+    this.holdout = new HoldoutStore(open(join(dir, HOLDOUT_DB_FILE)));
   }
 
   /** Snapshot restore: replace every table with the given dataset. */
@@ -248,15 +253,17 @@ export class ArenaStore {
     this.crm.replace(d.customers);
     this.orders.replace(d.orders);
     this.support.replace(d.tickets, d.notes);
+    this.holdout.replace(d.holdout ?? emptyHoldout());
   }
 
   dump(): Dataset {
-    return { customers: this.crm.all(), orders: this.orders.all(), tickets: this.support.all(), notes: this.support.allNotes() };
+    return { customers: this.crm.all(), orders: this.orders.all(), tickets: this.support.all(), notes: this.support.allNotes(), holdout: this.holdout.dump() };
   }
 
   close(): void {
     this.crm.db.close();
     this.orders.db.close();
     this.support.db.close();
+    this.holdout.db.close();
   }
 }

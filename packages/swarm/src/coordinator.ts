@@ -233,7 +233,19 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
   await effects;
 
   const chosen = directives.slice(0, Math.max(1, policy.candidates));
-  const candidates = await ctx.stage("planning", `${chosen.length} candidate(s)`, () => Promise.all(chosen.map((dir, i) => ctx.planCandidate(models, dir, catalog || undefined, i).catch((err) => ({ candidateId: `cand-${i + 1}-${dir.name}`, name: dir.name, plan: null as unknown as DslPlan, compiled: null, issues: [{ severity: "error" as const, code: "planner", message: (err as Error).message }], valid: false, estimate: null, workers: 1, planningMs: 0, repaired: false })))));
+  const failed = (i: number, name: string, err: unknown): CompiledCandidate => ({
+    candidateId: `cand-${i + 1}-${name}`,
+    name,
+    plan: { strategy: { name, summary: "planner failed", rationale: "" }, phases: [], outcomes: [], assumptions: [], risks: [] },
+    compiled: null,
+    issues: [{ severity: "error", code: "planner", message: (err as Error).message }],
+    valid: false,
+    estimate: null,
+    workers: 1,
+    planningMs: 0,
+    repaired: false,
+  });
+  const candidates = await ctx.stage("planning", `${chosen.length} candidate(s)`, () => Promise.all(chosen.map((dir, i) => ctx.planCandidate(models, dir, catalog || undefined, i).catch((err) => failed(i, dir.name, err)))));
 
   // Adversarial verification: critique + read-only dry-run probes, in parallel per candidate.
   if (policy.critique || policy.dryRun) {

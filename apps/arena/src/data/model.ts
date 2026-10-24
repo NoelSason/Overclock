@@ -1,4 +1,6 @@
-/** Arena domain model. Three independent applications, each with its own database. */
+import type { HoldoutData } from "../holdout/model";
+
+/** Arena domain model. Four independent applications, each with its own database. */
 
 export type CustomerStatus = "active" | "on_hold" | "vip";
 export type OrderStatus = "processing" | "shipped" | "delivered" | "refunded" | "cancelled";
@@ -56,6 +58,8 @@ export interface Dataset {
   orders: Order[];
   tickets: Ticket[];
   notes: Note[];
+  /** The fourth application's tables (empty for templates that do not use it). */
+  holdout: HoldoutData;
 }
 
 export const CUSTOMER_STATUSES: CustomerStatus[] = ["active", "on_hold", "vip"];
