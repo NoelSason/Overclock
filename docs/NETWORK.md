@@ -202,7 +202,7 @@ engine doesn't read them yet.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OVERCLOCK_NETWORK_ENABLED` | `false` | Turn the client on. |
-| `OVERCLOCK_NETWORK_ENDPOINT` | `ws://127.0.0.1:3100` | SpacetimeDB host. The default is moving from port 3000 to 3100 so it doesn't collide with the dashboard; check `.env.example` for the current value. |
+| `OVERCLOCK_NETWORK_ENDPOINT` | `ws://127.0.0.1:3100` | SpacetimeDB host. Port 3100 keeps it clear of the dashboard on 3000. |
 | `OVERCLOCK_NETWORK_DATABASE` | `overclock-network` | Database name. |
 | `OVERCLOCK_NETWORK_MODE` | `network-read` | Default knowledge policy. |
 | `OVERCLOCK_NETWORK_PUBLISH_ENABLED` | `false` | Allow publishing. |
@@ -215,12 +215,13 @@ engine doesn't read them yet.
 You need the `spacetime` CLI, version 2.x. If it's missing, the scripts print the install
 command.
 
-1. Start the local network. The script starts SpacetimeDB on the host and port of
-   `OVERCLOCK_NETWORK_ENDPOINT` if it isn't running, installs the module's own dependencies (the module is outside the workspace globs
-   and has its own lockfile), publishes the module, and regenerates the client bindings:
+1. Start the local network. The script starts SpacetimeDB on `127.0.0.1:3100` (the host and
+   port of `OVERCLOCK_NETWORK_ENDPOINT`) if it isn't running, installs the module's own
+   dependencies (the module is outside the workspace globs and has its own lockfile), publishes
+   the module, and regenerates the client bindings:
 
    ```bash
-   pnpm exec tsx scripts/network-dev.ts
+   pnpm network:dev
    ```
 
    Add `--clean` to destroy the database's data and republish, or `--database <name>` to use
@@ -232,7 +233,7 @@ command.
    as `pending`, then the owner authorizes it:
 
    ```bash
-   pnpm exec tsx scripts/network-authorize.ts --identity <hex> --role publisher
+   pnpm network:authorize --identity <hex> --role publisher
    ```
 
    Replace `<hex>` with the runtime's identity (`NetworkClient.identity`). The role is one of
@@ -241,7 +242,7 @@ command.
 3. **Optional:** regenerate the bindings on their own after a module change:
 
    ```bash
-   pnpm exec tsx scripts/network-generate.ts
+   pnpm network:generate
    ```
 
 4. **Optional:** inspect state with SQL. Pass `-s local`, because the CLI's default server is
@@ -251,10 +252,9 @@ command.
    spacetime sql -s local overclock-network "SELECT * FROM capability_versions"
    ```
 
-Watch for port collisions. `pnpm dashboard` uses port 3000, which is also SpacetimeDB's own
-default, and `pnpm test:e2e` starts a dashboard on port 3100
-(`OVERCLOCK_E2E_DASHBOARD_PORT`), which is the network's new default. If you run the network
-alongside either one, give one of them another port.
+The dashboard keeps `http://localhost:3000`, so it doesn't collide with SpacetimeDB on 3100.
+`pnpm test:e2e` does: it starts its own dashboard on port 3100 by default. To run the e2e suite
+while the local network is up, set `OVERCLOCK_E2E_DASHBOARD_PORT` to a free port.
 
 ### Maincloud
 
@@ -263,7 +263,7 @@ in first (an interactive browser login), then run the deploy script:
 
 ```bash
 spacetime login
-pnpm exec tsx scripts/network-deploy.ts --database <name>
+pnpm network:deploy --database <name>
 ```
 
 Database names are global on Maincloud, so pick a suffixed name. The script never reads,
@@ -273,19 +273,19 @@ republishes. Then set `OVERCLOCK_NETWORK_ENDPOINT` to the Maincloud host and
 
 ### Latency probe
 
-`scripts/network-probe.ts` measures connect time, subscription time, reducer round trips, and
-propagation between two client identities on an endpoint. `--read-only` only connects and
+`pnpm network:probe` (`scripts/network-probe.ts`) measures connect time, subscription time,
+reducer round trips, and propagation between two client identities on an endpoint. `--read-only` only connects and
 subscribes; `--temp` publishes a throwaway database and deletes it afterwards.
 
 ```bash
-pnpm exec tsx scripts/network-probe.ts --read-only
+pnpm network:probe --read-only
 ```
 
 ### Tests
 
 ```bash
-npx vitest run -c tests/network-capability/vitest.config.ts   # arena in-process; no SpacetimeDB
-npx vitest run --config tests/network/vitest.config.ts        # real local SpacetimeDB
+pnpm test:network-capability   # arena in-process; no SpacetimeDB
+pnpm test:network              # real local SpacetimeDB (same as pnpm network:test)
 ```
 
 The network suite starts SpacetimeDB if needed, publishes the module to a fresh database named

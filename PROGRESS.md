@@ -47,7 +47,7 @@ Run on 2026-10-24 between 00:24 and 00:50 PDT, with `OVERCLOCK_LIVE` unset (no m
 | `npx vitest run --project unit` | 10 files, 112 tests passed |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `npx vitest run --project integration` | 70 passed, 1 failed, 2 skipped (live). `tests/integration/arena-holdout.test.ts` was added after this run. |
-| `npx vitest run -c tests/network-capability/vitest.config.ts` | 3 files, 23 tests passed |
+| `pnpm test:network-capability` (run as `npx vitest run -c tests/network-capability/vitest.config.ts`) | 3 files, 23 tests passed |
 | `npx tsc -p tsconfig.json` | Passed |
 
 Not run: `pnpm test:e2e`, the dashboard typecheck, `tests/network/` (needs the shared local
@@ -63,7 +63,7 @@ SpacetimeDB), any `OVERCLOCK_LIVE=1` test, and any benchmark.
   expects three apps. Its failure diff prints holdout app details, which exposes them to anyone
   running the integration suite.
 - The locator-reuse pass reports a per-worker locator cache that the runtime doesn't have.
-- Port collisions: the network endpoint default is moving from 3000 (the dashboard's port) to
-  3100, which is the port `pnpm test:e2e` uses for its dashboard.
+- Port collision: local SpacetimeDB now defaults to 3100, which is also the default port of the
+  dashboard that `pnpm test:e2e` starts (`OVERCLOCK_E2E_DASHBOARD_PORT`).
 - The executor, staged swarm, crawler, effect classification, critique, and dry run have no
   automated tests.

@@ -98,7 +98,7 @@ flowchart LR
     work --> verify["Read-back verification"]
     work -.->|"failure"| rec["Recovery L0–L4"]
   end
-  work -->|"allowlisted origins only"| apps["Arena apps :4101–4103"]
+  work -->|"allowlisted origins only"| apps["Arena apps :4101–4104"]
   engine --> db[("SQLite event log")]
   engine -.->|"in progress"| net[("Overclock Network<br/>SpacetimeDB")]
 ```
@@ -200,13 +200,16 @@ TypeSafe key is optional: without it, reflex decisions fall back to deterministi
 3. Start each service in its own terminal:
 
    ```bash
-   pnpm arena       # judge console at http://127.0.0.1:4100, apps on :4101–4103
+   pnpm arena       # judge console at http://127.0.0.1:4100, apps on :4101–4104
    pnpm engine      # engine API at http://127.0.0.1:4000
    pnpm dashboard   # dashboard at http://localhost:3000
    ```
 
-   `pnpm dev` points at `scripts/dev.ts`, which doesn't exist yet, so start the three
-   services separately.
+   The arena's ports come from `OVERCLOCK_ARENA_ADMIN_PORT` (4100) and
+   `OVERCLOCK_ARENA_CRM_PORT`, `OVERCLOCK_ARENA_ORDERS_PORT`, `OVERCLOCK_ARENA_SUPPORT_PORT`,
+   and `OVERCLOCK_ARENA_APP4_PORT` (4101–4104). The fourth app is the holdout. `pnpm dev`
+   points at `scripts/dev.ts`, which doesn't exist yet, so start the three services
+   separately.
 
 4. Load the demo scenario and check the engine:
 
@@ -242,8 +245,8 @@ Each run spends model money. `OVERCLOCK_BENCH_BUDGET_USD` caps benchmark spend (
 | `pnpm test:adversarial` | Recovery L0/L1 against a fixture app with every UI surprise; refusal to guess; repair dedupe. | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:e2e` | Dashboard against a synthetic, test-only replay server (Playwright). | none |
 | `pnpm typecheck` | TypeScript across the workspace and the dashboard. | none |
-| `npx vitest run -c tests/network-capability/vitest.config.ts` | Capability export, sanitizer, static analysis, rebinding, and the validation worker, against the arena in-process. | none |
-| `npx vitest run --config tests/network/vitest.config.ts` | Network client and SpacetimeDB module against a real local SpacetimeDB (ephemeral database, deleted afterwards). Needs the `spacetime` CLI. | none |
+| `pnpm test:network-capability` | Capability export, sanitizer, static analysis, rebinding, and the validation worker, against the arena in-process. | none |
+| `pnpm test:network` | Network client and SpacetimeDB module against a real local SpacetimeDB (ephemeral database, deleted afterwards). Needs the `spacetime` CLI. | none |
 
 Setting `OVERCLOCK_LIVE=1` enables tests that call Claude and Jev, so they spend money.
 

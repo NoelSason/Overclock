@@ -14,7 +14,7 @@ on.
 1. Open four terminals in the repository root.
 
    ```bash
-   pnpm arena        # terminal 1: judge console http://127.0.0.1:4100, apps :4101–4103
+   pnpm arena        # terminal 1: judge console http://127.0.0.1:4100, apps :4101–4104
    pnpm engine       # terminal 2: engine http://127.0.0.1:4000
    pnpm dashboard    # terminal 3: dashboard http://localhost:3000
    pnpm cli health   # terminal 4: confirms the engine, models, browser, and arena
@@ -23,7 +23,7 @@ on.
 2. Record the baseline evidence ahead of time, on the same scenario the live run will use:
    - Run the benchmark suite you plan to cite, then `pnpm benchmark:report`. The dashboard's
      **Benchmarks** page (`http://localhost:3000/benchmarks`) and `docs/BENCHMARKS.md` then
-     show the results. Both spend model money.
+     show the results. The suite spends model money; the report doesn't.
    - Or record one real baseline run, for example
      `pnpm cli run --scenario --mode compiled-parallel`, so its run page is available in the
      dashboard's **Runs** list. Run `pnpm cli check` right after it finishes and keep that
@@ -142,7 +142,7 @@ and the discovery it skipped.
   against the local SpacetimeDB:
 
   ```bash
-  npx vitest run --config tests/network/vitest.config.ts -t "B receives the promoted version"
+  pnpm test:network -t "B receives the promoted version"
   ```
 
   Say what it shows: a publisher proposes a capability, a separate validator passes it, an
