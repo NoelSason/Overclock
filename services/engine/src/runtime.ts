@@ -5,6 +5,7 @@ import { BrowserManager, SessionManager, type Credentials, type StorageState } f
 import { claudeConfigFromEnv, jevConfigFromEnv, ModelLedger } from "@overclock/models";
 import type { ProgramCache } from "@overclock/swarm";
 import { repoRoot } from "@overclock/telemetry";
+import { NetworkService } from "./network";
 
 export interface EngineConfig {
   port: number;
@@ -82,6 +83,7 @@ export class EngineRuntime {
   readonly exploreSessions: SessionManager;
   readonly ledger: ModelLedger;
   readonly cache: FileProgramCache;
+  readonly network: NetworkService;
   readonly claudeConfig = claudeConfigFromEnv();
   readonly jevConfig = jevConfigFromEnv();
 
@@ -92,6 +94,7 @@ export class EngineRuntime {
     this.exploreSessions = new SessionManager(this.browser, explorationCredentials);
     this.ledger = new ModelLedger(config.budgetUsd);
     this.cache = new FileProgramCache(join(config.dataDir, "program-cache"));
+    this.network = new NetworkService(config.dataDir, config.runtimeLabel);
   }
 
   /** Explorer session (read-only role) when available; otherwise the operator session (exploration contexts still block all mutations). */
@@ -104,6 +107,7 @@ export class EngineRuntime {
   }
 
   async close(): Promise<void> {
+    await this.network.close().catch(() => undefined);
     await this.browser.close();
   }
 }

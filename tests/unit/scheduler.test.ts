@@ -179,7 +179,7 @@ describe("scheduler", () => {
     const { program, issues } = lowerPlan({ plan, models: [ordersModel, supportModel], apps, goal: "g", inputs: { records }, programId: "p", strategyId: "s" });
     expect(issues.filter((i) => i.severity === "error")).toEqual([]);
     const c = compileProgram(program);
-    const s = new Scheduler(c, { records }, { now: () => 0 }, { leaseMs: () => 10_000 });
+    const s = new Scheduler(c, { records }, { now: () => 0 }, { criticalPathPriority: true, leaseMs: () => 10_000 });
     s.start();
     const writes = [...c.segments.values()].filter((x) => x.kind === "write");
     expect(writes).toHaveLength(2);

@@ -1,7 +1,7 @@
 import type { AppModel, RunConfig } from "@overclock/contracts";
 
 export interface PolicyDecision {
-  intelligence: "single-planner" | "parallel-scout" | "warm-cache";
+  intelligence: "single-planner" | "parallel-scout" | "warm-cache" | "network-import";
   candidates: number;
   catalog: boolean;
   critique: boolean;

@@ -80,6 +80,8 @@ export interface INetworkClient {
   promote(versionId: string): Promise<{ state: PublicationState }>;
   quarantine(versionId: string, reason: string): Promise<void>;
   activeVersion(capabilityId: string): CapabilityCandidate | null;
+  /** Cached metadata for any version of a watched origin (not only the active one). */
+  versionInfo(versionId: string): CapabilityCandidate | null;
 
   reportFailure(sig: FailureSignature): Promise<{ jobId: string; existing: boolean }>;
   claimRepair(jobId: string, leaseMs: number): Promise<RepairLease>;

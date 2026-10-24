@@ -12,9 +12,30 @@ import type { EngineRuntime } from "./runtime";
 import type { EngineStore } from "./store";
 import type { RunHandle } from "./types";
 import { runStreamingPipeline } from "./streaming";
+import { importCapability, publishCapability, type ImportedCapability } from "./network";
 
 const VERIFICATION_SEMANTICS =
   "VERIFIED means every state-changing step for that record was read back from the application after a fresh navigation and matched the expected values (or the record needed no change). UNCONFIRMED means a write may or may not have committed and could not be confirmed. Sequential-agent runs never report VERIFIED: their completions are model claims.";
+
+/** Network block of the run summary, from the run's own network events (absent when none happened). */
+function networkSummary(v: RunView): RunSummary["network"] {
+  const n = v.network;
+  if (!n.lookups.length && !n.publishes.length && !n.repairs.length) return undefined;
+  const imp = n.imports.at(-1);
+  const look = n.lookups.at(-1);
+  return {
+    lookups: n.lookups.length,
+    hits: n.lookups.filter((l) => l.candidates > 0).length,
+    outcome: imp?.outcome ?? look?.outcome,
+    capabilityId: imp?.capabilityId ?? look?.capabilityId,
+    version: imp?.version ?? look?.version,
+    lookupMs: Math.round(n.lookups.reduce((a, l) => a + l.ms, 0)),
+    fetchMs: Math.round(n.imports.reduce((a, i) => a + i.fetchMs, 0)),
+    rebindMs: Math.round(n.imports.reduce((a, i) => a + i.rebindMs, 0)),
+    published: n.publishes.some((p) => !p.rejected),
+    repairs: n.repairs.length,
+  };
+}
 
 export function knowledgePolicy(config: RunConfig): string {
   return config.knowledge ?? (config.cache === "warm" ? "local-only" : "strict-cold");
@@ -46,6 +67,8 @@ export class RunController implements RunHandle {
   readonly claude: ClaudeProvider;
   readonly jev: JevProvider;
   private recoveryStats?: () => unknown;
+  /** Plan and models the run executed (staged, streamed, or imported), for publication. */
+  private finalPlan: { plan: import("@overclock/contracts").DslPlan; models: import("@overclock/contracts").AppModel[] } | null = null;
 
   constructor(
     readonly config: RunConfig,
@@ -124,6 +147,16 @@ export class RunController implements RunHandle {
     if (explore.role === "operator") this.emit({ type: "log", level: "warn", message: "no read-only explorer role available; exploring with the operator session (all mutations still blocked)" });
     const executeState = await this.runtime.executeSessions.storageStateFor(apps);
     const knowledge = knowledgePolicy(this.config);
+    const imported = knowledge.startsWith("network") ? await this.importFromNetwork(executeState) : null;
+    // Every path stores its final plan through the cache; reads and persistence follow the knowledge policy.
+    const localCache = knowledge === "local-only" || knowledge.startsWith("network") ? this.runtime.cache : undefined;
+    const cache = {
+      get: (key: string) => localCache?.get(key),
+      put: (key: string, value: { plan: import("@overclock/contracts").DslPlan; models: import("@overclock/contracts").AppModel[] }) => {
+        this.finalPlan = value;
+        localCache?.put(key, value);
+      },
+    };
     const swarmDeps = {
       runId: this.runId,
       config: this.config,
@@ -136,7 +169,8 @@ export class RunController implements RunHandle {
       latency: this.latency,
       signal: this.abort.signal,
       saveArtifact: (agentId: string, kind: ArtifactSummary["kind"], title: string, summary: string, data: unknown, stats?: Record<string, number | string>) => void this.saveArtifact(agentId, kind, title, summary, data, stats),
-      cache: knowledge === "local-only" || knowledge.startsWith("network") ? this.runtime.cache : undefined,
+      cache,
+      imported: imported ? { plan: imported.plan, models: imported.models, label: `network v${imported.version}`, reason: `imported ${imported.versionId} (${imported.outcome}) from the Overclock Network and rebound to this runtime's own observation; no planner call` } : undefined,
     };
     const recovery = new RecoveryEngine({
       jev: this.jev.usable ? this.jev : undefined,
@@ -151,7 +185,9 @@ export class RunController implements RunHandle {
     });
 
     this.recoveryStats = () => recovery.stats();
-    if (mode === "overclock" && this.config.ablation.streaming !== false) {
+    // Streaming only helps when a plan must be written; an imported or warm-cached plan runs staged.
+    const warmHit = this.config.cache === "warm" && !!localCache?.get(cacheKey(this.config));
+    if (mode === "overclock" && this.config.ablation.streaming !== false && !imported && !warmHit) {
       await runStreamingPipeline({ run: this, swarmDeps, executeState, recovery, setExecutor: (e) => (this.executor = e), setProgram: (p) => (this.programSummary = p) });
     } else {
       const swarm: SwarmResult = await runStagedSwarm(swarmDeps);
@@ -180,10 +216,57 @@ export class RunController implements RunHandle {
       });
       await this.executor.start({ incremental: false });
       this.emit({ type: "stage", stage: "execution", phase: "end" });
-      if (swarmDeps.cache && !this.abort.signal.aborted) swarmDeps.cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models });
+      if (!this.abort.signal.aborted) cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models });
     }
     this.outcomesList = this.executor?.outcomes() ?? [];
+    if (knowledge.startsWith("network") && !this.abort.signal.aborted) await this.contributeToNetwork(knowledge, imported);
     this.finish(this.abort.signal.aborted ? "cancelled" : "completed");
+  }
+
+  /** network-read: look up, fetch, and rebind a shared capability before any discovery. */
+  private async importFromNetwork(executeState: import("@overclock/browser-runtime").StorageState | undefined): Promise<ImportedCapability | null> {
+    const origins = this.config.applications.map((a) => new URL(a.origin).origin);
+    const client = await this.runtime.network.client();
+    if (!client) {
+      const why = this.runtime.network.enabled ? (this.runtime.network.error ?? "not connected") : "disabled for this engine (OVERCLOCK_NETWORK_ENABLED=false)";
+      this.emit({ type: "network.lookup", origins, outcome: "NETWORK_UNAVAILABLE", source: "none", candidates: 0, ms: 0 });
+      this.emit({ type: "log", level: "warn", message: `network unavailable: ${why}; discovering cold` });
+      return null;
+    }
+    this.emit({ type: "stage", stage: "discovery", phase: "start", detail: "network lookup and rebinding" });
+    this.emit({ type: "agent.started", agentId: "network", role: "ui-scout", label: "Network import · rebinding" });
+    const t0 = this.now();
+    try {
+      const imp = await importCapability({ client, config: this.config, browser: this.runtime.browser, storageState: executeState, signal: this.abort.signal, emit: (e) => this.emit(e) });
+      // Rebinding observed these pages itself; register their controls for recovery's structural matching.
+      if (imp) for (const m of imp.models) this.saveArtifact("network", "app-model", `${m.app} app model (rebinding)`, `${m.pages.length} pages observed while rebinding ${imp.versionId}`, m);
+      this.emit({ type: "agent.finished", agentId: "network", ok: true, ms: Math.round(this.now() - t0) });
+      return imp;
+    } catch (err) {
+      this.emit({ type: "agent.finished", agentId: "network", ok: false, ms: Math.round(this.now() - t0), error: (err as Error).message });
+      this.emit({ type: "log", level: "warn", message: `network import failed: ${(err as Error).message}; discovering cold` });
+      return null;
+    } finally {
+      this.emit({ type: "stage", stage: "discovery", phase: "end" });
+    }
+  }
+
+  /** After execution: report reuse of an imported capability, or publish a newly verified one. */
+  private async contributeToNetwork(knowledge: string, imported: ImportedCapability | null): Promise<void> {
+    const client = await this.runtime.network.client();
+    if (!client) return;
+    const outcomes = this.outcomesList;
+    const allVerified = outcomes.length > 0 && outcomes.every((o) => o.status === "VERIFIED" || o.status === "SKIPPED");
+    if (imported) {
+      await client.reportReuse(imported.versionId, allVerified).catch((err: unknown) => this.emit({ type: "log", level: "warn", message: `network: reuse report failed: ${(err as Error).message}` }));
+      return;
+    }
+    if (knowledge !== "network-read-and-contribute") return;
+    if (!allVerified || !this.finalPlan) {
+      this.emit({ type: "log", level: "info", message: "network: not publishing; only runs where every record verified are contributed" });
+      return;
+    }
+    await publishCapability({ client, config: this.config, plan: this.finalPlan.plan, models: this.finalPlan.models, verifiedReceipts: this.viewState.receipts.VERIFIED, emit: (e) => this.emit(e) });
   }
 
   publishProgram(compiled: import("@overclock/compiler").CompiledProgram): void {
@@ -241,6 +324,7 @@ export class RunController implements RunHandle {
       recoveryMs: Math.round(recoveryMs),
       stageMs: Object.fromEntries(Object.entries(stageMs).map(([k, x]) => [k, Math.round(x)])),
       knowledge: knowledgePolicy(this.config),
+      network: networkSummary(v),
     });
     this.summary = summary;
     if (reason) this.emit({ type: "log", level: status === "failed" ? "error" : "info", message: reason });

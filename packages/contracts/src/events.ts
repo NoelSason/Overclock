@@ -22,7 +22,7 @@ export type EventPayload =
   | E<"run.created", { config: RunConfig }>
   | E<"run.status", { status: RunStatus; reason?: string }>
   | E<"run.completed", { summary: RunSummary }>
-  | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
+  | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache" | "network-import"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
   | E<"agent.started", { agentId: string; role: AgentRole; label: string; model?: string; app?: string }>
   | E<"agent.artifact", { agentId: string; artifact: ArtifactSummary }>
   | E<"agent.finished", { agentId: string; ok: boolean; ms: number; error?: string }>

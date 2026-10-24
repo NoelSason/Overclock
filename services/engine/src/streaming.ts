@@ -236,6 +236,7 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     deepAbort.abort();
     await deepP;
     emit({ type: "stage", stage: "execution", phase: "end" });
+    if (d.cache) d.cache.put(cacheKey(d.config), { plan: fixedPlan, models });
     return;
   }
 

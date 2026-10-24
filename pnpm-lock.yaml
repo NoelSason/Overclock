@@ -623,6 +623,15 @@ importers:
       '@overclock/models':
         specifier: workspace:*
         version: link:../../packages/models
+      '@overclock/network-capability':
+        specifier: workspace:*
+        version: link:../../packages/network-capability
+      '@overclock/network-client':
+        specifier: workspace:*
+        version: link:../../packages/network-client
+      '@overclock/network-contracts':
+        specifier: workspace:*
+        version: link:../../packages/network-contracts
       '@overclock/optimizer':
         specifier: workspace:*
         version: link:../../packages/optimizer

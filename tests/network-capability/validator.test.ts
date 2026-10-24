@@ -162,6 +162,9 @@ class FakeNetworkClient implements INetworkClient {
   activeVersion() {
     return null;
   }
+  versionInfo() {
+    return null;
+  }
   reportFailure(): never {
     throw new Error("unused");
   }

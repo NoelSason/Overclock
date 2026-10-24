@@ -22,6 +22,8 @@ export interface SwarmDeps {
   saveArtifact(agentId: string, kind: ArtifactSummary["kind"], title: string, summary: string, data: unknown, stats?: Record<string, number | string>): void;
   /** Warm-start cache (local-only knowledge policy). */
   cache?: ProgramCache | undefined;
+  /** A plan imported from the Overclock Network and already rebound to this runtime's controls. */
+  imported?: { plan: DslPlan; models: AppModel[]; label: string; reason: string } | undefined;
 }
 
 export interface ProgramCache {
@@ -205,6 +207,21 @@ export class SwarmContext {
 export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
   const ctx = new SwarmContext(deps);
   const d = deps;
+  if (d.imported) {
+    const imp = d.imported;
+    const features = { phases: imp.plan.phases.length, apps: imp.models.length };
+    d.emit({ type: "policy.decision", intelligence: "network-import", candidates: 0, reason: imp.reason, features });
+    const { compiled, issues } = ctx.compile(imp.plan, imp.models, "network");
+    if (compiled) {
+      const c: CompiledCandidate = { candidateId: "network", name: `${imp.plan.strategy.name} (${imp.label})`, plan: imp.plan, compiled, issues, valid: true, estimate: null, workers: 1, planningMs: 0, repaired: false };
+      d.emit({ type: "candidate.proposed", candidateId: "network", name: c.name, summary: imp.plan.strategy.summary, agentId: "network" });
+      ctx.estimate(c);
+      d.emit({ type: "candidate.evaluated", candidateId: "network", estimate: c.estimate, valid: true, issues: [] });
+      d.emit({ type: "candidate.selected", candidateId: "network", reason: imp.reason, ranking: [{ candidateId: "network", totalMs: c.estimate?.totalMs ?? null }] });
+      return { selected: c, candidates: [c], models: imp.models, policy: { intelligence: "network-import", candidates: 0, catalog: false, critique: false, dryRun: false, reason: imp.reason, features }, workers: c.workers, reason: imp.reason };
+    }
+    d.emit({ type: "log", level: "warn", message: `imported plan did not compile here (${issues.filter((i) => i.severity === "error").map((i) => i.message).slice(0, 2).join("; ")}); discovering cold` });
+  }
   const key = cacheKey(d.config);
   const cached = d.config.cache === "warm" ? d.cache?.get(key) : undefined;
 
