@@ -497,6 +497,8 @@ export class Executor {
 
   private invalidate(t: TaskInstance, reason: string): void {
     if (t.attempt >= MAX_RETRIES.stale) return this.scheduler.fail(t.taskId, "FAILED", `stale repeatedly: ${reason}`);
+    const committed = this.scheduler.committedDependents(t.taskId);
+    if (committed.length) return this.scheduler.fail(t.taskId, "FAILED", `stale after ${committed.join(", ")} already committed for this record; not recomputing the reads it used: ${reason}`);
     const reset = this.scheduler.invalidate(t.taskId, reason);
     this.o.emit({ type: "invalidation", taskId: t.taskId, recordKey: t.recordKey, reason: reason.slice(0, 300), invalidated: reset });
   }

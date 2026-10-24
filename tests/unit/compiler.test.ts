@@ -65,6 +65,17 @@ describe("lowering and validation", () => {
     expect(save.preconditions).toHaveLength(0);
   });
 
+  it("drops a guard that expects the value the same form is about to write", () => {
+    // Seen live: a repaired plan guarded the note box with the note text it was about to type,
+    // so the guard could only pass after the write had already happened.
+    const guarded = steps.map((st) => (st.op === "submit" ? { ...st, guards: [{ control: "support.edit.status", equals: "'resolved'" }] } : st));
+    const { program, issues } = lower(plan(guarded as DslStep[]));
+    expect(issues.some((i) => i.code === "self-defeating-guard" && i.severity === "warning")).toBe(true);
+    const body = program.nodes[0]!.body!;
+    expect(body.find((n) => n.id === "set_status")!.preconditions).toHaveLength(0);
+    expect(body.find((n) => n.id === "save")!.preconditions).toHaveLength(0);
+  });
+
   it("rejects controls that were never observed", () => {
     const bad = steps.map((s) => (s.id === "set_status" ? { ...s, control: "support.edit.priority" } : s));
     expect(lower(plan(bad as DslStep[])).issues.some((i) => i.code === "unknown-control")).toBe(true);

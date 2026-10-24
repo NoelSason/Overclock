@@ -466,9 +466,8 @@ export class Scheduler {
    * and every upstream non-write task of the same record (their outputs are discarded) so they
    * re-read fresh state; verified writes are never re-executed.
    */
-  invalidate(taskId: string, reason: string): string[] {
-    const t = this.tasks.get(taskId);
-    if (!t) return [];
+  /** The task plus the upstream tasks `invalidate` would recompute (stops at writes and verified tasks). */
+  private invalidationSet(t: TaskInstance): TaskInstance[] {
     const reset: TaskInstance[] = [];
     const visit = (id: string) => {
       const x = this.tasks.get(id)!;
@@ -477,7 +476,45 @@ export class Scheduler {
       reset.push(x);
       for (const d of x.deps) visit(d);
     };
-    visit(taskId);
+    visit(t.taskId);
+    return reset;
+  }
+
+  /**
+   * Verified writes of the same record that consumed data `invalidate(taskId)` would recompute.
+   * Recomputing those reads would decide again from state the committed write already changed,
+   * so the caller must not invalidate when this is non-empty.
+   */
+  committedDependents(taskId: string): string[] {
+    const t = this.tasks.get(taskId);
+    if (!t) return [];
+    const reset = new Set(this.invalidationSet(t).filter((x) => x !== t));
+    if (!reset.size) return [];
+    const out: string[] = [];
+    for (const y of this.tasks.values()) {
+      if (y === t || y.recordKey !== t.recordKey || y.segment.kind !== "write" || y.state !== "VERIFIED") continue;
+      const seen = new Set<string>();
+      const stack = [...y.deps];
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const d = this.tasks.get(id);
+        if (!d) continue;
+        if (reset.has(d)) {
+          out.push(y.taskId);
+          break;
+        }
+        stack.push(...d.deps);
+      }
+    }
+    return out;
+  }
+
+  invalidate(taskId: string, reason: string): string[] {
+    const t = this.tasks.get(taskId);
+    if (!t) return [];
+    const reset = this.invalidationSet(t);
     for (const x of reset) {
       if (x !== t && ACTIVE.has(x.state)) continue;
       this.release(x);

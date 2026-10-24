@@ -176,6 +176,8 @@ export function lowerPlan(input: LowerInput): LowerResult {
             .filter((x): x is NonNullable<typeof x> => x !== null);
           if (verifyFields.length === 0) issues.push({ severity: "error", code: "missing-verification", message: `Submit "${s.id}" has no read-back verification fields`, stepId: s.id });
           if (s.writes.length === 0) issues.push({ severity: "error", code: "missing-writes", message: `Submit "${s.id}" declares no written resources`, stepId: s.id });
+          const lastGoto = app ? [...body].reverse().find((b) => b.type === "navigate" && b.app === app) : undefined;
+          const formSteps = lastGoto ? body.slice(body.indexOf(lastGoto) + 1).filter((b) => b.app === app) : [];
           const guards: Condition[] = s.guards
             .map((g) => {
               const gc = controls.get(g.control);
@@ -183,16 +185,19 @@ export function lowerPlan(input: LowerInput): LowerResult {
                 issues.push({ severity: "error", code: "unknown-control", message: `Step "${s.id}" guards with unknown control "${g.control}"`, stepId: s.id });
                 return null;
               }
+              // A guard that expects the value this form is about to write can only pass after the
+              // write already happened: it is not a compare-and-swap on earlier data. Drop it.
+              const writer = formSteps.find((b) => (b.type === "fill" || b.type === "select") && b.target?.controlId === g.control && b.input && "expr" in b.input && b.input.expr.trim() === g.equals.trim());
+              if (writer) {
+                issues.push({ severity: "warning", code: "self-defeating-guard", message: `Step "${s.id}" guards "${g.control}" with the value step "${writer.id}" writes; guards must compare against values read before the edit, so this guard was dropped`, stepId: s.id });
+                return null;
+              }
               return { kind: "fieldEquals" as const, target: locatorOf(gc), expected: { expr: g.equals }, attr: attrFor(gc) };
             })
             .filter((x): x is NonNullable<typeof x> => x !== null);
           // Compare-and-swap guards must see the form as loaded, before any fill/select changes it:
           // attach them to the first interaction after the edit page's goto (or the submit itself).
-          let guardHost: ActionNode | undefined;
-          if (app) {
-            const lastGoto = [...body].reverse().find((b) => b.type === "navigate" && b.app === app);
-            if (lastGoto) guardHost = body.slice(body.indexOf(lastGoto) + 1).find((b) => b.app === app && (b.type === "fill" || b.type === "select" || b.type === "click"));
-          }
+          const guardHost: ActionNode | undefined = formSteps.find((b) => b.type === "fill" || b.type === "select" || b.type === "click");
           if (guardHost) guardHost.preconditions.push(...guards);
           n = base(s.id, "click", {
             app,

@@ -156,6 +156,50 @@ describe("scheduler", () => {
     }
   });
 
+  it("refuses to recompute reads that a committed write of the same record used", () => {
+    // Two writes per record share read_order. Once the first write committed, recomputing
+    // read_order for the second write would decide again from post-write state.
+    const twoWrites: DslStep[] = [
+      ...perRecord,
+      { id: "open_tedit", op: "goto", app: "Support", url: "/tickets/T-{$rec.orderId}/edit", when: "$out.read_order.status == 'refunded'" },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "'resolved'", when: "$out.read_order.status == 'refunded'" },
+      {
+        id: "save2",
+        op: "submit",
+        control: "support.edit.submit",
+        when: "$out.read_order.status == 'refunded'",
+        writes: ["app:support:ticket:T-{$rec.orderId}"],
+        guards: [],
+        verify: { url: "/tickets/T-{$rec.orderId}", fields: [{ name: "status", control: "support.detail.status", equals: "'resolved'" }] },
+        irreversible: false,
+      },
+    ];
+    const plan: DslPlan = { strategy: { name: "t", summary: "t", rationale: "t" }, phases: [{ id: "per_record", kind: "foreach", over: "$input.records", key: "$rec.orderId", dependsOn: [], steps: twoWrites }], outcomes: [{ id: "o", description: "o" }], assumptions: [], risks: [] };
+    const records = [{ orderId: "A" }];
+    const { program, issues } = lowerPlan({ plan, models: [ordersModel, supportModel], apps, goal: "g", inputs: { records }, programId: "p", strategyId: "s" });
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const c = compileProgram(program);
+    const s = new Scheduler(c, { records }, { now: () => 0 }, { leaseMs: () => 10_000 });
+    s.start();
+    const writes = [...c.segments.values()].filter((x) => x.kind === "write");
+    expect(writes).toHaveLength(2);
+    const [first, second] = writes.map((w) => `${w.id}@A`);
+    let checked = false;
+    for (let i = 0; i < 40 && !checked; i++) {
+      const t = s.takeInline() ?? s.lease("w1", () => true);
+      if (!t) break;
+      if (t.taskId === second) {
+        expect(s.tasks.get(first!)!.state).toBe("VERIFIED");
+        expect(s.committedDependents(t.taskId)).toEqual([first]);
+        checked = true;
+        break;
+      }
+      for (const n of t.segment.nodes) if (n.id === "read_order") t.record.scope.out[n.id] = { status: "refunded", cust: "C-1" };
+      s.complete(t.taskId, t.segment.kind === "write" ? "VERIFIED" : "COMPLETED", t.segment.nodeIds);
+    }
+    expect(checked).toBe(true);
+  });
+
   it("expands a dependent phase from aggregated outputs of the previous phase", () => {
     const holds: DslPlan["phases"][number] = {
       id: "holds",
