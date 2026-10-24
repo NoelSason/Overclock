@@ -45,7 +45,22 @@ export type EventPayload =
   | E<"reopt.decision", { switched: boolean; reason: string; remainingMs: number; alternativeMs: number | null; alternative?: string }>
   | E<"approval.requested", { approvalId: string; taskId: string; nodeId: string; description: string }>
   | E<"approval.resolved", { approvalId: string; approved: boolean }>
-  | E<"log", { level: "debug" | "info" | "warn" | "error"; message: string }>;
+  | E<"log", { level: "debug" | "info" | "warn" | "error"; message: string }>
+  /** Pipeline stage intervals (stages may overlap in streaming mode). */
+  | E<"stage", { stage: StageName; phase: "start" | "end"; detail?: string }>
+  /** A scout loaded and observed a page (live discovery progress). */
+  | E<"scout.page", { agentId: string; app: string; url: string; routePattern: string; loadMs: number; controls: number }>
+  /** Incrementally compiled executable fragment lifecycle. */
+  | E<"fragment", { fragmentId: string; phaseId: string; segmentIds: string[]; state: FragmentState; label: string; reason?: string; effect?: string }>;
+
+export type StageName = "discovery" | "planning" | "compilation" | "critique" | "probe" | "execution" | "optimization";
+
+/**
+ * compiled: lowered and segmented; validated: selectors/expressions/effects checked; canary: running for
+ * one record; released: fanned out to all records; deferred: waiting for a safety gate (reason says which);
+ * revised: replaced by a newer version; rejected: will not run.
+ */
+export type FragmentState = "compiled" | "validated" | "canary" | "released" | "deferred" | "revised" | "rejected";
 
 export type EventType = EventPayload["type"];
 

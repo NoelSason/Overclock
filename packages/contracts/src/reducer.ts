@@ -1,4 +1,4 @@
-import type { AgentRole, ArtifactSummary, RunEvent } from "./events";
+import type { AgentRole, ArtifactSummary, FragmentState, RunEvent, StageName } from "./events";
 import type { CostEstimate, ExecutionMode, PassReport, PhaseTemplate, RunStatus, RunSummary, SegmentTemplate, TaskState, VerificationStatus, WorkerState } from "./run";
 import { TERMINAL_TASK_STATES } from "./run";
 
@@ -105,6 +105,13 @@ export interface RunView {
   approvals: Record<string, { approvalId: string; taskId: string; nodeId: string; description: string; resolved?: boolean | undefined; approved?: boolean | undefined }>;
   logs: { t: number; level: string; message: string }[];
   summary?: RunSummary | undefined;
+  /** Stage intervals for the overlap (Gantt) view; open intervals have end undefined. */
+  stages: { stage: StageName; start: number; end?: number | undefined; detail?: string | undefined }[];
+  fragments: Record<string, { fragmentId: string; phaseId: string; segmentIds: string[]; state: FragmentState; label: string; reason?: string | undefined; effect?: string | undefined; history: { t: number; state: FragmentState; reason?: string | undefined }[] }>;
+  scoutPages: { t: number; agentId: string; app: string; url: string; routePattern: string; loadMs: number; controls: number }[];
+  /** First browser action and first VERIFIED write (ms since submission). */
+  firstActionT?: number | undefined;
+  firstVerifiedT?: number | undefined;
 }
 
 export function createRunView(runId: string): RunView {
@@ -133,6 +140,9 @@ export function createRunView(runId: string): RunView {
     reopt: [],
     approvals: {},
     logs: [],
+    stages: [],
+    fragments: {},
+    scoutPages: [],
   };
 }
 
@@ -253,6 +263,7 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       break;
     }
     case "action": {
+      if (view.firstActionT === undefined && ev.ok) view.firstActionT = ev.t;
       view.actions.count++;
       view.actions.totalMs += ev.ms;
       if (ev.modelCalls === 0) view.actions.modelFree++;
@@ -265,7 +276,10 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       view.receipts[ev.status]++;
       const rr = (view.recordReceipts[ev.recordKey] ??= {});
       rr[ev.status] = (rr[ev.status] ?? 0) + 1;
-      if (ev.status === "VERIFIED") view.verifiedTimeline.push(ev.t);
+      if (ev.status === "VERIFIED") {
+        view.verifiedTimeline.push(ev.t);
+        view.firstVerifiedT ??= ev.t;
+      }
       break;
     }
     case "lock.conflict":
@@ -317,6 +331,27 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       view.logs.push({ t: ev.t, level: ev.level, message: ev.message });
       if (view.logs.length > MAX_LOGS) view.logs.shift();
       break;
+    case "stage":
+      if (ev.phase === "start") view.stages.push({ stage: ev.stage, start: ev.t, detail: ev.detail });
+      else {
+        const open = [...view.stages].reverse().find((s) => s.stage === ev.stage && s.end === undefined);
+        if (open) open.end = ev.t;
+      }
+      break;
+    case "scout.page":
+      view.scoutPages.push({ t: ev.t, agentId: ev.agentId, app: ev.app, url: ev.url, routePattern: ev.routePattern, loadMs: ev.loadMs, controls: ev.controls });
+      if (view.scoutPages.length > 500) view.scoutPages.shift();
+      break;
+    case "fragment": {
+      const f = (view.fragments[ev.fragmentId] ??= { fragmentId: ev.fragmentId, phaseId: ev.phaseId, segmentIds: ev.segmentIds, state: ev.state, label: ev.label, history: [] });
+      f.state = ev.state;
+      f.segmentIds = ev.segmentIds;
+      f.label = ev.label;
+      f.reason = ev.reason;
+      if (ev.effect) f.effect = ev.effect;
+      f.history.push({ t: ev.t, state: ev.state, reason: ev.reason });
+      break;
+    }
   }
   return view;
 }
@@ -331,6 +366,9 @@ export function deriveMetrics(view: RunView): {
   activeWorkers: number;
   costPerVerifiedUsd: number | null;
   modelFreeActionRatio: number | null;
+  firstActionMs: number | null;
+  firstVerifiedMs: number | null;
+  overlapMs: number;
 } {
   const elapsedMs = view.summary?.wallMs ?? view.lastT;
   const verified = view.receipts.VERIFIED;
@@ -350,5 +388,30 @@ export function deriveMetrics(view: RunView): {
     activeWorkers: workers.filter((w) => w.state !== "IDLE" && w.state !== "STOPPED").length,
     costPerVerifiedUsd: verified > 0 ? view.modelCalls.costUsd / verified : null,
     modelFreeActionRatio: view.actions.count > 0 ? view.actions.modelFree / view.actions.count : null,
+    firstActionMs: view.firstActionT ?? null,
+    firstVerifiedMs: view.firstVerifiedT ?? null,
+    overlapMs: stageOverlapMs(view.stages, view.lastT),
   };
+}
+
+/**
+ * Wall time during which a thinking stage (discovery, planning, compilation, critique, probe) and
+ * browser execution were both active. Zero for strictly stage-gated runs.
+ */
+export function stageOverlapMs(stages: RunView["stages"], now: number): number {
+  const merge = (xs: { start: number; end: number }[]) => {
+    const s = [...xs].sort((a, b) => a.start - b.start);
+    const out: { start: number; end: number }[] = [];
+    for (const x of s) {
+      const last = out.at(-1);
+      if (last && x.start <= last.end) last.end = Math.max(last.end, x.end);
+      else out.push({ ...x });
+    }
+    return out;
+  };
+  const thinking = merge(stages.filter((s) => s.stage !== "execution" && s.stage !== "optimization").map((s) => ({ start: s.start, end: s.end ?? now })));
+  const exec = merge(stages.filter((s) => s.stage === "execution").map((s) => ({ start: s.start, end: s.end ?? now })));
+  let total = 0;
+  for (const a of thinking) for (const b of exec) total += Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+  return Math.round(total);
 }

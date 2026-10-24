@@ -11,7 +11,7 @@ export interface SseMessage {
   data: string;
   /** The last event ID seen on the stream so far (persists across messages, per the spec). */
   id: string;
-  /** Reconnection delay requested by the server, when this message carried a `retry:` field. */
+  /** Most recent reconnection delay (ms) the server requested with `retry:` on this stream, if any. */
   retry?: number | undefined;
 }
 
@@ -80,13 +80,11 @@ export class SseParser {
   }
 
   private dispatch(out: SseMessage[]): void {
-    const retry = this.retry;
-    this.retry = undefined;
     if (this.dataLines.length === 0) {
       this.eventType = "";
       return;
     }
-    out.push({ event: this.eventType || "message", data: this.dataLines.join("\n"), id: this.lastEventId, retry });
+    out.push({ event: this.eventType || "message", data: this.dataLines.join("\n"), id: this.lastEventId, retry: this.retry });
     this.dataLines = [];
     this.eventType = "";
   }

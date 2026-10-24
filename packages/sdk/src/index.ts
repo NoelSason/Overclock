@@ -9,7 +9,7 @@ export { Arena, configFromScenario, DEFAULT_ARENA_URL, type ArenaOptions, type S
 export { OverclockError, type OverclockErrorCode, type OverclockErrorOptions } from "./errors";
 export { SseParser, readSseMessages, type SseMessage } from "./sse";
 
-export { RunConfigSchema, createRunView, applyEvent, deriveMetrics } from "@overclock/contracts";
+export { RunConfigSchema, createRunView, applyEvent, deriveMetrics, stageOverlapMs } from "@overclock/contracts";
 export type {
   AppBinding,
   CheckResult,
@@ -34,6 +34,7 @@ export type {
   RunStatusResponse,
   RunSummary,
   RunView,
+  StageName,
   ScenarioRequest,
   TaskState,
   TaskTemplateId,

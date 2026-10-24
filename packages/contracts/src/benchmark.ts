@@ -38,6 +38,15 @@ export interface BenchmarkRunRecord {
   maxConcurrency: number;
   /** Records the engine reported VERIFIED that the checker marks incorrect (should be 0). */
   verifiedButWrong: number;
+  /** Cold-start metrics (ms since submission); null when nothing happened. */
+  firstActionMs: number | null;
+  firstVerifiedMs: number | null;
+  overlapMs: number;
+  recoveryMs: number;
+  duplicateWrites: number;
+  collateralWrites: number;
+  /** Network/app condition the run was measured under, e.g. "local" or "latency:150±100". */
+  condition: string;
   config: RunConfigInput;
   error?: string | undefined;
 }
@@ -66,4 +75,6 @@ export interface BenchmarkAggregate {
   modelCalls: { median: number };
   verifiedButWrong: number;
   failedRuns: number;
+  firstVerifiedMs: { median: number | null };
+  condition: string;
 }

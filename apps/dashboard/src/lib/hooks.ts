@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { RunStore, type Slice } from "./run-store";
 
 /** One store per run id; disposed (stream closed, fetches aborted) when the id changes or on unmount. */
@@ -24,6 +24,36 @@ export function useSlices(store: RunStore | null, slices: readonly (Slice | "con
     () => (store ? store.version(slices) : -1),
     () => -1,
   );
+}
+
+/**
+ * Like `useSlices`, but re-renders at most once per `ms` (trailing, so the final state always
+ * renders). Used by panels that are costly to redraw: charts, the graph, the KPI strip.
+ */
+export function useSlicesThrottled(store: RunStore | null, slices: readonly (Slice | "connection")[], ms: number): number {
+  const key = slices.join(",");
+  const [version, setVersion] = useState(-1);
+  useEffect(() => {
+    if (!store) return;
+    const list = key.split(",") as (Slice | "connection")[];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let last = 0;
+    const update = () => {
+      timer = null;
+      last = Date.now();
+      setVersion(store.version(list));
+    };
+    const unsubscribe = store.subscribe(() => {
+      if (timer) return;
+      timer = setTimeout(update, Math.max(0, last + ms - Date.now()));
+    });
+    update();
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [store, key, ms]);
+  return version;
 }
 
 /**
@@ -86,4 +116,23 @@ export function usePolling<T>(load: (signal: AbortSignal) => Promise<T>, ms: num
     };
   }, [...deps, ms, enabled, tick]);
   return { data, error, loading, reload: () => setTick((t) => t + 1) };
+}
+
+/** Width of an element, tracked with ResizeObserver (0 until measured). */
+export function useElementWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
+  const [width, setWidth] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: T | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!el) return;
+    setWidth(Math.floor(el.getBoundingClientRect().width));
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w !== undefined) setWidth(Math.floor(w));
+    });
+    ro.observe(el);
+    observer.current = ro;
+  }, []);
+  return [ref, width];
 }

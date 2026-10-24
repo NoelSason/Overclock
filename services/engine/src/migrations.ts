@@ -191,6 +191,61 @@ CREATE TABLE spans (
 );
 `,
   },
+  {
+    version: 2,
+    name: "stages, scout pages, fragments",
+    sql: `
+CREATE TABLE stage_intervals (
+  run_id     TEXT NOT NULL,
+  seq        INTEGER NOT NULL,
+  stage      TEXT NOT NULL,
+  start_t    REAL NOT NULL,
+  end_t      REAL,
+  detail     TEXT,
+  end_detail TEXT,
+  PRIMARY KEY (run_id, seq)
+) WITHOUT ROWID;
+CREATE INDEX stage_intervals_open ON stage_intervals (run_id, stage, end_t);
+
+CREATE TABLE scout_pages (
+  run_id        TEXT NOT NULL,
+  seq           INTEGER NOT NULL,
+  agent_id      TEXT NOT NULL,
+  app           TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  route_pattern TEXT NOT NULL,
+  load_ms       REAL NOT NULL,
+  controls      INTEGER NOT NULL,
+  t             REAL NOT NULL,
+  PRIMARY KEY (run_id, seq)
+);
+
+CREATE TABLE fragments (
+  run_id           TEXT NOT NULL,
+  fragment_id      TEXT NOT NULL,
+  phase_id         TEXT NOT NULL,
+  segment_ids_json TEXT NOT NULL,
+  state            TEXT NOT NULL,
+  label            TEXT NOT NULL,
+  reason           TEXT,
+  effect           TEXT,
+  updated_t        REAL NOT NULL,
+  PRIMARY KEY (run_id, fragment_id)
+);
+
+CREATE TABLE fragment_transitions (
+  run_id      TEXT NOT NULL,
+  seq         INTEGER NOT NULL,
+  fragment_id TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  reason      TEXT,
+  t           REAL NOT NULL,
+  PRIMARY KEY (run_id, seq)
+);
+CREATE TRIGGER fragment_transitions_no_update BEFORE UPDATE ON fragment_transitions BEGIN SELECT RAISE(ABORT, 'fragment_transitions are append-only'); END;
+CREATE TRIGGER fragment_transitions_no_delete BEFORE DELETE ON fragment_transitions BEGIN SELECT RAISE(ABORT, 'fragment_transitions are append-only'); END;
+`,
+  },
 ];
 
 /**

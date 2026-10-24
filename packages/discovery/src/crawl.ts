@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
 import type { AppBinding, AppModel, AppPage } from "@overclock/contracts";
-import type { BrowserManager, StorageState } from "@overclock/browser-runtime";
+import { settle, type BrowserManager, type StorageState } from "@overclock/browser-runtime";
 import { observe, routePattern, toAppControls, type Observation } from "@overclock/perception";
 
 const UNSAFE_LINK = /(log ?out|sign ?out|logoff|delete|remove|unsubscribe|deactivate)/i;
@@ -67,6 +67,8 @@ export async function crawlApp(opts: CrawlOptions): Promise<CrawlResult> {
       const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => null);
       const loadMs = performance.now() - t0;
       if (!resp || resp.status() >= 400) continue;
+      // Client-rendered apps fill the page after DOMContentLoaded: wait for requests and DOM to settle.
+      await settle(page, { maxMs: 2500 });
       const finalUrl = page.url();
       if (new URL(finalUrl).origin !== origin) continue;
       const pattern = routePattern(finalUrl);
@@ -78,6 +80,7 @@ export async function crawlApp(opts: CrawlOptions): Promise<CrawlResult> {
       const d = await clearDialogs(page, obs);
       if (d) {
         dismissed.push(d);
+        await settle(page, { maxMs: 1000 });
         obs = await observe(page);
       }
       obs.metrics.navMs = Math.round(loadMs);

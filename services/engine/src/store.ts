@@ -1,7 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
-import type { RunConfig, RunEvent, RunListItem, RunStatus, RunSummary, TaskState, VerificationStatus } from "@overclock/contracts";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
+import type { FragmentState, RunConfig, RunEvent, RunListItem, RunStatus, StageName, TaskState, VerificationStatus } from "@overclock/contracts";
+import { RunSummary } from "@overclock/contracts";
 import { redact, repoRoot } from "@overclock/telemetry";
 import { migrate } from "./migrations";
 
@@ -19,6 +20,22 @@ import { migrate } from "./migrations";
 
 export function defaultDbPath(): string {
   return join(repoRoot(), ".data", "engine", "engine.db");
+}
+
+/**
+ * Fill fields that older summaries lack (firstActionMs, overlapMs, stageMs, ...) from the
+ * RunSummary schema's own defaults. Stored values are kept as-is, so a summary that does not
+ * fully validate is still returned rather than dropped.
+ */
+export function withSummaryDefaults(raw: unknown): RunSummary | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+  for (const [key, schema] of Object.entries(RunSummary.shape)) {
+    if (out[key] !== undefined) continue;
+    const d = schema.safeParse(undefined);
+    if (d.success && d.data !== undefined) out[key] = d.data;
+  }
+  return out as RunSummary;
 }
 
 export interface StoredRun {
@@ -74,6 +91,37 @@ export interface StoredArtifactInfo {
   createdAt: number;
 }
 
+export interface StoredStageInterval {
+  seq: number;
+  stage: StageName;
+  start: number;
+  end?: number | undefined;
+  detail?: string | undefined;
+}
+
+export interface StoredFragment {
+  fragmentId: string;
+  phaseId: string;
+  segmentIds: string[];
+  state: FragmentState;
+  label: string;
+  reason?: string | undefined;
+  effect?: string | undefined;
+  updatedT: number;
+  history: { seq: number; t: number; state: FragmentState; reason?: string | undefined }[];
+}
+
+export interface StoredScoutPage {
+  seq: number;
+  t: number;
+  agentId: string;
+  app: string;
+  url: string;
+  routePattern: string;
+  loadMs: number;
+  controls: number;
+}
+
 export interface ObservationInput {
   observationId: string;
   app: string;
@@ -103,6 +151,10 @@ const PROJECTION_TABLES = [
   "observations",
   "metrics",
   "spans",
+  "stage_intervals",
+  "scout_pages",
+  "fragments",
+  "fragment_transitions",
 ] as const;
 export type ProjectionTable = (typeof PROJECTION_TABLES)[number];
 
@@ -235,6 +287,18 @@ export class EngineStore {
       case "model.call":
         s.modelCall.run(runId, seq, e.provider, e.model, e.purpose, num(e.ms), numOrNull(e.inputTokens), numOrNull(e.outputTokens), numOrNull(e.costUsd), e.ok ? 1 : 0, strOrNull(e.error));
         break;
+      case "stage":
+        // Mirrors the reducer: `end` closes the most recent open interval for that stage.
+        if (e.phase === "start") s.stageStart.run(runId, seq, e.stage, t, e.detail ?? null);
+        else s.stageEnd.run(t, e.detail ?? null, runId, e.stage);
+        break;
+      case "scout.page":
+        s.scoutPage.run(runId, seq, e.agentId, e.app, e.url, e.routePattern, num(e.loadMs), num(e.controls), t);
+        break;
+      case "fragment":
+        s.fragment.run(runId, e.fragmentId, e.phaseId, json(e.segmentIds), e.state, e.label, e.reason ?? null, e.effect || null, t);
+        s.fragmentTransition.run(runId, seq, e.fragmentId, e.state, e.reason ?? null, t);
+        break;
       default:
         break;
     }
@@ -364,6 +428,50 @@ export class EngineStore {
     return rows.map((r) => ({ taskId: str(r.task_id), seq: num(r.seq), state: str(r.state) as TaskState, t: num(r.t) }));
   }
 
+  stageIntervals(runId: string): StoredStageInterval[] {
+    return this.s.stageIntervals.all(runId).map((r) => ({
+      seq: num(r.seq),
+      stage: str(r.stage) as StageName,
+      start: num(r.start_t),
+      end: typeof r.end_t === "number" ? r.end_t : undefined,
+      detail: optStr(r.detail),
+    }));
+  }
+
+  scoutPages(runId: string): StoredScoutPage[] {
+    return this.s.scoutPages.all(runId).map((r) => ({
+      seq: num(r.seq),
+      t: num(r.t),
+      agentId: str(r.agent_id),
+      app: str(r.app),
+      url: str(r.url),
+      routePattern: str(r.route_pattern),
+      loadMs: num(r.load_ms),
+      controls: num(r.controls),
+    }));
+  }
+
+  fragments(runId: string): StoredFragment[] {
+    const history = new Map<string, StoredFragment["history"]>();
+    for (const r of this.s.fragmentTransitions.all(runId)) {
+      const id = str(r.fragment_id);
+      let h = history.get(id);
+      if (!h) history.set(id, (h = []));
+      h.push({ seq: num(r.seq), t: num(r.t), state: str(r.state) as FragmentState, reason: optStr(r.reason) });
+    }
+    return this.s.fragments.all(runId).map((r) => ({
+      fragmentId: str(r.fragment_id),
+      phaseId: str(r.phase_id),
+      segmentIds: parse<string[]>(r.segment_ids_json) ?? [],
+      state: str(r.state) as FragmentState,
+      label: str(r.label),
+      reason: optStr(r.reason),
+      effect: optStr(r.effect),
+      updatedT: num(r.updated_t),
+      history: history.get(str(r.fragment_id)) ?? [],
+    }));
+  }
+
   /** Row counts per projection table for one run (diagnostics and tests). */
   projectionCounts(runId: string): Record<ProjectionTable | "events", number> {
     const out = { events: num(this.s.countEvents.get(runId)?.n) } as Record<ProjectionTable | "events", number>;
@@ -388,7 +496,7 @@ function toRun(r: Row): StoredRun {
     goal: str(r.goal),
     label: optStr(r.label),
     config: parse<RunConfig>(r.config_json) ?? ({} as RunConfig),
-    summary: parse<RunSummary>(r.summary_json),
+    summary: withSummaryDefaults(parse(r.summary_json)),
   };
 }
 
@@ -439,6 +547,15 @@ function prepareStatements(db: DatabaseSync) {
     lockConflict: p(`INSERT OR IGNORE INTO lock_conflicts (run_id, seq, task_id, resource, holder, t) VALUES (?, ?, ?, ?, ?, ?)`),
     recovery: p(`INSERT OR IGNORE INTO recovery_attempts (run_id, seq, task_id, level, phase, reason, detail, ms, propagated_to, t) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     modelCall: p(`INSERT OR IGNORE INTO model_invocations (run_id, seq, provider, model, purpose, ms, input_tokens, output_tokens, cost_usd, ok, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    stageStart: p(`INSERT OR IGNORE INTO stage_intervals (run_id, seq, stage, start_t, detail) VALUES (?, ?, ?, ?, ?)`),
+    stageEnd: p(`UPDATE stage_intervals SET end_t = ?1, end_detail = ?2
+      WHERE run_id = ?3 AND seq = (SELECT seq FROM stage_intervals WHERE run_id = ?3 AND stage = ?4 AND end_t IS NULL ORDER BY seq DESC LIMIT 1)`),
+    scoutPage: p(`INSERT OR IGNORE INTO scout_pages (run_id, seq, agent_id, app, url, route_pattern, load_ms, controls, t) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    // Mirrors the reducer: segmentIds/state/label/reason replace; effect only overwrites when present.
+    fragment: p(`INSERT INTO fragments (run_id, fragment_id, phase_id, segment_ids_json, state, label, reason, effect, updated_t) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(run_id, fragment_id) DO UPDATE SET segment_ids_json = excluded.segment_ids_json, state = excluded.state, label = excluded.label,
+        reason = excluded.reason, effect = COALESCE(excluded.effect, fragments.effect), updated_t = excluded.updated_t`),
+    fragmentTransition: p(`INSERT OR IGNORE INTO fragment_transitions (run_id, seq, fragment_id, state, reason, t) VALUES (?, ?, ?, ?, ?, ?)`),
 
     // explicit saves
     saveArtifact: p(`INSERT INTO artifacts (run_id, artifact_id, kind, title, json, created_at) VALUES (?, ?, ?, ?, ?, ?)
@@ -461,7 +578,10 @@ function prepareStatements(db: DatabaseSync) {
     tasks: p(`SELECT * FROM tasks WHERE run_id = ? ORDER BY task_id`),
     transitions: p(`SELECT task_id, seq, state, t FROM task_transitions WHERE run_id = ? ORDER BY seq, task_id`),
     transitionsForTask: p(`SELECT task_id, seq, state, t FROM task_transitions WHERE run_id = ? AND task_id = ? ORDER BY seq`),
+    stageIntervals: p(`SELECT * FROM stage_intervals WHERE run_id = ? ORDER BY seq`),
+    scoutPages: p(`SELECT * FROM scout_pages WHERE run_id = ? ORDER BY seq`),
+    fragments: p(`SELECT * FROM fragments WHERE run_id = ? ORDER BY fragment_id`),
+    fragmentTransitions: p(`SELECT * FROM fragment_transitions WHERE run_id = ? ORDER BY seq`),
   };
 }
 
-export type { SQLInputValue };

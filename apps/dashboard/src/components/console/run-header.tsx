@@ -1,0 +1,119 @@
+"use client";
+
+import { deriveMetrics } from "@overclock/contracts";
+import { useState } from "react";
+import { engine, errorMessage, type RunControl } from "@/lib/api";
+import { writeTaskCount } from "@/lib/derive";
+import { fmtClock, fmtInt, fmtMs, fmtNum, fmtPct, fmtTokens, fmtUsd } from "@/lib/format";
+import { useSlices, useSlicesThrottled } from "@/lib/hooks";
+import type { RunStore } from "@/lib/run-store";
+import { ACTIVE_STATUSES, STATUS_TONE } from "@/lib/states";
+import { Badge, Button, Stat, cx } from "../ui/primitives";
+
+const CONNECTION_LABEL = { loading: "Loading history", live: "Live", reconnecting: "Reconnecting", ended: "Stream ended", error: "Engine unreachable" } as const;
+
+/** Run identity, status, controls, and the headline KPIs (including the cold-start tiles). */
+export function RunHeader({ store, onOpenInterference }: { store: RunStore; onOpenInterference: () => void }) {
+  useSlices(store, ["meta", "connection", "program"]);
+  const view = store.view;
+  const conn = store.connection;
+  const [pending, setPending] = useState<RunControl | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const control = async (action: RunControl) => {
+    setPending(action);
+    setError(null);
+    try {
+      await engine.control(store.runId, action);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const status = view.status;
+  const active = ACTIVE_STATUSES.has(status);
+  const canPause = status === "running" || status === "discovering" || status === "compiling";
+
+  return (
+    <section aria-label="Run" className="rounded-lg border border-line bg-panel">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="font-mono text-sm font-semibold text-fg" title={store.runId}>
+            {store.runId}
+          </h1>
+          <Badge tone={STATUS_TONE[status]} className="uppercase" title={`Run status: ${status}`}>
+            <span data-testid="run-status">{status}</span>
+          </Badge>
+          {view.mode && <Badge tone={view.mode === "overclock" ? "accent" : "neutral"}>{view.mode}</Badge>}
+          {view.program?.strategy && (
+            <Badge tone="neutral" title="Compiled strategy">
+              {view.program.strategy}
+            </Badge>
+          )}
+        </div>
+        <span className={cx("text-[11px]", conn.state === "error" ? "text-bad" : conn.state === "reconnecting" ? "text-warn" : "text-dim")} title={conn.error}>
+          {CONNECTION_LABEL[conn.state]}
+          {conn.state === "error" && conn.error ? `: ${conn.error}` : ""} · {fmtInt(view.lastSeq)} events
+        </span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Button size="sm" onClick={() => void control("pause")} disabled={!canPause || pending !== null}>
+            {pending === "pause" ? "Pausing…" : "Pause"}
+          </Button>
+          <Button size="sm" onClick={() => void control("resume")} disabled={status !== "paused" || pending !== null}>
+            {pending === "resume" ? "Resuming…" : "Resume"}
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => void control("cancel")} disabled={!active || pending !== null}>
+            {pending === "cancel" ? "Stopping…" : "Stop"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onOpenInterference} aria-haspopup="dialog">
+            Interference
+          </Button>
+        </div>
+      </div>
+      {view.goal && (
+        <div className="border-t border-line px-3 py-2">
+          <p className={cx("text-xs whitespace-pre-wrap text-muted", !expanded && "line-clamp-2")}>{view.goal}</p>
+          {view.goal.split("\n").length > 2 || view.goal.length > 220 ? (
+            <button type="button" className="mt-0.5 text-[11px] text-accent-soft hover:underline" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
+              {expanded ? "Show less" : "Show full goal"}
+            </button>
+          ) : null}
+        </div>
+      )}
+      {error && (
+        <div role="alert" className="border-t border-line px-3 py-1.5 text-xs text-bad">
+          {error}
+        </div>
+      )}
+      <KpiStrip store={store} />
+    </section>
+  );
+}
+
+function KpiStrip({ store }: { store: RunStore }) {
+  useSlicesThrottled(store, ["meta", "stages", "telemetry", "tasks", "workers", "program"], 120);
+  const view = store.view;
+  const m = deriveMetrics(view);
+  const complete = view.summary !== undefined;
+  const writes = writeTaskCount(view);
+  const hasExecution = view.stages.some((s) => s.stage === "execution");
+  const verifiedShare = writes && writes > 0 ? view.receipts.VERIFIED / writes : null;
+
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line px-3 py-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-10">
+      <Stat label="Time to first action" testId="stat-first-action" raw={m.firstActionMs} value={fmtMs(m.firstActionMs)} sub="first browser action" />
+      <Stat label="Time to first verified action" testId="stat-first-verified" raw={m.firstVerifiedMs} value={fmtMs(m.firstVerifiedMs)} sub="read-back confirmed" tone={m.firstVerifiedMs !== null ? "ok" : undefined} />
+      <Stat label="Discovery ∥ execution" testId="stat-overlap" raw={hasExecution ? m.overlapMs : null} value={hasExecution ? fmtMs(m.overlapMs) : "—"} sub="thinking overlapped with work" tone={hasExecution && m.overlapMs > 0 ? "accent" : undefined} />
+      <Stat label="Total wall time" testId="stat-total-wall" raw={complete ? m.elapsedMs : null} value={complete ? fmtMs(m.elapsedMs) : "—"} sub={complete ? "complete" : `elapsed ${fmtClock(view.lastT)}`} />
+      <Stat label="Verified" testId="stat-verified-share" raw={verifiedShare} value={fmtPct(verifiedShare, 1)} sub={writes === null ? "of write tasks" : `of ${fmtInt(writes)} write tasks`} tone={verifiedShare !== null ? "ok" : undefined} />
+      <Stat label="Verified writes" testId="stat-verified" raw={m.verified} value={fmtInt(m.verified)} sub={`${fmtInt(Object.keys(view.tasks).length)} tasks`} tone="ok" />
+      <Stat label="Throughput now" testId="stat-throughput-now" raw={m.recentThroughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.recentThroughputPerMin) : "—"} sub="verified / min, last 10 s" />
+      <Stat label="Throughput avg" testId="stat-throughput-avg" raw={m.throughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.throughputPerMin) : "—"} sub="verified / min since running" />
+      <Stat label="Model calls" testId="stat-model-calls" raw={view.modelCalls.count} value={fmtInt(view.modelCalls.count)} sub={`${fmtTokens(view.modelCalls.inputTokens + view.modelCalls.outputTokens)} tokens`} />
+      <Stat label="Model cost" testId="stat-cost" raw={view.modelCalls.costUsd} value={fmtUsd(view.modelCalls.costUsd)} sub={`${fmtUsd(m.costPerVerifiedUsd)} / verified`} />
+    </div>
+  );
+}

@@ -290,7 +290,19 @@ async function extractTable(env: ActionEnv, node: ActionNode, spec: ExtractTable
   let tier = resolved.strategyIndex;
   let table = resolved.locator;
   for (;;) {
-    const page = await readTablePage(table, spec);
+    let page = await readTablePage(table, spec);
+    if (page.rows.length === 0) {
+      // Client-rendered tables may populate after load: poll for rows, then confirm the count is stable.
+      const until = performance.now() + 1500;
+      while (page.rows.length === 0 && performance.now() < until) {
+        await env.page.waitForTimeout(60);
+        page = await readTablePage(table, spec);
+      }
+      if (page.rows.length > 0) {
+        await env.page.waitForTimeout(80);
+        page = await readTablePage(table, spec);
+      }
+    }
     if (page.missing.length) throw new LocatorNotFoundError(`Table columns not found: ${page.missing.join(", ")}`, node.id, spec.target.controlId);
     for (const row of page.rows) {
       const k = spec.key ? row[spec.key] : undefined;

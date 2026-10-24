@@ -16,7 +16,7 @@ import { engine, errorMessage } from "./api";
  * does not re-render the swarm map, and so on.
  */
 
-export type Slice = "meta" | "swarm" | "candidates" | "program" | "tasks" | "workers" | "telemetry" | "approvals";
+export type Slice = "meta" | "stages" | "swarm" | "candidates" | "program" | "fragments" | "tasks" | "workers" | "telemetry" | "approvals";
 
 const SLICE_OF: Record<EventType, Slice> = {
   "run.created": "meta",
@@ -42,10 +42,13 @@ const SLICE_OF: Record<EventType, Slice> = {
   invalidation: "telemetry",
   "model.call": "telemetry",
   concurrency: "telemetry",
-  "reopt.decision": "telemetry",
+  "reopt.decision": "candidates",
   "approval.requested": "approvals",
   "approval.resolved": "approvals",
   log: "meta",
+  stage: "stages",
+  "scout.page": "swarm",
+  fragment: "fragments",
 };
 
 export type ConnectionState = "loading" | "live" | "reconnecting" | "ended" | "error";
@@ -63,7 +66,7 @@ export class RunStore {
   readonly view: RunView;
   connection: ConnectionInfo = { state: "loading" };
 
-  private readonly versions: Record<Slice | "connection", number> = { meta: 0, swarm: 0, candidates: 0, program: 0, tasks: 0, workers: 0, telemetry: 0, approvals: 0, connection: 0 };
+  private readonly versions: Record<Slice | "connection", number> = { meta: 0, stages: 0, swarm: 0, candidates: 0, program: 0, fragments: 0, tasks: 0, workers: 0, telemetry: 0, approvals: 0, connection: 0 };
   private readonly listeners = new Set<() => void>();
   private queue: RunEvent[] = [];
   private frame: number | null = null;

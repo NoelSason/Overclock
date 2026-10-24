@@ -47,6 +47,11 @@ export interface ParseRequest<T extends z.ZodType> {
   signal?: AbortSignal;
 }
 
+export interface StreamParseRequest<T extends z.ZodType> extends ParseRequest<T> {
+  /** Called with each text delta and the accumulated text (the JSON being generated). */
+  onText?: (delta: string, snapshot: string) => void;
+}
+
 export interface ParseResult<T> {
   data: T;
   ms: number;
@@ -117,6 +122,65 @@ export class ClaudeProvider {
       if (err instanceof ModelOutputError) throw err;
       const ms = performance.now() - start;
       this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: (err as Error).message.slice(0, 200) });
+      throw err;
+    }
+  }
+
+  /**
+   * Streaming variant of parse(): the structured JSON arrives incrementally through `onText`, so
+   * callers can act on completed parts (e.g. compile plan steps) before generation finishes.
+   */
+  async streamParse<T extends z.ZodType>(req: StreamParseRequest<T>): Promise<ParseResult<z.infer<T>> & { firstTextMs: number | null }> {
+    const model = this.modelFor(req.role);
+    const price = priceFor(model);
+    const projected = ((req.system.length + req.user.length) / 3.5 / 1e6) * price.input + ((req.maxTokens ?? 16_000) / 1e6) * price.output * 0.5;
+    this.ledger.guard(projected);
+    const start = performance.now();
+    let firstTextMs: number | null = null;
+    const useFallback = FALLBACK_MODELS.has(model);
+    try {
+      const stream = this.api.beta.messages.stream(
+        {
+          model,
+          max_tokens: req.maxTokens ?? 16_000,
+          system: req.system,
+          messages: [{ role: "user", content: req.user }],
+          output_config: { format: betaZodOutputFormat(req.schema), effort: req.effort ?? (req.role === "planner" ? this.config.plannerEffort : this.config.helperEffort) },
+          ...(useFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
+        },
+        { signal: req.signal },
+      );
+      stream.on("text", (delta, snapshot) => {
+        firstTextMs ??= performance.now() - start;
+        req.onText?.(delta, snapshot);
+      });
+      const response = await stream.finalMessage();
+      const ms = performance.now() - start;
+      const u = response.usage;
+      const cacheRead = u.cache_read_input_tokens ?? 0;
+      const input = u.input_tokens + (u.cache_creation_input_tokens ?? 0) + cacheRead;
+      const costUsd = ((u.input_tokens + (u.cache_creation_input_tokens ?? 0) * 1.25) / 1e6) * price.input + (cacheRead / 1e6) * (price.cacheRead ?? price.input * 0.1) + (u.output_tokens / 1e6) * price.output;
+      let parsed: unknown = response.parsed_output;
+      if (parsed == null) {
+        const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+        const r = req.schema.safeParse((() => {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return undefined;
+          }
+        })());
+        parsed = r.success ? r.data : null;
+      }
+      const ok = response.stop_reason !== "refusal" && response.stop_reason !== "max_tokens" && parsed != null;
+      this.ledger.record({ provider: "anthropic", model: response.model ?? model, purpose: req.purpose, ms, inputTokens: input, outputTokens: u.output_tokens, costUsd, ok, error: ok ? undefined : `stop_reason=${response.stop_reason}` });
+      if (response.stop_reason === "refusal") throw new ModelOutputError("The model declined the request", "refusal");
+      if (response.stop_reason === "max_tokens") throw new ModelOutputError("The model ran out of output tokens", "max_tokens");
+      if (parsed == null) throw new ModelOutputError("Structured output failed to parse", response.stop_reason ?? null);
+      return { data: parsed as z.infer<T>, ms, inputTokens: input, outputTokens: u.output_tokens, costUsd, model: response.model ?? model, firstTextMs };
+    } catch (err) {
+      if (err instanceof ModelOutputError) throw err;
+      this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms: performance.now() - start, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: (err as Error).message.slice(0, 200) });
       throw err;
     }
   }

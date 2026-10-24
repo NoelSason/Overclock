@@ -2,7 +2,8 @@ import { z } from "zod";
 
 /** Arena scenario contracts. Ground truth lives only inside the arena; these are the shapes it exposes. */
 
-export const TaskTemplateId = z.enum(["t1-order-reconcile", "t2-ticket-triage", "t3-crm-status-sync"]);
+/** t3 and t4 are holdout templates: never used while developing prompts or the optimizer. t4 runs on a fourth, structurally different application. */
+export const TaskTemplateId = z.enum(["t1-order-reconcile", "t2-ticket-triage", "t3-crm-status-sync", "t4-holdout"]);
 export type TaskTemplateId = z.infer<typeof TaskTemplateId>;
 
 export const ScenarioRequest = z.object({

@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { AppBinding, Effect } from "./ir";
 
-export const ExecutionMode = z.enum(["sequential-agent", "compiled-single", "compiled-parallel", "overclock"]);
+/**
+ * A: sequential-agent — observe/decide/act loop, one model call per action.
+ * B: compiled-single — one planner, compiled program, one worker.
+ * C: compiled-parallel — one planner, compiled program, fixed parallel workers.
+ * D: overclock-staged — full discovery swarm, then compile, then execute (stage-gated).
+ * E: overclock — streaming discovery + incremental compilation + online optimization (flagship).
+ */
+export const ExecutionMode = z.enum(["sequential-agent", "compiled-single", "compiled-parallel", "overclock-staged", "overclock"]);
 export type ExecutionMode = z.infer<typeof ExecutionMode>;
 
 export const IntelligenceMode = z.enum(["single-planner", "parallel-scout", "adaptive"]);
@@ -36,6 +43,12 @@ export const RunConfigSchema = z.object({
       dryRunProbes: z.boolean().default(true),
       criticalPathPriority: z.boolean().default(true),
       onlineReoptimization: z.boolean().default(true),
+      /** E only: execute validated fragments while the plan is still streaming. */
+      streaming: z.boolean().default(true),
+      /** Online access-path substitution (per-record detail reads -> shared list scans). */
+      accessPaths: z.boolean().default(true),
+      /** Release each write template for one record first; fan out only after its read-back verifies. */
+      writeCanary: z.boolean().default(true),
     })
     .partial()
     .default({}),
@@ -163,6 +176,13 @@ export const RunSummary = z.object({
   workerUtilization: z.number(),
   maxConcurrency: z.number(),
   strategy: z.string().optional(),
+  /** Cold-start metrics (ms since the instruction was submitted). */
+  firstActionMs: z.number().nullable().default(null),
+  firstVerifiedMs: z.number().nullable().default(null),
+  /** Time during which discovery/planning and browser execution ran concurrently. */
+  overlapMs: z.number().default(0),
+  recoveryMs: z.number().default(0),
+  stageMs: z.record(z.string(), z.number()).default({}),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 
