@@ -80,6 +80,8 @@ export class Scheduler {
   private readonly phaseTasks = new Map<string, Set<string>>();
   private ready: TaskInstance[] = [];
   private readonly suspended = new Map<string, string>();
+  /** Tasks waiting for a human approval decision (state NEEDS_APPROVAL, not final). */
+  private readonly parked = new Set<string>();
   private readonly phases: Map<string, PhaseInfo>;
   private readonly gates = new Map<string, SegmentGate>();
   private readonly canaryPassed = new Set<string>();
@@ -439,6 +441,35 @@ export class Scheduler {
     this.insertReady(t);
   }
 
+  /**
+   * Park a task until a human decides (irreversible step). Its locks are released and its
+   * dependents keep waiting, so its phase stays open; `unpark` resolves it.
+   */
+  park(taskId: string, error: string): void {
+    const t = this.tasks.get(taskId);
+    if (!t || TERMINAL_TASK_STATES.has(t.state)) return;
+    this.release(t);
+    this.ready = this.ready.filter((x) => x !== t);
+    this.parked.add(taskId);
+    this.setState(t, "NEEDS_APPROVAL", { error });
+  }
+
+  /** Approved: back to the ready queue. Rejected or expired: final NEEDS_APPROVAL, dependents skipped. */
+  unpark(taskId: string, approved: boolean, reason: string): void {
+    const t = this.tasks.get(taskId);
+    if (!t || !this.parked.delete(taskId)) return;
+    t.state = "PENDING";
+    if (!approved) return this.fail(taskId, "NEEDS_APPROVAL", reason);
+    t.notBefore = this.hooks.now();
+    this.setState(t, "READY", { error: reason, attempt: t.attempt });
+    t.readyAt = this.hooks.now();
+    this.insertReady(t);
+  }
+
+  isParked(taskId: string): boolean {
+    return this.parked.has(taskId);
+  }
+
   /** Terminal failure; dependents that can no longer run are skipped. */
   fail(taskId: string, state: "FAILED" | "UNCONFIRMED" | "NEEDS_APPROVAL" | "CANCELLED", error: string): void {
     const t = this.tasks.get(taskId);
@@ -565,7 +596,7 @@ export class Scheduler {
     const ids = this.phaseTasks.get(phaseId);
     if (!ids || this.phaseState.get(phaseId) !== "expanded") return;
     if (!this.sealed.has(phaseId)) return;
-    for (const id of ids) if (!TERMINAL_TASK_STATES.has(this.tasks.get(id)!.state)) return;
+    for (const id of ids) if (this.parked.has(id) || !TERMINAL_TASK_STATES.has(this.tasks.get(id)!.state)) return;
     this.finishPhase(phaseId);
   }
 

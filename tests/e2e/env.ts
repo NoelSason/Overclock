@@ -6,7 +6,7 @@
 export const EXTERNAL_ENGINE = process.env.OVERCLOCK_E2E_ENGINE_URL;
 export const REPLAY_PORT = Number(process.env.OVERCLOCK_E2E_REPLAY_PORT ?? 4010);
 export const REPLAY_ARENA_PORT = Number(process.env.OVERCLOCK_E2E_REPLAY_ARENA_PORT ?? 4110);
-export const DASHBOARD_PORT = Number(process.env.OVERCLOCK_E2E_DASHBOARD_PORT ?? 3100);
+export const DASHBOARD_PORT = Number(process.env.OVERCLOCK_E2E_DASHBOARD_PORT ?? 3200);
 export const ENGINE_URL = (EXTERNAL_ENGINE ?? `http://127.0.0.1:${REPLAY_PORT}`).replace(/\/+$/, "");
 export const ARENA_URL = (process.env.OVERCLOCK_E2E_ARENA_URL ?? (EXTERNAL_ENGINE ? "http://127.0.0.1:4100" : `http://127.0.0.1:${REPLAY_ARENA_PORT}`)).replace(/\/+$/, "");
 export const DASHBOARD_URL = `http://localhost:${DASHBOARD_PORT}`;

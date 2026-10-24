@@ -156,6 +156,55 @@ describe("scheduler", () => {
     }
   });
 
+  it("parks a step awaiting approval without closing its phase, then resumes or rejects it", () => {
+    const h = harness();
+    const write = [...h.c.segments.values()].find((x) => x.kind === "write")!;
+    let parkedId: string | null = null;
+    for (let i = 0; i < 200 && !h.s.isDone(); i++) {
+      const inl = h.s.takeInline();
+      if (inl) {
+        h.run(inl, () => "C-1");
+        continue;
+      }
+      const t = h.s.lease("w1", () => true);
+      if (!t) break;
+      if (t.segmentId === write.id && !parkedId) {
+        parkedId = t.taskId;
+        h.s.park(t.taskId, "irreversible: needs approval");
+        continue;
+      }
+      h.run(t, (k) => `C-${k}`);
+    }
+    expect(parkedId).not.toBeNull();
+    // Everything else finished, but the parked step keeps its phase (and the run) open.
+    expect(h.s.tasks.get(parkedId!)!.state).toBe("NEEDS_APPROVAL");
+    expect(h.s.isDone()).toBe(false);
+    h.s.unpark(parkedId!, true, "approved by a human");
+    const again = h.s.lease("w1", () => true)!;
+    expect(again.taskId).toBe(parkedId);
+    h.run(again, (k) => `C-${k}`);
+    expect(h.s.isDone()).toBe(true);
+
+    const r = harness();
+    let rejected: string | null = null;
+    for (let i = 0; i < 200 && !rejected; i++) {
+      const inl = r.s.takeInline();
+      if (inl) {
+        r.run(inl, () => "C-1");
+        continue;
+      }
+      const t = r.s.lease("w1", () => true);
+      if (!t) break;
+      if (t.segmentId === write.id) {
+        r.s.park(t.taskId, "irreversible: needs approval");
+        r.s.unpark(t.taskId, false, "rejected by a human");
+        rejected = t.taskId;
+      } else r.run(t, (k) => `C-${k}`);
+    }
+    expect(r.s.tasks.get(rejected!)!.state).toBe("NEEDS_APPROVAL");
+    expect(r.s.isParked(rejected!)).toBe(false);
+  });
+
   it("refuses to recompute reads that a committed write of the same record used", () => {
     // Two writes per record share read_order. Once the first write committed, recomputing
     // read_order for the second write would decide again from post-write state.

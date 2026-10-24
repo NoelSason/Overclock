@@ -57,6 +57,8 @@ export interface ExecutorOptions {
   substitute?(t: TaskInstance): Record<string, unknown> | null;
 }
 
+/** How long a parked irreversible step waits for a human decision before it stays NEEDS_APPROVAL. */
+const APPROVAL_WAIT_MS = Number(process.env.OVERCLOCK_APPROVAL_WAIT_MS ?? 10 * 60_000);
 const MAX_RETRIES = { transient: 3, throttled: 6, stale: 3, uncertain: 3, verification: 2 } as const;
 
 function isWriteNode(n: ActionNode): boolean {
@@ -178,10 +180,8 @@ export class Executor {
   }
 
   approve(taskId: string, approved: boolean): void {
-    if (approved) {
-      this.approvedTasks.add(taskId);
-      this.scheduler.retry(taskId, 0, "approved by a human");
-    }
+    if (approved) this.approvedTasks.add(taskId);
+    this.scheduler.unpark(taskId, approved, approved ? "approved by a human" : "rejected by a human");
     this.wake();
   }
 
@@ -443,8 +443,14 @@ export class Executor {
       if (!this.pendingApprovals.has(approvalId)) {
         this.pendingApprovals.set(approvalId, t.taskId);
         this.o.emit({ type: "approval.requested", approvalId, taskId: t.taskId, nodeId: err.nodeId ?? "", description: `${seg.label} for ${t.recordKey} is irreversible and needs human approval` });
+        // Without a decision the step stays unexecuted and the record ends NEEDS_APPROVAL.
+        setTimeout(() => {
+          if (!this.scheduler.isParked(t.taskId)) return;
+          this.scheduler.unpark(t.taskId, false, `no approval decision within ${Math.round(APPROVAL_WAIT_MS / 1000)} s`);
+          this.wake();
+        }, APPROVAL_WAIT_MS).unref();
       }
-      return this.scheduler.fail(t.taskId, "NEEDS_APPROVAL", msg);
+      return this.scheduler.park(t.taskId, msg);
     }
     if (err instanceof OriginBlockedError) return this.scheduler.fail(t.taskId, "FAILED", `blocked: ${msg}`);
 

@@ -252,9 +252,8 @@ command.
    spacetime sql -s local overclock-network "SELECT * FROM capability_versions"
    ```
 
-The dashboard keeps `http://localhost:3000`, so it doesn't collide with SpacetimeDB on 3100.
-`pnpm test:e2e` does: it starts its own dashboard on port 3100 by default. To run the e2e suite
-while the local network is up, set `OVERCLOCK_E2E_DASHBOARD_PORT` to a free port.
+The dashboard keeps `http://localhost:3000`, and `pnpm test:e2e` starts its own dashboard on
+port 3200, so neither collides with SpacetimeDB on 3100.
 
 ### Maincloud
 
