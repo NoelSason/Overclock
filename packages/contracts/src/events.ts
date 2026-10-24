@@ -40,7 +40,7 @@ export type EventPayload =
   | E<"lock.conflict", { taskId: string; resource: string; holder: string }>
   | E<"recovery", { taskId: string; level: number; phase: "started" | "succeeded" | "failed" | "escalated"; reason: string; detail?: string; ms?: number; propagatedTo?: number }>
   | E<"invalidation", { taskId: string; recordKey: string; reason: string; invalidated: string[] }>
-  | E<"model.call", { provider: "anthropic" | "typesafe"; model: string; purpose: string; ms: number; inputTokens: number; outputTokens: number; costUsd: number; ok: boolean; error?: string }>
+  | E<"model.call", { provider: "anthropic" | "typesafe"; model: string; purpose: string; ms: number; inputTokens: number; outputTokens: number; costUsd: number; ok: boolean; error?: string; speed?: "standard" | "fast"; ttftMs?: number | null }>
   | E<"concurrency", { app: string; limit: number; reason: string }>
   | E<"reopt.decision", { switched: boolean; reason: string; remainingMs: number; alternativeMs: number | null; alternative?: string }>
   | E<"approval.requested", { approvalId: string; taskId: string; nodeId: string; description: string }>

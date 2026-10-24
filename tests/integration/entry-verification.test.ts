@@ -83,16 +83,16 @@ function addEntrySteps(extra: Partial<Extract<DslStep, { op: "submit" }>> = {}):
   ];
 }
 
-function plan(steps: DslStep[]): DslPlan {
-  return { strategy: { name: "t", summary: "t", rationale: "t" }, phases: [{ id: "log", kind: "foreach", over: "$input.records", key: "$rec.id", dependsOn: [], steps }], outcomes: [{ id: "o", description: "o" }], assumptions: [], risks: [] };
+function plan(steps: DslStep[], laterPhases: DslPlan["phases"] = []): DslPlan {
+  return { strategy: { name: "t", summary: "t", rationale: "t" }, phases: [{ id: "log", kind: "foreach", over: "$input.records", key: "$rec.id", dependsOn: [], steps }, ...laterPhases], outcomes: [{ id: "o", description: "o" }], assumptions: [], risks: [] };
 }
 
-async function execute(steps: DslStep[], records: Record<string, unknown>[]): Promise<{ outcomes: RecordOutcome[]; events: EventPayload[]; executor: Executor }> {
+async function execute(steps: DslStep[], records: Record<string, unknown>[], laterPhases: DslPlan["phases"] = []): Promise<{ outcomes: RecordOutcome[]; events: EventPayload[]; executor: Executor }> {
   const apps = [
     { name: "mini", origin: app.origin },
     { name: "reader", origin: app.origin },
   ];
-  const lowered = lowerPlan({ plan: plan(steps), models: [mini, reader], apps, goal: "g", inputs: { records }, programId: "p", strategyId: "s" });
+  const lowered = lowerPlan({ plan: plan(steps, laterPhases), models: [mini, reader], apps, goal: "g", inputs: { records }, programId: "p", strategyId: "s" });
   expect(lowered.issues.filter((i) => i.severity === "error")).toEqual([]);
   expect(hasErrors(lowered.issues)).toBe(false);
   const compiled = compileProgram(lowered.program);
@@ -254,5 +254,34 @@ describe("executor: writes that append an entry", () => {
     expect(app.activity.get("I-2") ?? []).toEqual([]);
     expect(outcomes[0]!.status).toBe("FAILED");
     expect(outcomes[0]!.notes.join(" ")).toContain("already committed");
+  });
+
+  it("marks records produced by a later phase as derived, so input-record counts never exceed the input", async () => {
+    // Seen in a benchmark report: 10 orders plus one cross-record hold showed "Engine-verified 108%".
+    const groupEntry = "concat('Group ', $rec.key)";
+    const group: DslPlan["phases"][number] = {
+      id: "group",
+      kind: "foreach",
+      over: "entries(countBy($phase.log, 'rec.group'))",
+      key: "$rec.key",
+      dependsOn: ["log"],
+      steps: [
+        { id: "open_group", op: "goto", app: "mini", url: "/items/{$rec.key}/activity" },
+        { id: "write_group", op: "fill", control: ids.entry, value: groupEntry },
+        { id: "add_group", op: "submit", control: ids.add, writes: ["app:mini:item:{$rec.key}"], guards: [], verify: { url: "/items/{$rec.key}/activity", fields: [{ name: "entry", control: ids.region, equals: groupEntry }] }, irreversible: false },
+      ],
+    };
+    const records = [
+      { id: "I-4", group: "I-20" },
+      { id: "I-5", group: "I-20" },
+    ];
+    const { outcomes } = await execute(addEntrySteps(), records, [group]);
+    expect(app.activity.get("I-20")).toEqual(["Group I-20"]);
+    expect(outcomes.map((o) => [o.recordKey, o.scope, o.status]).sort()).toEqual([
+      ["I-20", "derived", "VERIFIED"],
+      ["I-4", "input", "VERIFIED"],
+      ["I-5", "input", "VERIFIED"],
+    ]);
+    expect(outcomes.filter((o) => o.scope !== "derived" && o.status === "VERIFIED")).toHaveLength(records.length);
   });
 });

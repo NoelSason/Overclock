@@ -228,7 +228,7 @@ function stubClaude(answer: (user: string) => Promise<RepairPlan>): DeepModel & 
     async parse<T extends z.ZodType>(req: ParseRequest<T>): Promise<ParseResult<z.infer<T>>> {
       s.calls++;
       const data = await answer(req.user);
-      return { data: data as z.infer<T>, ms: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, model: "stub" };
+      return { data: data as z.infer<T>, ms: 1, inputTokens: 0, outputTokens: 0, costUsd: 0, model: "stub", speed: "standard" };
     },
   };
   return s;

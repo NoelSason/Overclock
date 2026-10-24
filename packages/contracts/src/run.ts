@@ -210,6 +210,8 @@ export type RunSummary = z.infer<typeof RunSummary>;
 /** Per-record outcome the engine reports (what it claims, with evidence). */
 export const RecordOutcome = z.object({
   recordKey: z.string(),
+  /** `input`: a record of the run's input. `derived`: produced by a later phase (e.g. customers to hold). */
+  scope: z.enum(["input", "derived"]).optional(),
   status: VerificationStatus,
   writes: z.number(),
   receipts: z.array(z.string()),

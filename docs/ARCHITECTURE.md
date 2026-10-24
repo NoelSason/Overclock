@@ -551,8 +551,6 @@ never from browser workers:
 - **Idempotency decisions read region text.** A plan that skips an append when the notes
   already contain its text uses `contains()` on the region's text, so a longer unrelated entry
   that contains the text can cause a skip. Verification never accepts that case.
-- **Record counts include aggregate phases.** `recordsVerified` counts outcomes of every
-  phase, so a run over 10 orders with one cross-record hold can report 11.
 - **Access paths have no test.** Access-path substitution is wired into mode E only. Online
   re-optimization beyond access paths doesn't exist, so the `overclock-no-online-reopt`
   ablation rung measures the same thing as `overclock-no-access-paths`.

@@ -332,8 +332,6 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
   after a capability breaks; it discovers cold instead.
 - The staged swarm, crawler, dry run, critique, and effect classification have no automated
   tests. They run in every live run and benchmark.
-- `recordsVerified` counts outcomes of every phase, so a run over 10 orders with one
-  cross-record hold reports 11.
 - Bulk-import operations are detected but never planned, because read-back verification
   covers one entity per write.
 - Sign-in is generic: it looks for a password field plus an email, text, or user-named input.

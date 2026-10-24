@@ -577,8 +577,13 @@ export class Executor {
     return this.pool.length ? Math.min(1, this.busyMs / (span * this.pool.length)) : 0;
   }
 
-  /** Per-record outcome: VERIFIED only if every write segment of that record verified (or was correctly skipped). */
+  /**
+   * Per-record outcome: VERIFIED only if every write segment of that record verified (or was
+   * correctly skipped). Records that no phase over `$input.*` produced (for example a cross-record
+   * hold over customers) are marked `derived`, so input-record counts never exceed the input.
+   */
   outcomes(): RecordOutcome[] {
+    const inputPhases = new Set(this.o.compiled.phases.filter((p) => p.kind === "foreach" && /^\s*\$input\./.test(p.over ?? "")).map((p) => p.id));
     const byRecord = new Map<string, TaskInstance[]>();
     for (const t of this.scheduler.tasks.values()) {
       if (t.phaseId && t.recordKey === "_") continue;
@@ -592,7 +597,7 @@ export class Executor {
       const status: VerificationStatus = worst === "UNCONFIRMED" ? "UNCONFIRMED" : worst === "FAILED" || worst === "CANCELLED" ? "FAILED" : worst === "NEEDS_APPROVAL" || worst === "PENDING" || worst === "READY" ? (worst === "NEEDS_APPROVAL" ? "NEEDS_APPROVAL" : "FAILED") : "VERIFIED";
       const writes = tasks.filter((t) => t.segment.kind === "write" && t.state === "VERIFIED").length;
       const receipts = (this.receipts.get(key) ?? []).map((r) => `${r.nodeId}:${r.status}`);
-      out.push({ recordKey: key, status: writes === 0 && status === "VERIFIED" && tasks.some((t) => t.segment.kind === "write") ? "SKIPPED" : status, writes, receipts, notes: tasks.filter((t) => t.error && t.state !== "VERIFIED" && t.state !== "COMPLETED").map((t) => `${t.segmentId}: ${t.error}`).slice(0, 5) });
+      out.push({ recordKey: key, scope: tasks.some((t) => inputPhases.has(t.phaseId)) ? "input" : "derived", status: writes === 0 && status === "VERIFIED" && tasks.some((t) => t.segment.kind === "write") ? "SKIPPED" : status, writes, receipts, notes: tasks.filter((t) => t.error && t.state !== "VERIFIED" && t.state !== "COMPLETED").map((t) => `${t.segmentId}: ${t.error}`).slice(0, 5) });
     }
     return out;
   }

@@ -81,7 +81,7 @@ export class RunController implements RunHandle {
     this.bus.subscribe((e) => applyEvent(this.viewState, e));
     const budget = config.budgetUsd;
     this.ledger = new ModelLedger(budget, runtime.ledger);
-    this.ledger.onCall((c) => this.emit({ type: "model.call", provider: c.provider, model: c.model, purpose: c.purpose, ms: Math.round(c.ms), inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd, ok: c.ok, error: c.error }));
+    this.ledger.onCall((c) => this.emit({ type: "model.call", provider: c.provider, model: c.model, purpose: c.purpose, ms: Math.round(c.ms), inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd, ok: c.ok, error: c.error, ...(c.speed ? { speed: c.speed } : {}), ...(c.ttftMs != null ? { ttftMs: Math.round(c.ttftMs) } : {}) }));
     this.claude = new ClaudeProvider(runtime.claudeConfig, this.ledger);
     this.jev = new JevProvider(runtime.jevConfig, this.ledger);
     this.jev.enabled = config.useJev;
@@ -310,7 +310,7 @@ export class RunController implements RunHandle {
       unconfirmed: outcomes.filter((o) => o.status === "UNCONFIRMED").length,
       skipped: outcomes.filter((o) => o.status === "SKIPPED").length,
       needsApproval: outcomes.filter((o) => o.status === "NEEDS_APPROVAL").length,
-      recordsVerified: outcomes.filter((o) => o.status === "VERIFIED" || o.status === "SKIPPED").length,
+      recordsVerified: outcomes.filter((o) => o.scope !== "derived" && (o.status === "VERIFIED" || o.status === "SKIPPED")).length,
       recoveries: v.recoveries.filter((r) => r.phase === "succeeded").length,
       modelCalls: totals.calls,
       inputTokens: totals.inputTokens,
