@@ -73,8 +73,8 @@ optional `note`.
 | --- | --- |
 | `control` | The form's submit button. |
 | `writes` | Resource keys the write changes, specific to the entity, for example `app:support:ticket:{$out.find_ticket.ticketId}`. Two writes with the same key never run at the same time. |
-| `guards` | Compare-and-swap checks: `{ control, equals }`. For each field the step changes whose earlier value it read, the edit form's current value must still equal what was read. If it doesn't, the runtime re-reads and recomputes instead of overwriting. |
-| `verify` | `{ url, fields: { name, control, equals }[] }`. After the write, the runtime loads `url` fresh and reports success only if every field matches. |
+| `guards` | Compare-and-swap checks: `{ control, equals }`. For each field the step changes whose earlier value it read, the edit form's current value must still equal what was read. If it doesn't, the runtime re-reads and recomputes instead of overwriting. The compiler adds a guard the plan left out when an earlier `extract` read the same control under the same condition, and drops a guard whose expected value is the value the same form is about to write (it could only pass after the write). |
+| `verify` | `{ url, fields: { name, control, equals }[] }`. After the write, the runtime loads `url` fresh and reports success only if every field matches. When `control` is a section's region fact (a list of notes or comments), the field passes only if exactly one entry equals the expected text. |
 | `irreversible` | `true` for payments, deletions, publishing, sending messages, and refunds. Such a step requires human approval. |
 
 ### Data flow between steps
@@ -147,7 +147,7 @@ observed app models; an unresolvable reference becomes an error, never a guessed
 | `goto` | `navigate` | Reads the page resource `page:<app>:<path>`. |
 | `fill`, `select` | `fill`, `select` | Effect `local-write`. |
 | `click` | `click` | Effect `read`, or `local-write` for `purpose: "toggle"`. Rejected if the control was classified as a write. |
-| `submit` | `click` | Effect `remote-write`, or `irreversible` (from the flag or the control's classification). Retry policy `verify-before-retry`, or `never` for irreversible. Writes the declared keys plus the verification page's resource. Guards become `fieldEquals` preconditions on the first interaction after the edit page loads. Timeout 15 s. |
+| `submit` | `click` | Effect `remote-write`, or `irreversible` (from the flag or the control's classification). Retry policy `verify-before-retry`, or `never` for irreversible. Writes the declared keys plus the verification page's resource. Guards become `fieldEquals` preconditions on the first interaction after the edit page loads. A verification field on a region fact gets `match: "entry"`. Timeout 15 s. |
 | `extract` | `extract` with `fields` | Reads the `value` of inputs, selects, textareas, and checkboxes, and the `text` of everything else. |
 | `extractTable` | `extract` with `table` | Pagination capped at 200 pages (default 50). Timeout 60 s. |
 | `compute` | `compute` | |
@@ -196,7 +196,7 @@ The lowering also infers dependencies:
 | `reads`, `writes` | Resource keys (templates allowed). |
 | `effect` | `read`, `local-write`, `remote-write`, or `irreversible`. |
 | `retryPolicy` | `safe`, `verify-before-retry`, or `never`. |
-| `verify` | `VerificationSpec`: `{ url, fields: { name, target, equals, attr }[] }`. |
+| `verify` | `VerificationSpec`: `{ url, fields: { name, target, equals, attr, match? }[] }`. `match: "entry"` counts matching entries of a collection region instead of comparing one value. |
 | `timeoutMs`, `estimatedLatencyMs` | Timing. |
 | `requiresApproval`, `evidence`, `resourceLocks` | Approval flag, evidence links, explicit locks. |
 
@@ -239,7 +239,9 @@ expr    := or
 or      := and ('||' and)*
 and     := eq ('&&' eq)*
 eq      := cmp (('==' | '!=') cmp)*
-cmp     := unary (('<' | '<=' | '>' | '>=' | 'in') unary)*
+cmp     := add (('<' | '<=' | '>' | '>=' | 'in') add)*
+add     := mul (('+' | '-') mul)*
+mul     := unary (('*' | '/') unary)*
 unary   := ('!' | '-') unary | postfix
 postfix := primary ('.' ident | '[' expr ']')*
 primary := number | string | true | false | null | $root | ident '(' args ')' | '(' expr ')' | '[' items ']'
@@ -257,6 +259,9 @@ primary := number | string | true | false | null | $root | ident '(' args ')' | 
 - **Ordering** (`<`, `<=`, `>`, `>=`) compares numerically when both sides parse as numbers
   (ignoring `$` and `,`), otherwise as strings.
 - **`in`** tests list membership, an object key, or a substring.
+- **Arithmetic** (`+`, `-`, `*`, `/`) works on numbers and numeric strings. `+` with a
+  non-number operand joins the two as text (`null` counts as `""`); the other operators return
+  `null`. Division by zero returns `null`. Use `concat()` to join text explicitly.
 - **Truthiness:** `false`, `null`, `0`, `""`, and empty lists are falsy.
 - **`&&` and `||`** short-circuit; `||` returns the first truthy operand. `if` evaluates only
   the branch it takes.
@@ -351,7 +356,12 @@ severity, a code, a message, and the step or phase involved. Any `error` blocks 
 ### Compilation and streaming
 
 - `compile`: segment formation found that a page action can't join its page chain without a
-  cycle.
+  cycle and the page can't be re-opened. When only reads ran on that page since it loaded (for
+  example: open a ticket, read its notes, decide using data from other apps, then add a note),
+  the compiler starts a new segment that re-opens the page instead.
+- `self-defeating-guard` (warning): a guard that expects the value its own form writes was
+  dropped.
+- `auto-guard` (warning): the compiler added a compare-and-swap guard the plan left out.
 - `stream-continuation` (incremental compiler only): a streamed step continues a page whose
   fragment already ran and can't be re-opened.
 - `segments` (incremental compiler only): segment formation failed for a streamed phase.
@@ -364,4 +374,8 @@ Validation can't see everything, so the runtime checks again:
 - An unknown `foreach` list or a list longer than `maxIterations` fails the phase.
 - A record without a key fails the phase, and a duplicate key is dropped.
 - A failed `assert` or postcondition fails the record.
-- A failed compare-and-swap guard triggers invalidation.
+- A failed compare-and-swap guard triggers invalidation, unless a write of the same record that
+  used the same reads already committed. Recomputing those reads would decide again from
+  post-write state, so the task fails instead.
+- Read-back on a region fact requires exactly one matching entry on the page of the entity the
+  write targeted. Duplicates and a different entity fail the write without a retry.

@@ -161,9 +161,12 @@ The exact rules mode E applies are in [Cold-start pipelines](#cold-start-pipelin
 
 ## Execution correctness
 
-**Status: Partial.** The scheduler, locks, AIMD, read-back, and uncertain-write detection are
-tested in isolation (`tests/unit/scheduler.test.ts`, `tests/integration/runtime.test.ts`).
-The executor that combines them has no automated test; it runs only in live runs.
+**Status: Working (tested).** The scheduler, locks, AIMD, read-back, and uncertain-write
+detection are tested in isolation (`tests/unit/scheduler.test.ts`,
+`tests/integration/runtime.test.ts`). The executor that combines them is tested end to end on
+a fixture app with real perception, lowering, and compilation
+(`tests/integration/entry-verification.test.ts`): successful, duplicate, rejected, and
+ambiguous submissions, and the invalidation rule below.
 
 ### Task states
 
@@ -171,6 +174,11 @@ A task moves through `PENDING → READY → LEASED → RUNNING → VERIFYING →
 `COMPLETED` for reads). Side states are `REPAIRING`, `RECONCILING`, and `SUSPENDED`. Terminal
 states are `VERIFIED`, `COMPLETED`, `FAILED`, `UNCONFIRMED`, `SKIPPED`, `NEEDS_APPROVAL`, and
 `CANCELLED`. When a task fails terminally, its dependents are `SKIPPED`.
+
+An irreversible step that needs approval is **parked** in `NEEDS_APPROVAL`: its locks are
+released, its dependents keep waiting, and its phase stays open. Approving it puts it back in
+the ready queue; rejecting it, or no decision within `OVERCLOCK_APPROVAL_WAIT_MS` (default 10
+minutes), makes `NEEDS_APPROVAL` final and skips its dependents.
 
 ### Leases and the watchdog
 
@@ -201,9 +209,25 @@ it. A failed guard raises `PreconditionFailedError`, which triggers invalidation
 
 After a write, the worker navigates fresh to the verification URL (never the form it
 submitted) and compares each expected field. Values are whitespace-normalized. A field matches
-when it is loosely equal (numbers and numeric strings compare equal), equal ignoring case, or,
-for expected text of 12 characters or more, contained in the actual text (for example a note
-in a notes list). A mismatch raises `VerificationFailedError`.
+when it is loosely equal (numbers and numeric strings compare equal) or equal ignoring case.
+There is no substring matching. A mismatch raises `VerificationFailedError`.
+
+Two rules make appended entries (notes, comments, log lines) verifiable without false
+positives:
+
+- **Exactly one matching entry.** Perception records a titled region with no form fields,
+  definition lists, or tables (for example an "Internal notes" section) as one fact with role
+  `region`. Verification against a region fact counts the region's innermost list items outside
+  forms (or treats a region without a list as one entry) and passes only when exactly one entry,
+  or an element inside it, has text equal to the expected value. An empty list, a longer entry
+  that merely contains the text, a draft left in a form field, and the same text in another
+  region don't match. Two or more matches is a **duplicate**.
+- **Same entity.** The verification page must show the entity ids of the page the write
+  targeted (the segment's last navigation before the write): a write on `/tickets/T-1/edit`
+  can't be verified on `/tickets/T-2`.
+
+A duplicate or a different entity fails the write without a retry, because another write can
+only make the state worse.
 
 ### Uncertain writes and reconciliation
 
@@ -213,9 +237,11 @@ treated the same way. The executor never retries an uncertain write blindly. It 
 
 1. Load the verification page and compare.
 2. If the state matches, record `VERIFIED` without a second write.
-3. If it doesn't match and the node's policy is `verify-before-retry`, retry with backoff (up
+3. If the read-back shows a duplicate entry or a different entity, report `FAILED` without
+   retrying.
+4. If it doesn't match and the node's policy is `verify-before-retry`, retry with backoff (up
    to 3 attempts).
-4. Otherwise report `UNCONFIRMED`.
+5. Otherwise report `UNCONFIRMED`.
 
 A 429 or a 4xx response means the write was rejected before commit, so it is safe to handle
 as a rejection.
@@ -228,6 +254,12 @@ the same record that is not a write and not already verified, discards their out
 re-queues them so they read fresh state. Verified writes are never re-executed. A write task
 that is still stale on its third attempt fails.
 
+Invalidation is refused when a verified write of the same record used any of the reads it
+would recompute. Re-reading after that write would decide again from the state the write
+already changed. In a live run, that path skipped a record's note and still reported the
+record `VERIFIED`. The task now fails instead
+(`tests/integration/entry-verification.test.ts`, "regression: …").
+
 ### Failure handling
 
 | Error | Executor response |
@@ -237,10 +269,11 @@ that is still stale on its third attempt fails.
 | Guard failure or 409 | Invalidate and re-read. |
 | Uncertain write, or a crash after the write point | Reconcile by read-back. |
 | Read-back mismatch | Retry up to 2 attempts, then `FAILED` with a receipt. Under a canary gate, two failures block the template. |
+| Read-back duplicate entry or different entity | `FAILED` with a receipt, no retry. |
 | Write blocked by the read-only guard | `FAILED`: a read fragment attempted a write. |
 | Other 4xx on a write | `FAILED` (rejected). |
 | Unrepaired locator or dialog failure | `NEEDS_APPROVAL` (escalated after recovery). |
-| Irreversible node not approved | `approval.requested`, then `NEEDS_APPROVAL`. |
+| Irreversible node not approved | `approval.requested`, then parked in `NEEDS_APPROVAL` until approved, rejected, or expired. |
 | Crash before any write | Retry after 200 ms. |
 
 Backoff is `min(8 s, base × 2^(attempt − 1))` with ±25% jitter.
@@ -366,6 +399,8 @@ is invalid.
 
 `decidePolicy` decides how much discovery a staged run gets:
 
+- Network import: a capability imported from the Overclock Network and rebound to this
+  runtime's own observation is compiled and executed; no discovery swarm or planner call.
 - Warm cache hit: reuse the cached plan and app models; no discovery or planning.
 - Modes B and C: one planner, no catalogs, no critique, no dry run.
 - 5 records or fewer: one planner plus a dry-run probe.
@@ -377,7 +412,7 @@ is invalid.
 Two strategy directives exist today: `per-record` (always) and `list-scan` (when an app has a
 paginated or long list table). So a run compares at most two candidates.
 
-### Mode D: stage-gated (Partial)
+### Mode D: stage-gated (Working, measured)
 
 `runStagedSwarm` runs each stage to completion before the next one starts:
 
@@ -392,6 +427,8 @@ paginated or long list table). So a run compares at most two candidates.
 5. **Critique and dry run.** For each valid candidate, in parallel: an adversarial critique
    (Claude Haiku) and a dry run of its read segments for the first record in a
    mutation-blocked context. High-severity risks or a failed dry run trigger one repair round.
+   The repaired plan is validated and compiled with every static check, but it isn't
+   critiqued a second time.
 6. **Selection.** The optimization scout estimates each candidate's cost and selects the
    fastest valid one.
 7. **Execution.** The executor starts only after selection, with the recommended worker count.
@@ -399,10 +436,12 @@ paginated or long list table). So a run compares at most two candidates.
 The first browser action of execution happens after every earlier stage has finished, so
 `overlapMs` is 0.
 
-### Mode E: streaming (In progress)
+### Mode E: streaming (Working, measured)
 
-`runStreamingPipeline` (`services/engine/src/streaming.ts`) is implemented but has not been
-run end to end. Unlike mode D, it plans a single strategy (the first directive, `per-record`)
+`runStreamingPipeline` (`services/engine/src/streaming.ts`) runs end to end; see
+[`BENCHMARKS.md`](BENCHMARKS.md) for measured runs. A recorded live planner stream is replayed
+through the watcher and the incremental compiler in `tests/unit/stream-replay.test.ts`. Unlike
+mode D, it plans a single strategy (the first directive, `per-record`)
 instead of competing several, runs no dry-run probes, and uses critique only to gate writes. A
 comparison of E with D therefore measures these differences together with the overlap. It works
 as follows:
@@ -450,7 +489,21 @@ as follows:
     directly.
 11. **Fallback.** If any write gate fails, the pipeline rejects every write fragment, cancels
     queued tasks, waits for running ones, asks the planner for a repaired plan, and runs it
-    stage-gated. Reads that already ran had no side effects.
+    stage-gated. Reads that already ran had no side effects. If the repaired plan doesn't
+    validate, the planner gets one more round with those validation errors only (the same
+    bound as mode D); then the run fails. As in mode D, the repaired plan isn't critiqued
+    again, so after a fallback its writes wait for validation and compilation, not a second
+    critique.
+
+**Where cold-start time goes.** The critique gate is the most common fallback trigger. In the
+strict A→B demo on 2026-10-24 (10 records, local arena), runtime A spent 36.8 s on the
+streamed plan, with reads executing from 7.6 s, plus 8.2 s on the critique, plus 49.8 s on one
+repair round. The repair was triggered by six high-severity findings. Two were real defects:
+an email compared after normalizing only one side, and edit-form fields overwritten without
+guards. Two were speculative: unverified pagination on a search, and a resubmitted form. Two
+were false positives: valid `'out.step.field'` paths, and a ticket match the plan already
+filtered by exact order id. Any one high-severity finding triggers the repair, so the gate
+stays as strict as before; the measured cost of that strictness is the repair round.
 
 Phases that depend on other phases (cross-record aggregates) expand only after those phases
 finish, in both modes. Every stage emits `stage` events, scouts emit `scout.page`, and every
@@ -460,7 +513,8 @@ so the overlap is visible, and the **Fragments** panel shows each fragment's gat
 
 ## Network layer
 
-**Status: In progress.** [`NETWORK.md`](NETWORK.md) has the design, status, and setup.
+**Status: Working (tested, one recorded live A→B run).** [`NETWORK.md`](NETWORK.md) has the
+design, status, setup, and results.
 
 The Overclock Network shares **portable capabilities**: a Procedure DSL plan whose control
 references are semantic, data-free control descriptors instead of observation-local ids. A
@@ -469,8 +523,18 @@ content hash, rebinds every control against its own live observation, and compil
 A capability reaches other runtimes only after sanitization, independent validation by a
 different identity, and promotion through a state machine enforced by the SpacetimeDB module.
 
-The engine doesn't call the network yet. Runs with `knowledge: "network-read"` or
-`"network-read-and-contribute"` behave like cold runs that also write the local program cache.
+The engine calls the network only from the run controller (`services/engine/src/network.ts`),
+never from browser workers:
+
+- **Before discovery** (`network-read`, `network-read-and-contribute`): look up an ACTIVE
+  capability by canonical operation and origins, fetch and hash-verify it, and rebind it with a
+  mutation-blocked mini-crawl. If the rebound plan compiles and every write bound safely, the
+  staged swarm executes it with policy `network-import` and no planner call. Otherwise the run
+  discovers cold. An unreachable or disabled network also means a cold run
+  (`tests/unit/network-service.test.ts`).
+- **After execution:** an imported capability gets a reuse report. With
+  `network-read-and-contribute`, a run where every record verified exports the executed plan
+  (with the same compiler-added guards) as a sanitized capability and proposes it.
 
 ## Limitations
 
