@@ -1,9 +1,14 @@
+import { HOLDOUT_APP, HOLDOUT_DISPLAY_NAME } from "../holdout/meta";
+import { BRANDS } from "./ui";
+import { APP_NAMES, CLASSIC_APPS, SAVE_BUTTON_RENAMES } from "./variations";
+
 /**
  * Judge console: a static page whose inline script calls the admin API. All dynamic values are
- * written with textContent (mismatch values can contain agent-written note text).
- * Note: this string must not contain backticks or "${" sequences.
+ * written with textContent (mismatch values can contain agent-written note text). The app list,
+ * display names, and rename-save pairs are injected as JSON so the page covers every app.
+ * Note: the template string must not contain backticks or "${" sequences.
  */
-export const JUDGE_CONSOLE_HTML = String.raw`<!doctype html>
+const TEMPLATE = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -12,7 +17,7 @@ export const JUDGE_CONSOLE_HTML = String.raw`<!doctype html>
 <link rel="icon" href="data:,">
 <style>
 :root{--bg:#070a12;--bg2:#0c111d;--panel:#111827cc;--panel-solid:#111827;--line:#1f2a3d;--line2:#2a3850;--fg:#e6eaf2;--muted:#8a94a8;--dim:#5d677b;
---cyan:#22d3ee;--violet:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--crm:#2dd4bf;--orders:#fb923c;--support:#a78bfa;
+--cyan:#22d3ee;--violet:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--crm:#2dd4bf;--orders:#fb923c;--support:#a78bfa;--app4:#60a5fa;
 --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;--sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -57,7 +62,8 @@ main{padding:1.4em 1.6em 3em;max-width:1500px;margin:0 auto;display:grid;gap:1.2
 .rps-num{font-size:2.3em;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
 .rps-unit{color:var(--muted);font-size:.8em;margin-bottom:.35em}
 .spark{flex:1;height:44px}
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:.5em}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.5em}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1.2em}
 .metric{background:#0b1220;border:1px solid var(--line);border-radius:10px;padding:.5em .6em}
 .metric .k{font-size:.68em;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
 .metric .v{font-size:1.25em;font-weight:800;font-variant-numeric:tabular-nums}
@@ -93,7 +99,7 @@ td.exp{color:var(--green)}td.act{color:var(--red)}
 .kind span{font-size:.8em;color:var(--dim)}
 .cell{border-radius:9px;font-size:.82em}
 .cell.on{background:rgba(251,191,36,.14);border-color:rgba(251,191,36,.55);color:var(--amber)}
-.cell[data-app=CRM]:not(.on):hover{border-color:var(--crm)}.cell[data-app=Orders]:not(.on):hover{border-color:var(--orders)}.cell[data-app=Support]:not(.on):hover{border-color:var(--support)}
+.cell:not(.on):hover{border-color:var(--cyan)}
 .big-actions{display:flex;gap:.7em;flex-wrap:wrap;margin-top:1.1em;align-items:center}
 .result{font-family:var(--mono);font-size:.82em;color:var(--muted)}
 textarea.json{width:100%;min-height:320px;font-family:var(--mono);font-size:.82em;line-height:1.5;resize:vertical;tab-size:2}
@@ -115,9 +121,7 @@ textarea.json{width:100%;min-height:320px;font-family:var(--mono);font-size:.82e
   <nav class="top-links" id="top-links" aria-label="Apps"></nav>
 </header>
 <main>
-  <section class="panel span-4 app-card" style="--accent:var(--crm)" data-card="CRM"></section>
-  <section class="panel span-4 app-card" style="--accent:var(--orders)" data-card="Orders"></section>
-  <section class="panel span-4 app-card" style="--accent:var(--support)" data-card="Support"></section>
+  <div class="span-12 cards" id="cards"></div>
 
   <section class="panel span-5" aria-labelledby="h-scn">
     <h2 id="h-scn">Scenario<span class="hint" id="scn-loaded"></span></h2>
@@ -129,6 +133,7 @@ textarea.json{width:100%;min-height:320px;font-family:var(--mono);font-size:.82e
         <option value="t1-order-reconcile">T1 · Order reconcile</option>
         <option value="t2-ticket-triage">T2 · Ticket triage</option>
         <option value="t3-crm-status-sync">T3 · CRM status sync (holdout)</option>
+        <option value="t4-holdout">T4 · Fourth app (holdout)</option>
       </select></div>
       <div><label for="f-records">Records</label><input id="f-records" type="number" min="1" max="500" value="100"></div>
       <button type="submit" class="primary">Load scenario</button>
@@ -183,12 +188,15 @@ textarea.json{width:100%;min-height:320px;font-family:var(--mono);font-size:.82e
     <div class="err" id="json-err" hidden></div>
   </section>
 </main>
+<script type="application/json" id="arena-meta">__ARENA_META__</script>
 <script>
 (function(){
 "use strict";
-var APPS = ["CRM", "Orders", "Support"];
-var NAMES = { CRM: "Ledgerline CRM", Orders: "Parcelpoint Orders", Support: "Helpwell Desk" };
-var SAVE = { CRM: ["Save changes", "Update record"], Orders: ["Update order", "Apply changes"], Support: ["Save ticket", "Commit ticket"] };
+var META = JSON.parse(document.getElementById("arena-meta").textContent);
+var APPS = META.apps;
+var NAMES = META.names;
+var SAVE = META.save;
+var ACCENTS = META.accents;
 var KINDS = [
   { kind: "rename-save", title: "Rename save buttons", desc: "Save changes → Update record, …" },
   { kind: "confirm-modal", title: "Confirmation modal", desc: "Edits need a Confirm click" },
@@ -238,7 +246,8 @@ function log(tag, text, tone){
 // ---------- App cards
 var cards = {}, history = {}, last = {};
 APPS.forEach(function(app){
-  var root = document.querySelector('[data-card="' + app + '"]');
+  var root = el("section", { cls: "panel app-card", "data-card": app, style: "--accent:var(" + ACCENTS[app] + ")" });
+  $("cards").appendChild(root);
   var origin = el("a", { cls: "app-origin", href: "#", target: "_blank", rel: "noopener", text: "" });
   var rpsNum = el("div", { cls: "rps-num", text: "0" });
   var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -249,14 +258,14 @@ APPS.forEach(function(app){
   function metric(k, cls){ var v = el("div", { cls: "v", text: "0" }); var m = el("div", { cls: "metric" + (cls ? " " + cls : "") }, [el("div", { cls: "k", text: k }), v]); return { root: m, v: v }; }
   var m = {
     inflight: metric("In flight"), max: metric("Peak"), writes: metric("Writes", "good"), requests: metric("Requests"),
-    t429: metric("429s", "warn"), c409: metric("409s", "warn"), b503: metric("503 inj.", "bad"), a500: metric("500 inj.", "bad")
+    t429: metric("429s", "warn"), c409: metric("409s", "warn"), b503: metric("503 inj.", "bad"), a500: metric("500 inj.", "bad"), d403: metric("Denied 403", "warn")
   };
   var bar = el("div", { cls: "bar" }, [el("i")]);
   m.inflight.root.appendChild(bar);
   var chips = el("div", { cls: "chips" });
   root.appendChild(el("div", { cls: "app-head" }, [el("span", { cls: "app-name", text: NAMES[app] }), origin]));
   root.appendChild(el("div", { cls: "rps" }, [el("div", null, [rpsNum, el("div", { cls: "rps-unit", text: "requests / s" })]), svg]));
-  root.appendChild(el("div", { cls: "metrics" }, [m.inflight.root, m.max.root, m.writes.root, m.requests.root, m.t429.root, m.c409.root, m.b503.root, m.a500.root]));
+  root.appendChild(el("div", { cls: "metrics" }, [m.inflight.root, m.max.root, m.writes.root, m.requests.root, m.t429.root, m.c409.root, m.b503.root, m.a500.root, m.d403.root]));
   root.appendChild(chips);
   cards[app] = { origin: origin, rps: rpsNum, area: area, line: line, m: m, bar: bar.firstChild, chips: chips };
   history[app] = [];
@@ -275,6 +284,7 @@ function drawSpark(app){
 var cellEls = {};
 (function buildMatrix(){
   var mx = $("matrix");
+  mx.style.gridTemplateColumns = "minmax(14em,1.4fr) repeat(" + (APPS.length + 1) + ",minmax(6.5em,1fr))";
   ["Surprise"].concat(APPS).concat(["All apps"]).forEach(function(h){ mx.appendChild(el("div", { cls: "hdr", text: h })); });
   KINDS.forEach(function(k){
     mx.appendChild(el("div", { cls: "kind" }, [el("b", { text: k.title }), el("span", { text: k.desc })]));
@@ -429,7 +439,7 @@ function pollStats(){
       c.rps.textContent = rps < 10 ? rps.toFixed(1) : String(Math.round(rps));
       drawSpark(app);
       c.m.inflight.v.textContent = st.inFlight; c.m.max.v.textContent = st.maxInFlight; c.m.writes.v.textContent = st.writes; c.m.requests.v.textContent = st.requests;
-      c.m.t429.v.textContent = st.throttled429; c.m.c409.v.textContent = st.conflicts409; c.m.b503.v.textContent = st.injectedBeforeCommit; c.m.a500.v.textContent = st.injectedAfterCommit;
+      c.m.t429.v.textContent = st.throttled429; c.m.c409.v.textContent = st.conflicts409; c.m.b503.v.textContent = st.injectedBeforeCommit; c.m.a500.v.textContent = st.injectedAfterCommit; c.m.d403.v.textContent = st.deniedWrites || 0;
       var limit = currentCfg && currentCfg.concurrencyLimit[app];
       c.bar.style.width = Math.min(100, (st.inFlight / (limit || Math.max(8, st.maxInFlight || 1))) * 100) + "%";
     });
@@ -454,3 +464,13 @@ log("ready", "Judge console connected");
 </script>
 </body>
 </html>`;
+
+const ACCENTS: Record<string, string> = { CRM: "--crm", Orders: "--orders", Support: "--support", [HOLDOUT_APP]: "--app4" };
+const META = {
+  apps: APP_NAMES,
+  names: { ...Object.fromEntries(CLASSIC_APPS.map((a) => [a, BRANDS[a].name])), [HOLDOUT_APP]: HOLDOUT_DISPLAY_NAME },
+  save: Object.fromEntries(APP_NAMES.map((a) => [a, [SAVE_BUTTON_RENAMES[a].from, SAVE_BUTTON_RENAMES[a].to]])),
+  accents: Object.fromEntries(APP_NAMES.map((a) => [a, ACCENTS[a] ?? "--cyan"])),
+};
+
+export const JUDGE_CONSOLE_HTML = TEMPLATE.replace("__ARENA_META__", () => JSON.stringify(META).replace(/</g, "\\u003c"));

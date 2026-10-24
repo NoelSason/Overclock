@@ -6,3 +6,4 @@ export * from "./validate";
 export * from "./passes";
 export * from "./segments";
 export * from "./compile";
+export * from "./incremental";

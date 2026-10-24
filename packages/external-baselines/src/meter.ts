@@ -32,6 +32,8 @@ function cacheCreationTokens(providerMetadata: unknown): number {
 export class UsageMeter {
   calls = 0;
   failures = 0;
+  /** Message of the most recent failed call. */
+  lastError: string | undefined;
   inputTokens = 0;
   outputTokens = 0;
   cachedInputTokens = 0;
@@ -68,6 +70,11 @@ export class UsageMeter {
     this.spentUsd += costUsd(this.model, input, output);
   }
 
+  private fail(err: unknown): void {
+    this.failures++;
+    this.lastError = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+  }
+
   /** Throws (and aborts the run) if this call could take spend past the budget. */
   guard(params: CallParams): void {
     if (this.abort.signal.aborted) throw this.budgetExceeded ?? new Error("Cancelled");
@@ -95,7 +102,7 @@ export class UsageMeter {
         this.record(res.usage, res.providerMetadata);
         return res;
       } catch (err) {
-        this.failures++;
+        this.fail(err);
         throw err;
       }
     },
@@ -106,13 +113,13 @@ export class UsageMeter {
       try {
         res = await doStream();
       } catch (err) {
-        this.failures++;
+        this.fail(err);
         throw err;
       }
       type Part = typeof res.stream extends ReadableStream<infer P> ? P : never;
       const meter = (part: Part) => {
         if (part.type === "finish") this.record(part.usage, part.providerMetadata);
-        else if (part.type === "error") this.failures++;
+        else if (part.type === "error") this.fail(part.error);
       };
       return { ...res, stream: res.stream.pipeThrough(new TransformStream<Part, Part>({ transform: (part, ctl) => (meter(part), ctl.enqueue(part)) })) };
     },

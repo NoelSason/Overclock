@@ -46,6 +46,17 @@ export async function loadFramework(): Promise<Framework> {
   return { Stagehand: mod.Stagehand as unknown as StagehandCtor, chromium, version, executablePath };
 }
 
+/**
+ * ANTHROPIC_BASE_URL follows the official SDK's convention (the host root; the SDK appends
+ * /v1/messages). The AI SDK provider Stagehand uses reads the same variable but appends only
+ * /messages, so a root URL 404s. Translate it; undefined means use the provider default.
+ */
+export function aiSdkAnthropicBaseUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.replace(/\/+$/, "");
+  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
 export interface GuardStats {
   requests: number;
   blocked: number;
@@ -116,9 +127,10 @@ export interface SessionOptions {
 /** Launch Stagehand locally, guard the origins, log in, and leave the page on the first app's start page. */
 export async function openStagehandSession(o: SessionOptions): Promise<StagehandSession> {
   const errors: string[] = [];
+  const baseURL = aiSdkAnthropicBaseUrl(process.env.ANTHROPIC_BASE_URL);
   const stagehand = new o.framework.Stagehand({
     env: "LOCAL",
-    model: { modelName: `anthropic/${o.model}`, apiKey: o.apiKey, ...(o.middleware ? { middleware: o.middleware } : {}) },
+    model: { modelName: `anthropic/${o.model}`, apiKey: o.apiKey, ...(baseURL ? { baseURL } : {}), ...(o.middleware ? { middleware: o.middleware } : {}) },
     localBrowserLaunchOptions: { executablePath: o.framework.executablePath, headless: o.headless ?? process.env.OVERCLOCK_HEADLESS !== "0", viewport: { width: 1280, height: 860 } },
     verbose: 0,
     disablePino: true,

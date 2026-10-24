@@ -113,6 +113,7 @@ export async function runStagehand(o: StagehandRunOptions): Promise<ExternalRunR
       episodes.push(await runEpisode(agent, WRAPUP_KEY, "wrap-up", wrapUpInstruction({ goal: o.goal, apps: o.applications, items }), o.maxStepsPerRecord * 2));
       error = stopReason();
     }
+    if (!error && meter.calls > 0 && meter.failures === meter.calls) error = `All ${meter.calls} model calls failed; last: ${meter.lastError ?? "unknown error"}`;
     const m = await session.stagehand.metrics.catch(() => null);
     if (m) frameworkReported = { inputTokens: m.totalPromptTokens, outputTokens: m.totalCompletionTokens };
   } catch (err) {

@@ -40,8 +40,8 @@ export function RunHeader({ store, onOpenInterference }: { store: RunStore; onOp
   return (
     <section aria-label="Run" className="rounded-lg border border-line bg-panel">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="font-mono text-sm font-semibold text-fg" title={store.runId}>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="max-w-full truncate font-mono text-sm font-semibold text-fg" title={store.runId}>
             {store.runId}
           </h1>
           <Badge tone={STATUS_TONE[status]} className="uppercase" title={`Run status: ${status}`}>

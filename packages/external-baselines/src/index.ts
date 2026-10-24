@@ -23,7 +23,7 @@ export {
 } from "./contract";
 export { UsageMeter, type Effort, type ModelMiddleware } from "./meter";
 export { OPERATING_RULES, recordInstruction, wrapUpInstruction } from "./prompt";
-export { FRAMEWORK, installOriginGuard, loadFramework, login, openStagehandSession, type Framework, type GuardStats, type StagehandSession } from "./session";
+export { aiSdkAnthropicBaseUrl, FRAMEWORK, installOriginGuard, loadFramework, login, openStagehandSession, type Framework, type GuardStats, type StagehandSession } from "./session";
 
 /**
  * Run the external baseline (Stagehand's agent) on one batch.

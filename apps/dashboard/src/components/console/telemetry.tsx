@@ -7,6 +7,7 @@ import type { RunStore } from "@/lib/run-store";
 import { Badge, Empty, KeyValue, Panel, Stat } from "../ui/primitives";
 import { APP_COLORS, ConcurrencyChart, ThroughputChart } from "./charts";
 import { GroundTruth } from "./ground-truth";
+import { NetworkPanel } from "./network-panel";
 
 const RECOVERY_TONE = { started: "warn", succeeded: "ok", failed: "bad", escalated: "violet" } as const;
 
@@ -65,6 +66,7 @@ export function Telemetry({ store }: { store: RunStore }) {
       </Panel>
 
       <GroundTruth />
+      <NetworkPanel store={store} />
 
       <Panel id="summary" title="Run summary" subtitle={view.summary ? "reported by the engine" : undefined} className="lg:col-span-2 2xl:col-span-3">
         <RunSummaryBlock view={view} />

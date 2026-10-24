@@ -54,6 +54,17 @@ describe("lowering and validation", () => {
     expect(fe.body!.find((n) => n.id === "decide")!.dependsOn.sort()).toEqual(["read_order", "read_tickets"]);
   });
 
+  it("checks compare-and-swap guards before the form is modified", () => {
+    const guarded = steps.map((st) => (st.op === "submit" ? { ...st, guards: [{ control: "support.edit.status", equals: "$out.read_tickets.rows[0].status" }] } : st));
+    const { program } = lower(plan(guarded as DslStep[]));
+    const body = program.nodes[0]!.body!;
+    const select = body.find((n) => n.id === "set_status")!;
+    const save = body.find((n) => n.id === "save")!;
+    expect(select.preconditions).toHaveLength(1);
+    expect(select.preconditions[0]!.kind).toBe("fieldEquals");
+    expect(save.preconditions).toHaveLength(0);
+  });
+
   it("rejects controls that were never observed", () => {
     const bad = steps.map((s) => (s.id === "set_status" ? { ...s, control: "support.edit.priority" } : s));
     expect(lower(plan(bad as DslStep[])).issues.some((i) => i.code === "unknown-control")).toBe(true);

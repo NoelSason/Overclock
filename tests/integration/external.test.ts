@@ -6,6 +6,7 @@ import { startArena, type Arena } from "@overclock/arena";
 import { loadEnv } from "@overclock/telemetry";
 // Imported by path: the root package.json does not list @overclock/external-baselines yet.
 import {
+  aiSdkAnthropicBaseUrl,
   arenaCredentialsFromEnv,
   BASELINE_PRICES,
   costUsd,
@@ -149,6 +150,20 @@ describe("external baseline: input and result plumbing", () => {
     }
   });
 
+  it("translates ANTHROPIC_BASE_URL from the official SDK's form to the AI SDK's", () => {
+    expect(aiSdkAnthropicBaseUrl(undefined)).toBeUndefined();
+    expect(aiSdkAnthropicBaseUrl("")).toBeUndefined();
+    expect(aiSdkAnthropicBaseUrl("https://api.anthropic.com")).toBe("https://api.anthropic.com/v1");
+    expect(aiSdkAnthropicBaseUrl("https://proxy.example/anthropic/")).toBe("https://proxy.example/anthropic/v1");
+    expect(aiSdkAnthropicBaseUrl("https://api.anthropic.com/v1/")).toBe("https://api.anthropic.com/v1");
+  });
+
+  it("records the last failed call's message", async () => {
+    const meter = new UsageMeter("claude-haiku-5-5", undefined, null, undefined);
+    await expect(generate(meter, params("x"), new Error("Not Found"))).rejects.toThrow();
+    expect(meter.lastError).toBe("Not Found");
+  });
+
   it("loads Stagehand and Playwright's Chromium in this environment", async () => {
     const fw = await loadFramework();
     expect(fw.version).toBe("3.7.3");
@@ -219,8 +234,10 @@ describe.skipIf(!LIVE)("external baseline (live Stagehand + Claude)", () => {
       };
       console.log(`[external live] ${JSON.stringify(report, null, 2)}`);
       expect(result.recordsAttempted).toBe(3);
-      expect(result.costUsd).toBeLessThan(1.6);
       expect(result.modelCalls).toBeGreaterThan(0);
+      expect(result.inputTokens).toBeGreaterThan(0);
+      expect(result.outputTokens).toBeGreaterThan(0);
+      expect(result.costUsd).toBeLessThan(1.6);
     } finally {
       await arena.close();
       rmSync(dir, { recursive: true, force: true });

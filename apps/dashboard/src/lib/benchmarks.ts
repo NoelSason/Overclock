@@ -133,7 +133,7 @@ export function buildSections(runs: BenchmarkRunRecord[]): Section[] {
     sections.set(key, s);
   }
   return [...sections.entries()]
-    .sort(([, a], [, b]) => a.condition.localeCompare(b.condition) || Number(a.holdout) - Number(b.holdout) || a.cache.localeCompare(b.cache))
+    .sort(([, a], [, b]) => Number(a.condition !== "local") - Number(b.condition !== "local") || a.condition.localeCompare(b.condition) || Number(a.holdout) - Number(b.holdout) || a.cache.localeCompare(b.cache))
     .map(([key, s]) => {
       const groups = new Map<string, BenchmarkRunRecord[]>();
       for (const r of s.runs) {

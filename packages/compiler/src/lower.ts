@@ -186,13 +186,21 @@ export function lowerPlan(input: LowerInput): LowerResult {
               return { kind: "fieldEquals" as const, target: locatorOf(gc), expected: { expr: g.equals }, attr: attrFor(gc) };
             })
             .filter((x): x is NonNullable<typeof x> => x !== null);
+          // Compare-and-swap guards must see the form as loaded, before any fill/select changes it:
+          // attach them to the first interaction after the edit page's goto (or the submit itself).
+          let guardHost: ActionNode | undefined;
+          if (app) {
+            const lastGoto = [...body].reverse().find((b) => b.type === "navigate" && b.app === app);
+            if (lastGoto) guardHost = body.slice(body.indexOf(lastGoto) + 1).find((b) => b.app === app && (b.type === "fill" || b.type === "select" || b.type === "click"));
+          }
+          if (guardHost) guardHost.preconditions.push(...guards);
           n = base(s.id, "click", {
             app,
             target: c ? locatorOf(c) : undefined,
             effect: irreversible ? "irreversible" : "remote-write",
             retryPolicy: irreversible ? "never" : "verify-before-retry",
             requiresApproval: irreversible || undefined,
-            preconditions: guards,
+            preconditions: guardHost ? [] : guards,
             writes: [...s.writes, ...(app ? [pageResource(app, s.verify.url)] : [])],
             verify: { url: { template: s.verify.url }, fields: verifyFields },
             timeoutMs: 15_000,

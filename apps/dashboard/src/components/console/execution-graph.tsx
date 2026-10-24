@@ -181,7 +181,7 @@ export function ExecutionGraph({ store, onOpenProgram }: { store: RunStore; onOp
         </div>
       ) : (
         <>
-          <div className="h-[360px] w-full sm:h-[440px]">
+          <div className="w-full" style={{ height: 440 }}>
             <ReactFlow
               key={program.programId}
               nodes={nodes}

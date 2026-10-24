@@ -1,27 +1,36 @@
 import { ScenarioRequest, VariationConfig, type PublicScenario, type TaskTemplateId } from "@overclock/contracts";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
-import type { AppOrigins } from "../data/scenario";
+import type { AppOrigins, JudgeEntity } from "../data/scenario";
+import { HOLDOUT_EDITABLE, HOLDOUT_ENTITY_KINDS, holdoutEntityExists, isHoldoutEntityKind, planHoldoutJudgeEdits } from "../holdout/task";
 import type { ServerContext } from "./app-server";
 import { JUDGE_CONSOLE_HTML } from "./console";
-import { CUSTOMER_STATUS, isEnum, ORDER_STATUS, TICKET_CATEGORY, TICKET_OWNER, TICKET_STATUS, type EnumSpec } from "./labels";
-import { applySurprise, deepMerge, isAppName, isSurpriseKind } from "./variations";
+import { CUSTOMER_STATUS, ORDER_STATUS, TICKET_CATEGORY, TICKET_OWNER, TICKET_STATUS } from "./labels";
+import { APP_NAMES, applySurprise, deepMerge, isAppName, isSurpriseKind } from "./variations";
 
 /**
  * Admin / judge server: JSON API for the benchmark harness and the judge console, plus the
  * console page itself. Never exposed to the agent under test.
  */
 
-type Entity = "order" | "ticket" | "customer";
-type FieldRule = "text" | "flag" | EnumSpec<string>;
+type Entity = JudgeEntity;
+type FieldRule = "text" | "flag" | { values: readonly string[] };
 
 const EDITABLE: Record<Entity, Record<string, FieldRule>> = {
   customer: { name: "text", email: "text", phone: "text", city: "text", status: CUSTOMER_STATUS },
   order: { customer_id: "text", status: ORDER_STATUS, tracking: "text", review_flag: "flag", review_reason: "text" },
   ticket: { category: TICKET_CATEGORY, status: TICKET_STATUS, owner: TICKET_OWNER },
+  ...HOLDOUT_EDITABLE,
 };
+const ENTITIES = ["order", "ticket", "customer", ...HOLDOUT_ENTITY_KINDS] as const;
 
 function isEntity(v: unknown): v is Entity {
-  return v === "order" || v === "ticket" || v === "customer";
+  return typeof v === "string" && (ENTITIES as readonly string[]).includes(v);
+}
+
+function entityExists(ctx: ServerContext, entity: Entity, id: string): boolean {
+  const { store } = ctx;
+  if (isHoldoutEntityKind(entity)) return holdoutEntityExists(store.holdout, entity, id);
+  return !!(entity === "order" ? store.orders.get(id) : entity === "ticket" ? store.support.get(id) : store.crm.get(id));
 }
 
 function validatePatch(entity: Entity, patch: unknown): { ok: true; patch: Record<string, string | number> } | { ok: false; error: string } {
@@ -37,7 +46,7 @@ function validatePatch(entity: Entity, patch: unknown): { ok: true; patch: Recor
       if (v !== 0 && v !== 1) return { ok: false, error: `${k} must be 0 or 1` };
       out[k] = v;
     } else {
-      if (!isEnum(rule, v)) return { ok: false, error: `${k} must be one of ${rule.values.join(", ")}` };
+      if (typeof v !== "string" || !rule.values.includes(v)) return { ok: false, error: `${k} must be one of ${rule.values.join(", ")}` };
       out[k] = v;
     }
   }
@@ -65,10 +74,12 @@ interface JudgeEdit {
 }
 
 /** A source-data change for one unprocessed record that changes what the rules require. */
-function planJudgeEdit(ctx: ServerContext, template: TaskTemplateId, recordKey: string): JudgeEdit | undefined {
-  const { store } = ctx;
+function planJudgeEdit(ctx: ServerContext, template: TaskTemplateId, recordKey: string, untouched: ReadonlySet<string>): JudgeEdit | undefined {
+  const { store, manager } = ctx;
   const options: JudgeEdit[] = [];
-  if (template === "t1-order-reconcile") {
+  if (template === "t4-holdout") {
+    options.push(...planHoldoutJudgeEdits(store.holdout, recordKey, untouched, manager.current?.recordKeys ?? []));
+  } else if (template === "t1-order-reconcile") {
     const o = store.orders.get(recordKey);
     if (!o) return undefined;
     options.push({ entity: "order", id: o.id, patch: { status: o.status === "refunded" ? "delivered" : "refunded" } });
@@ -164,10 +175,9 @@ export async function createAdminServer(ctx: ServerContext, info: AdminInfo): Pr
   f.post("/api/edit-record", async (req, reply) => {
     if (!manager.current) return noScenario(reply);
     const b = (req.body ?? {}) as { entity?: unknown; id?: unknown; patch?: unknown };
-    if (!isEntity(b.entity)) return fail(reply, 400, 'entity must be "order", "ticket", or "customer"');
+    if (!isEntity(b.entity)) return fail(reply, 400, `entity must be one of ${ENTITIES.map((e) => `"${e}"`).join(", ")}`);
     if (typeof b.id !== "string" || !b.id) return fail(reply, 400, "id must be a non-empty string");
-    const exists = b.entity === "order" ? store.orders.get(b.id) : b.entity === "ticket" ? store.support.get(b.id) : store.crm.get(b.id);
-    if (!exists) return fail(reply, 404, `No ${b.entity} with id ${b.id}`);
+    if (!entityExists(ctx, b.entity, b.id)) return fail(reply, 404, `No ${b.entity} with id ${b.id}`);
     const v = validatePatch(b.entity, b.patch);
     if (!v.ok) return fail(reply, 400, v.error);
     const ok = manager.editRecord(b.entity, b.id, v.patch);
@@ -179,8 +189,9 @@ export async function createAdminServer(ctx: ServerContext, info: AdminInfo): Pr
     if (!s) return noScenario(reply);
     const keys = manager.untouchedRecords();
     if (!keys.length) return fail(reply, 409, "Every record has already been processed");
+    const untouched = new Set(keys);
     for (const recordKey of shuffled(keys)) {
-      const edit = planJudgeEdit(ctx, s.template, recordKey);
+      const edit = planJudgeEdit(ctx, s.template, recordKey, untouched);
       if (!edit) continue;
       manager.editRecord(edit.entity, edit.id, edit.patch);
       return { recordKey, entity: edit.entity, id: edit.id, patch: edit.patch };
@@ -192,7 +203,7 @@ export async function createAdminServer(ctx: ServerContext, info: AdminInfo): Pr
     const b = (req.body ?? {}) as { kind?: unknown; app?: unknown };
     if (!isSurpriseKind(b.kind)) return fail(reply, 400, "Unknown surprise kind");
     const target = b.app === undefined || b.app === "all" ? "all" : b.app;
-    if (target !== "all" && !isAppName(target)) return fail(reply, 400, 'app must be "CRM", "Orders", "Support", or "all"');
+    if (target !== "all" && !isAppName(target)) return fail(reply, 400, `app must be one of ${[...APP_NAMES, "all"].map((a) => `"${a}"`).join(", ")}`);
     return variations.set(applySurprise(variations.get(), b.kind, target));
   });
 

@@ -28,7 +28,7 @@ function gateText(f: RunView["fragments"][string]): string | null {
     case "deferred":
       return `${isWrite ? "write" : "fragment"} deferred: ${f.reason ?? "waiting on a safety gate"}`;
     case "canary":
-      return `canary verifying${f.reason ? `: ${f.reason}` : ""}`;
+      return f.reason && /canary/i.test(f.reason) ? f.reason : `canary verifying${f.reason ? `: ${f.reason}` : ""}`;
     case "compiled":
       return f.reason ? `awaiting validation: ${f.reason}` : "awaiting validation";
     case "validated":

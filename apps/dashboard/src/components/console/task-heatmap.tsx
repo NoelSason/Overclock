@@ -56,7 +56,7 @@ export function TaskHeatmap({ store }: { store: RunStore }) {
   const nRows = index.rows.length;
   const nCols = Math.max(1, index.cols.length);
   const cellH = nRows > 160 ? 6 : nRows > 60 ? 9 : 14;
-  const cellW = Math.max(6, Math.min(64, Math.floor((width - LABEL_W - 4) / nCols)));
+  const cellW = Math.max(6, Math.min(120, Math.floor((width - LABEL_W - 4) / nCols)));
   const totalH = nRows * cellH;
   const viewH = Math.min(totalH, MAX_VIEW_H);
 
@@ -76,6 +76,8 @@ export function TaskHeatmap({ store }: { store: RunStore }) {
     const first = Math.floor(scrollTop / cellH);
     const offset = scrollTop - first * cellH;
     const visible = Math.ceil(viewH / cellH) + 1;
+    // Label every row when rows are tall enough, otherwise every Nth row so labels never overlap.
+    const labelEvery = Math.max(1, Math.ceil(12 / cellH));
     const gap = cellW > 10 ? 1 : 0.5;
     ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.textBaseline = "middle";
@@ -84,10 +86,10 @@ export function TaskHeatmap({ store }: { store: RunStore }) {
       if (r >= nRows) break;
       const y = i * cellH - offset;
       const row = index.cells[r]!;
-      if (cellH >= 9) {
+      if (r % labelEvery === 0) {
         ctx.fillStyle = "#9aa6b4";
         const key = index.rows[r]!;
-        ctx.fillText(key.length > 14 ? `${key.slice(0, 13)}…` : key, 4, y + cellH / 2);
+        ctx.fillText(key.length > 14 ? `${key.slice(0, 13)}…` : key, 4, y + Math.max(cellH, 10) / 2);
       }
       for (let c = 0; c < index.cols.length; c++) {
         const t = row[c];
