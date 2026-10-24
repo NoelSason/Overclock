@@ -88,6 +88,7 @@ export interface RebindResult {
      * record link). Local only: these are data and must never be shared.
      */
     paramValues: Record<string, Record<string, string>>;
+    /** navigateMs and observeMs sum over pages; apps are crawled concurrently, so they can exceed totalMs. */
     timings: { totalMs: number; navigateMs: number; observeMs: number; matchMs: number; compileMs: number; perPage: { app: string; routeFamily: string; ms: number }[] };
   };
 }
@@ -367,14 +368,18 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
   const record = args.records?.[0];
   const navTimeout = args.navTimeoutMs ?? 15_000;
   const ctx = await args.browser.newContext({ allowedOrigins: bound.map((a) => a.origin), blockMutations: true, storageState: args.storageState });
-  const page = await ctx.newPage();
-  page.on("dialog", (d) => void d.dismiss().catch(() => undefined));
   const observationsByApp = new Map<string, Visited[]>();
   const loads = new Map<string, Map<string, number[]>>();
   const tableHeadersOf = (key: string | undefined) => (key ? cap.controls.find((c) => c.key === key)?.headers : undefined);
   let blockedMutations = 0;
   try {
-    for (const app of cap.applications) {
+    // Apps are crawled concurrently, one page each, so no origin sees more than one navigation at
+    // a time. Each crawl reads and writes only its own app's state; the lists it reports are merged
+    // in capability order afterwards, so the result doesn't depend on which app finishes first.
+    const crawl = async (app: PortableCapability["applications"][number]) => {
+      const page = await ctx.newPage();
+      page.on("dialog", (d) => void d.dismiss().catch(() => undefined));
+      const own = { missingRoutes: [] as MissingRoute[], flags: [] as string[], perPage: [] as typeof timings.perPage };
       const origin = app.origin;
       const visited: Visited[] = [];
       const appLoads = new Map<string, number[]>();
@@ -431,8 +436,8 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
         if (visited.some((v) => v.page.routeFamily === pg.routeFamily) || missing.has(pg.routeFamily)) return;
         const fail = (reason: string, permission = false) => {
           missing.add(pg.routeFamily);
-          missingRoutes.push({ app: app.name, routeFamily: pg.routeFamily, reason });
-          if (permission) flags.push(`permission:${app.name}:${pg.routeFamily}`);
+          own.missingRoutes.push({ app: app.name, routeFamily: pg.routeFamily, reason });
+          if (permission) own.flags.push(`permission:${app.name}:${pg.routeFamily}`);
         };
         /** A concrete instance found by browsing: the reach-via page's list table, then any observed link. */
         const discover = async (): Promise<string | null> => {
@@ -469,7 +474,7 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
         }
         obs.metrics.navMs = Math.round(navMs);
         timings.observeMs += performance.now() - tObs;
-        timings.perPage.push({ app: app.name, routeFamily: pg.routeFamily, ms: Math.round(performance.now() - tNav) });
+        own.perPage.push({ app: app.name, routeFamily: pg.routeFamily, ms: Math.round(performance.now() - tNav) });
         (appLoads.get(obs.routePattern) ?? appLoads.set(obs.routePattern, []).get(obs.routePattern)!).push(navMs);
         const params = paramsFrom(pg.pathTemplate, new URL(finalUrl).pathname);
         visited.push({ page: pg, obs, params });
@@ -478,6 +483,15 @@ export async function rebindCapability(args: RebindArgs): Promise<RebindResult> 
 
       const ordered = [...pages].sort((a, b) => Number(a.routeFamily.includes(":id")) - Number(b.routeFamily.includes(":id")) || a.routeFamily.split("/").length - b.routeFamily.split("/").length || a.routeFamily.localeCompare(b.routeFamily));
       for (const pg of ordered) await visit(pg, 0);
+      return own;
+    };
+    const crawls = await Promise.allSettled(cap.applications.map(crawl));
+    for (const c of crawls) if (c.status === "rejected") throw c.reason;
+    for (const c of crawls) {
+      if (c.status !== "fulfilled") continue;
+      missingRoutes.push(...c.value.missingRoutes);
+      flags.push(...c.value.flags);
+      timings.perPage.push(...c.value.perPage);
     }
   } finally {
     blockedMutations = args.browser.guardStats.get(ctx)?.blockedMutations ?? 0;

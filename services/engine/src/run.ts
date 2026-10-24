@@ -143,9 +143,9 @@ export class RunController implements RunHandle {
       return;
     }
 
-    const explore = await this.runtime.exploreState(apps);
+    // Both sessions log in at once (sessions are memoized, so a viewer fallback shares the operator login).
+    const [explore, executeState] = await Promise.all([this.runtime.exploreState(apps), this.runtime.executeSessions.storageStateFor(apps)]);
     if (explore.role === "operator") this.emit({ type: "log", level: "warn", message: "no read-only explorer role available; exploring with the operator session (all mutations still blocked)" });
-    const executeState = await this.runtime.executeSessions.storageStateFor(apps);
     const knowledge = knowledgePolicy(this.config);
     const imported = knowledge.startsWith("network") ? await this.importFromNetwork(executeState) : null;
     // Every run stores its final plan, so a later warm run can reuse it. Only local-only and

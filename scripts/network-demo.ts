@@ -36,7 +36,8 @@
  *
  * With --a-warm-cache <dir> (a regression run, not a learning run), runtime A starts with that
  * program cache (a plan it learned and reviewed in an earlier run) and reuses it instead of
- * planning, so the run spends no model money; the report says so.
+ * planning, so the run spends no model money; the report says so. A and B start without model
+ * access, so a cache or import miss fails the run instead of planning cold.
  *
  * With --conflict-arm, before B runs, a fourth runtime X (own identity, own data dir, no model
  * access) asks for the same task with one value changed ("Tier 2" becomes "Tier 1"). Its
@@ -202,8 +203,11 @@ async function main(): Promise<void> {
     for (const f of readdirSync(aWarmCache)) copyFileSync(join(aWarmCache, f), join(dest, f));
     console.log(`A: regression run, starting from its own cached plan in ${aWarmCache} (no planning)`);
   }
-  const a = startEngine("runtime-a", 4010);
-  const b = startEngine("runtime-b", 4020);
+  // A regression run needs no model: A replays its cached plan and B imports. Without model access
+  // a cache or import miss fails the run instead of planning cold and spending.
+  const noModel: Record<string, string> = aWarmCache ? { ANTHROPIC_API_KEY: "" } : {};
+  const a = startEngine("runtime-a", 4010, true, noModel);
+  const b = startEngine("runtime-b", 4020, true, noModel);
   const c = coldArm ? startEngine("runtime-c", 4030, false) : null;
   // X has no model access: if it can't reuse a capability, it can't plan, so it writes nothing.
   const x = conflictArm ? startEngine("runtime-x", 4040, true, { ANTHROPIC_API_KEY: "" }) : null;

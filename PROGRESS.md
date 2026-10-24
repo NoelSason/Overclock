@@ -84,7 +84,7 @@ unless noted.
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
 | `npx vitest run --project unit` | 159 passed |
-| `npx vitest run --project integration` | 127 passed, 2 skipped (live) |
+| `npx vitest run --project integration` | 128 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `pnpm test:network-capability` | 34 passed |
 | `pnpm test:network` | 26 passed |
@@ -93,7 +93,8 @@ unless noted.
 | `pnpm network:demo --records 10 --seed 5151 --variation fields-in-tab --expect-refusal --no-cold-arm` (live) | Every check passed: B refused, planned cold, 10/10 |
 | `pnpm network:demo --records 10 --seed 4242 --no-cold-arm` (live) | Every check passed: A 22.5 s, B 3.1 s (`EXACT_COMPATIBLE`), both 10/10 |
 | `pnpm network:demo --records 10 --variation rename-save --conflict-arm --no-cold-arm` (live) | Every check passed at 13:17 (A cold) and at 13:40 on the final code (A reused its own cached plan, no model spend): X made zero writes, B 10/10 |
-| `tsx scripts/warm-bench.ts --records 500 --workers 16 --trials 3` (no model calls) | Median 17.2 s, 500/500 in every trial |
+| `tsx scripts/warm-bench.ts --records 500 --workers 16 --trials 3` (no model calls) | Median 14.8 s on the final code (17.2 s before the batched reads), 500/500 in every trial |
+| `pnpm network:demo ... --conflict-arm --a-warm-cache ...` on the final code (no model spend) | Every check passed again after the batched-read change: X zero writes, B 10/10 in 3.3 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 
 Model spend on 2026-10-24 after noon: about $17.9 (benchmarks $7.1, network demos $7.6 including

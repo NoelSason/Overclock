@@ -19,6 +19,9 @@ const live = new EngineRunManager(runtime, store);
 const manager = new ManagerWithHistory(live, store);
 const server = await createEngineServer({ manager, benchmarksDir: join(repoRoot(), "benchmarks", "results"), host: config.host, port: config.port });
 console.log(`Overclock engine (${config.runtimeLabel}) listening on ${server.url}  data=${config.dataDir}`);
+// Launch the browser pool at startup, as a long-running engine has it warm anyway; a run that
+// starts first waits on the same launches. OVERCLOCK_WARM_BROWSERS=0 launches on first use instead.
+if (process.env.OVERCLOCK_WARM_BROWSERS !== "0") void runtime.browser.warm().catch((err: unknown) => console.warn(`browser warm-up failed: ${err instanceof Error ? err.message : String(err)}`));
 
 let stopping = false;
 async function shutdown(): Promise<void> {

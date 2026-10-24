@@ -5,8 +5,7 @@
 import { chromium } from "playwright";
 
 // Loopback only: by default Playwright listens on every interface, guarded just by a random path.
-const args = process.env.OVERCLOCK_CHROMIUM_ARGS ? process.env.OVERCLOCK_CHROMIUM_ARGS.split(/\s+/).filter(Boolean) : [];
-const server = await chromium.launchServer({ headless: process.env.OVERCLOCK_HEADLESS !== "0", host: "127.0.0.1", args });
+const server = await chromium.launchServer({ headless: process.env.OVERCLOCK_HEADLESS !== "0", host: "127.0.0.1" });
 process.stdout.write(`${server.wsEndpoint()}\n`);
 let closing = false;
 const close = () => {

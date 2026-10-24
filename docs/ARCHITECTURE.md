@@ -302,10 +302,12 @@ one browser and one thread it took 23–172 ms. What runs now:
   the engine), so Playwright's server side runs on other cores. The route guard (allowlist,
   read-only pages, risky GETs) still runs in the engine for every request: route handlers are
   client side.
-- **One browser call where two were made:** reading a field and finding a click target check
-  "exactly one element matched" (and, for targets, visibility) in the same page call that reads
-  or locates it. If the top-ranked locator strategy doesn't match exactly one element, the full
-  resolution path runs unchanged.
+- **Fewer browser calls per action:** all fields of an extraction or a verification whose
+  top-ranked strategy is an XPath (label-anchored facts) are resolved and read in one page call,
+  with the semantics of Playwright's XPath engine (`document.evaluate`, element nodes only);
+  other fields and click targets check "exactly one element matched" (and, for targets,
+  visibility) in the same call that reads or locates them. A field or target that doesn't match
+  exactly one element takes the full resolution path unchanged.
 - **No lingering waiters:** a write's response, network failure, and timeout are page listeners
   removed as soon as the write settles.
 - **Constant-time scheduler counts** (active tasks per app).
@@ -315,8 +317,13 @@ one browser and one thread it took 23–172 ms. What runs now:
 - **No source-mapped stack traces** in the engine (`OVERCLOCK_SOURCE_MAPS=1` restores them):
   Playwright captures a stack for every browser call, and mapping it was the largest single cost.
 
-What remains on the engine thread is mostly Playwright's per-call stack capture and the event
-store; more workers than about 16–24 don't help on a 16-core machine.
+After these changes the machine is the limit: during a warm 500-record run it is 80–83% busy,
+mostly in Chromium loading and rendering about 3,300 pages (one request each; the arena itself
+uses 7–11% of a core and serves over 10,000 pages a second in isolation). More workers than about
+16 don't help, and two engines splitting the records finish no sooner. Disabling the GPU process
+(`--disable-gpu --disable-software-rasterizer`) measured slower (16.5 s against 14.8 s median)
+and isn't used. The next large step would be skipping the separate verification page load after
+each write, which is not done: a fresh read is the verification guarantee.
 
 ### Adaptive concurrency (AIMD)
 

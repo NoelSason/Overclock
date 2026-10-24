@@ -4,11 +4,6 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 
 const SERVER_SCRIPT = fileURLToPath(new URL("../browser-server.mjs", import.meta.url));
 
-/** Extra Chromium command-line switches (OVERCLOCK_CHROMIUM_ARGS, space-separated). */
-function chromiumArgs(): string[] {
-  return (process.env.OVERCLOCK_CHROMIUM_ARGS ?? "").split(/\s+/).filter(Boolean);
-}
-
 /** Start a browser server process and return its endpoint (first stdout line). */
 async function startBrowserServer(headless: boolean): Promise<{ child: ChildProcess; wsEndpoint: string }> {
   const child = spawn(process.execPath, [SERVER_SCRIPT], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, OVERCLOCK_HEADLESS: headless ? "1" : "0" } });
@@ -100,7 +95,7 @@ export class BrowserManager {
         const { child, wsEndpoint } = await startBrowserServer(headless);
         this.servers[i] = child;
         launched = await chromium.connect(wsEndpoint);
-      } else launched = await chromium.launch({ headless, args: chromiumArgs() });
+      } else launched = await chromium.launch({ headless });
       this.browsers[i] = launched;
       this.launching[i] = null;
       return launched;
@@ -109,6 +104,11 @@ export class BrowserManager {
       throw err;
     });
     return this.launching[i]!;
+  }
+
+  /** Launch every pooled browser now, so the first run doesn't pay for launching them. */
+  async warm(): Promise<void> {
+    await Promise.all(this.browsers.map((_, i) => this.get(i)));
   }
 
   /** Mark a page read-only (true) or allow it to write (false). */
