@@ -1,5 +1,6 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { createWriteStream, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { createWriteStream, existsSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -186,11 +187,21 @@ function engineNotes(h: EngineHealth): { notes: string[]; fatal?: string } {
   return { notes };
 }
 
+/**
+ * Commit the results were produced from. With uncommitted changes it adds a digest of the exact
+ * working tree (tracked diff against HEAD plus untracked files), so a result still names one code state.
+ */
 function codeVersion(root: string): string | undefined {
+  const git = (args: string[]) => execFileSync("git", args, { cwd: root, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
   try {
-    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-    const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: root, stdio: ["ignore", "pipe", "ignore"] }).toString().trim().length > 0;
-    return `${sha}${dirty ? " (uncommitted changes)" : ""}`;
+    const sha = git(["rev-parse", "--short", "HEAD"]).toString().trim();
+    if (git(["status", "--porcelain"]).toString().trim().length === 0) return sha;
+    const h = createHash("sha256").update(git(["diff", "HEAD", "--binary"]));
+    for (const f of git(["ls-files", "--others", "--exclude-standard", "-z"]).toString().split("\0").filter(Boolean).sort()) {
+      h.update(`\0${f}\0`);
+      h.update(readFileSync(join(root, f)));
+    }
+    return `${sha} (uncommitted changes, tree digest ${h.digest("hex").slice(0, 12)})`;
   } catch {
     return undefined;
   }

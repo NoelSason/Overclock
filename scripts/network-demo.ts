@@ -19,6 +19,11 @@
  * With --compare-cold, B then repeats its scenario (reloaded, same seed and variation) with the
  * strict-cold policy, so network-warm and strict-cold are compared on identical data.
  *
+ * The script exits 1 unless every acceptance check passes: both runs complete and the arena's
+ * independent checker finds every record correct with no duplicate or collateral writes; B
+ * imported an executable capability and selected it instead of planning; and B made no planner
+ * calls while A made at least one.
+ *
  * Every number printed comes from the engines' run summaries and the arena's checker. Tokens
  * stay in each runtime's data dir and are never printed.
  */
@@ -90,6 +95,17 @@ async function engineReady(engine: Overclock, timeoutMs = 60_000): Promise<void>
     if (Date.now() > deadline) throw new Error("engine did not start");
     await new Promise((r) => setTimeout(r, 300));
   }
+}
+
+type Events = Awaited<ReturnType<Overclock["events"]>>["events"];
+
+/** Planner (plan and repair) calls in a run, from its model.call events. */
+function plannerCalls(events: Events): number {
+  return events.filter((e) => e.type === "model.call" && e.purpose.startsWith("planner.")).length;
+}
+
+function groundTruthOk(o: ReturnType<typeof brief>): boolean {
+  return o.status === "completed" && o.checker.accuracy === 1 && o.checker.correct === o.checker.total && o.checker.total === o.records && o.checker.duplicateWrites === 0 && o.checker.collateralWrites === 0;
 }
 
 function brief(label: string, r: RunResultResponse, check: { accuracy: number; correctRecords: number; totalRecords: number; duplicateWrites: number; collateralWrites: number }) {
@@ -169,6 +185,7 @@ async function main(): Promise<void> {
     const outA = brief("runtime-a", resA, await arena.check());
     console.log(JSON.stringify(outA, null, 2));
     const eventsA = await engineA.events(resA.runId, 0, 10_000);
+    if (!groundTruthOk(outA)) console.log("A did not pass the ground-truth check; continuing so the report records it");
     const pub = eventsA.events.find((e) => e.type === "network.publish");
     if (!pub || pub.type !== "network.publish" || pub.rejected) throw new Error(`A did not publish: ${pub && pub.type === "network.publish" ? pub.rejected : "no network.publish event"}`);
     const versionId = `${pub.capabilityId}@${pub.version}`;
@@ -192,6 +209,12 @@ async function main(): Promise<void> {
     const resB = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "network-read", thumbnails: false }));
     const outB = brief("runtime-b", resB, await arena.check());
     console.log(JSON.stringify(outB, null, 2));
+    const eventsB = (await engineB.events(resB.runId, 0, 10_000)).events;
+    const importB = eventsB.find((e) => e.type === "network.import");
+    const policyB = eventsB.find((e) => e.type === "policy.decision");
+    const selectedB = eventsB.find((e) => e.type === "candidate.selected");
+    const plannerA = plannerCalls(eventsA.events);
+    const plannerB = plannerCalls(eventsB);
 
     let outCold: ReturnType<typeof brief> | null = null;
     if (compareCold) {
@@ -203,9 +226,28 @@ async function main(): Promise<void> {
     }
     if (variation) await arena.resetVariations();
 
-    const report = { at: new Date().toISOString(), database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, a: outA, b: outB, bStrictCold: outCold };
+    const checks = [
+      { check: "A passes the independent ground-truth check", ok: groundTruthOk(outA), detail: JSON.stringify(outA.checker) },
+      { check: "B passes the independent ground-truth check", ok: groundTruthOk(outB), detail: JSON.stringify(outB.checker) },
+      {
+        check: "B imported the shared capability (executable after rebinding)",
+        ok: importB?.type === "network.import" && `${importB.capabilityId}@${importB.version}` === versionId && ["EXACT_COMPATIBLE", "STRUCTURALLY_COMPATIBLE", "REQUIRES_REBINDING"].includes(importB.outcome),
+        detail: importB?.type === "network.import" ? `${importB.capabilityId}@${importB.version} ${importB.outcome}, ${importB.bound} bound, ${importB.unbound} unbound` : "no network.import event",
+      },
+      {
+        check: "B executed the imported plan (no cold planning)",
+        ok: policyB?.type === "policy.decision" && policyB.intelligence === "network-import" && selectedB?.type === "candidate.selected" && selectedB.candidateId === "network",
+        detail: `policy ${policyB?.type === "policy.decision" ? policyB.intelligence : "?"}, selected ${selectedB?.type === "candidate.selected" ? selectedB.candidateId : "?"}`,
+      },
+      { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
+    ];
+    console.log("\nacceptance checks");
+    for (const c of checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${c.check}: ${c.detail}`);
+    const passed = checks.every((c) => c.ok);
+    const report = { at: new Date().toISOString(), passed, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, plannerCalls: { a: plannerA, b: plannerB }, a: outA, b: outB, bStrictCold: outCold };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     console.log(`\nreport: ${join(DEMO_DIR, "report.json")}`);
+    if (!passed) process.exitCode = 1;
   } finally {
     a.kill("SIGTERM");
     b.kill("SIGTERM");
