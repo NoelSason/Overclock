@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   // Do not write AGENTS.md into the app directory on `next dev`.
   agentRules: false,
   poweredByHeader: false,
+  // Allow loading the dev server through 127.0.0.1 as well as localhost (HMR, dev assets).
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;

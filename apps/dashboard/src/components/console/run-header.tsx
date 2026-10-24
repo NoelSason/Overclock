@@ -56,7 +56,11 @@ export function RunHeader({ store, onOpenInterference }: { store: RunStore; onOp
         </div>
         <span className={cx("text-[11px]", conn.state === "error" ? "text-bad" : conn.state === "reconnecting" ? "text-warn" : "text-dim")} title={conn.error}>
           {CONNECTION_LABEL[conn.state]}
-          {conn.state === "error" && conn.error ? `: ${conn.error}` : ""} · {fmtInt(view.lastSeq)} events
+          {conn.state === "error" && conn.error ? `: ${conn.error}` : ""} ·{" "}
+          <span data-testid="event-count" data-value={view.lastSeq}>
+            {fmtInt(view.lastSeq)}
+          </span>{" "}
+          events
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Button size="sm" onClick={() => void control("pause")} disabled={!canPause || pending !== null}>
@@ -99,21 +103,31 @@ function KpiStrip({ store }: { store: RunStore }) {
   const m = deriveMetrics(view);
   const complete = view.summary !== undefined;
   const writes = writeTaskCount(view);
-  const hasExecution = view.stages.some((s) => s.stage === "execution");
-  const verifiedShare = writes && writes > 0 ? view.receipts.VERIFIED / writes : null;
+  const hasExecution = view.stages.some((st) => st.stage === "execution");
+  const verifiedShare = writes && writes.active > 0 ? view.receipts.VERIFIED / writes.active : null;
 
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line px-3 py-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-10">
-      <Stat label="Time to first action" testId="stat-first-action" raw={m.firstActionMs} value={fmtMs(m.firstActionMs)} sub="first browser action" />
-      <Stat label="Time to first verified action" testId="stat-first-verified" raw={m.firstVerifiedMs} value={fmtMs(m.firstVerifiedMs)} sub="read-back confirmed" tone={m.firstVerifiedMs !== null ? "ok" : undefined} />
-      <Stat label="Discovery ∥ execution" testId="stat-overlap" raw={hasExecution ? m.overlapMs : null} value={hasExecution ? fmtMs(m.overlapMs) : "—"} sub="thinking overlapped with work" tone={hasExecution && m.overlapMs > 0 ? "accent" : undefined} />
-      <Stat label="Total wall time" testId="stat-total-wall" raw={complete ? m.elapsedMs : null} value={complete ? fmtMs(m.elapsedMs) : "—"} sub={complete ? "complete" : `elapsed ${fmtClock(view.lastT)}`} />
-      <Stat label="Verified" testId="stat-verified-share" raw={verifiedShare} value={fmtPct(verifiedShare, 1)} sub={writes === null ? "of write tasks" : `of ${fmtInt(writes)} write tasks`} tone={verifiedShare !== null ? "ok" : undefined} />
-      <Stat label="Verified writes" testId="stat-verified" raw={m.verified} value={fmtInt(m.verified)} sub={`${fmtInt(Object.keys(view.tasks).length)} tasks`} tone="ok" />
-      <Stat label="Throughput now" testId="stat-throughput-now" raw={m.recentThroughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.recentThroughputPerMin) : "—"} sub="verified / min, last 10 s" />
-      <Stat label="Throughput avg" testId="stat-throughput-avg" raw={m.throughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.throughputPerMin) : "—"} sub="verified / min since running" />
-      <Stat label="Model calls" testId="stat-model-calls" raw={view.modelCalls.count} value={fmtInt(view.modelCalls.count)} sub={`${fmtTokens(view.modelCalls.inputTokens + view.modelCalls.outputTokens)} tokens`} />
-      <Stat label="Model cost" testId="stat-cost" raw={view.modelCalls.costUsd} value={fmtUsd(view.modelCalls.costUsd)} sub={`${fmtUsd(m.costPerVerifiedUsd)} / verified`} />
+    <div className="grid gap-3 border-t border-line px-3 py-3 xl:grid-cols-2 xl:gap-0">
+      <div className="xl:border-r xl:border-line xl:pr-4">
+        <div className="mb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-dim uppercase">Cold start</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+          <Stat label="First action" testId="stat-first-action" raw={m.firstActionMs} value={fmtMs(m.firstActionMs)} sub="first browser action" />
+          <Stat label="First verified action" testId="stat-first-verified" raw={m.firstVerifiedMs} value={fmtMs(m.firstVerifiedMs)} sub="time to read-back" tone={m.firstVerifiedMs !== null ? "ok" : undefined} />
+          <Stat label="Discovery ∥ execution" testId="stat-overlap" raw={hasExecution ? m.overlapMs : null} value={hasExecution ? fmtMs(m.overlapMs) : "—"} sub="thinking during work" tone={hasExecution && m.overlapMs > 0 ? "accent" : undefined} />
+          <Stat label="Total wall time" testId="stat-total-wall" raw={complete ? m.elapsedMs : null} value={complete ? fmtMs(m.elapsedMs) : "—"} sub={complete ? "complete" : `elapsed ${fmtClock(view.lastT)}`} />
+          <Stat label="Verified" testId="stat-verified-share" raw={verifiedShare} value={fmtPct(verifiedShare, 1)} sub={writes === null ? "of write tasks" : `of ${fmtInt(writes.active)} writes${writes.skipped ? `, ${fmtInt(writes.skipped)} skipped` : ""}`} tone={verifiedShare !== null ? "ok" : undefined} />
+        </div>
+      </div>
+      <div className="xl:pl-4">
+        <div className="mb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-dim uppercase">Throughput</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+          <Stat label="Verified writes" testId="stat-verified" raw={m.verified} value={fmtInt(m.verified)} sub={`${fmtInt(Object.keys(view.tasks).length)} tasks`} tone="ok" />
+          <Stat label="Now" testId="stat-throughput-now" raw={m.recentThroughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.recentThroughputPerMin) : "—"} sub="verified / min, 10 s" />
+          <Stat label="Average" testId="stat-throughput-avg" raw={m.throughputPerMin} value={view.verifiedTimeline.length ? fmtNum(m.throughputPerMin) : "—"} sub="verified / min" />
+          <Stat label="Model calls" testId="stat-model-calls" raw={view.modelCalls.count} value={fmtInt(view.modelCalls.count)} sub={`${fmtTokens(view.modelCalls.inputTokens + view.modelCalls.outputTokens)} tokens`} />
+          <Stat label="Model cost" testId="stat-cost" raw={view.modelCalls.costUsd} value={fmtUsd(view.modelCalls.costUsd)} sub={`${fmtUsd(m.costPerVerifiedUsd)} / verified`} />
+        </div>
+      </div>
     </div>
   );
 }

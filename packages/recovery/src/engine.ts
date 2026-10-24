@@ -592,7 +592,7 @@ export class RecoveryEngine {
       case "select":
       case "field":
       case "checkbox":
-        return { task: `A browser automation step sets the "${name}" ${noun} on this page${d.desired ? ` to "${d.desired}"` : ""}. ${recorded}`, instructions: `Which ${noun} on the page now holds the "${name}" value that the step must set?`, intent: intentOf(ctx.node, d) };
+        return { task: `A browser automation step sets the record's ${name.toLowerCase()} on the form being edited. ${recorded}`, instructions: `Which ${noun} on the page now holds the record's ${name.toLowerCase()} that the step must set?`, intent: intentOf(ctx.node, d) };
       case "button":
         if (ctx.write) return { task: `A browser automation step submits the form being edited on this page. ${recorded}`, instructions: "Which button on the page now submits the form being edited?", intent: intentOf(ctx.node, d) };
         return { task: `A browser automation step clicks "${name}"${ctx.node.description ? ` (${ctx.node.description})` : ""} on this page. ${recorded}`, instructions: `Which button on the page now does what "${name}" did?`, intent: intentOf(ctx.node, d) };
@@ -618,7 +618,7 @@ export class RecoveryEngine {
       this.emit(ctx, 2, "failed", why, { ms, detail: `${calls} model call(s)` });
     };
     if (l1.shortlist.length) {
-      const state = { task: qn.task, page: { title: obs.title, url: obs.url } };
+      const state = { task: qn.task };
       try {
         calls++;
         this.modelCalls++;
