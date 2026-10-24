@@ -1,6 +1,6 @@
 import type { TaskState } from "@overclock/contracts";
 import { TERMINAL_TASK_STATES } from "@overclock/contracts";
-import { bottomLevels, evaluate, renderTemplate, toStr, type CompiledProgram, type CompiledSegment, type PhaseInfo } from "@overclock/compiler";
+import { bottomLevels, evaluate, recordFirstPriority, renderTemplate, toStr, type CompiledProgram, type CompiledSegment, type PhaseInfo } from "@overclock/compiler";
 import { LockManager } from "./locks";
 
 /** Record scope shared by every segment of one record (mirrors browser-runtime's RecordScope). */
@@ -294,8 +294,7 @@ export class Scheduler {
 
   private priorityOf(seg: CompiledSegment, record: RecordState): number {
     if (!this.opts.criticalPathPriority) return -record.index;
-    // Bottom level (ms) dominates; earlier records break ties so records complete progressively.
-    return (this.compiled.priority.get(seg.id) ?? 0) * 1000 - record.index;
+    return recordFirstPriority(this.compiled.priority.get(seg.id) ?? 0, record.index);
   }
 
   /** Every state change goes through here, so the per-segment active count stays exact. */

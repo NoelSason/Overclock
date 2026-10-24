@@ -1,5 +1,5 @@
 import type { CompiledProgram, CompiledSegment } from "@overclock/compiler";
-import { bottomLevels } from "@overclock/compiler";
+import { bottomLevels, recordFirstPriority } from "@overclock/compiler";
 
 export interface SimulationInput {
   compiled: CompiledProgram;
@@ -34,7 +34,7 @@ interface SimTask {
 
 /**
  * Event-driven list-scheduling simulation of the expanded task DAG: W identical workers,
- * per-app concurrency caps, phase barriers, critical-path priority, and serialized
+ * per-app concurrency caps, phase barriers, the executor's task priority, and serialized
  * per-run-constant locks. This is how candidate strategies are compared before execution.
  */
 export function simulate(input: SimulationInput): SimulationResult {
@@ -53,11 +53,14 @@ export function simulate(input: SimulationInput): SimulationResult {
       segs.map((s) => ({ id: s.id, deps: s.dependsOn })),
       (n) => input.segmentMs(compiled.segments.get(n.id)!),
     );
+    // Per segment, not per task: a segment's duration and whether it takes a contended lock.
+    const segMs = new Map(segs.map((s) => [s.id, input.segmentMs(s) + (s.app ? overhead : 0)]));
+    const takesLock = new Map(segs.map((s) => [s.id, s.writes.some((w) => contended.has(w))]));
     const tasks: SimTask[] = [];
     for (let r = 0; r < items; r++) {
       const local = new Map<string, SimTask>();
       for (const s of segs) {
-        const t: SimTask = { id: `${s.id}@${r}`, seg: s, ms: input.segmentMs(s) + (s.app ? overhead : 0), deps: s.dependsOn.length, dependents: [], prio: (bl.get(s.id) ?? 0) * 1000 - r };
+        const t: SimTask = { id: `${s.id}@${r}`, seg: s, ms: segMs.get(s.id)!, deps: s.dependsOn.length, dependents: [], prio: recordFirstPriority(bl.get(s.id) ?? 0, r) };
         local.set(s.id, t);
         tasks.push(t);
       }
@@ -66,6 +69,33 @@ export function simulate(input: SimulationInput): SimulationResult {
     totalTasks += tasks.length;
     const start = clock;
     const ready: SimTask[] = tasks.filter((t) => t.deps === 0);
+    // ready[0, sorted) is in descending priority; tasks that became ready since are appended after
+    // it. Inserting each of them after every task of equal or higher priority orders the list
+    // exactly as a stable sort of the whole list would, without re-sorting it at every event.
+    let sorted = 0;
+    const order = () => {
+      if (sorted === 0) {
+        ready.sort((a, b) => b.prio - a.prio);
+        sorted = ready.length;
+        return;
+      }
+      const arrived = ready.splice(sorted);
+      for (const t of arrived) {
+        let lo = 0;
+        let hi = ready.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (ready[mid]!.prio >= t.prio) lo = mid + 1;
+          else hi = mid;
+        }
+        ready.splice(lo, 0, t);
+      }
+      sorted = ready.length;
+    };
+    const take = (i: number): SimTask => {
+      if (i < sorted) sorted--;
+      return ready.splice(i, 1)[0]!;
+    };
     const running: { end: number; t: SimTask }[] = [];
     const appRunning = new Map<string, number>();
     let lockBusy = false;
@@ -75,9 +105,9 @@ export function simulate(input: SimulationInput): SimulationResult {
       for (const d of t.dependents) if (--d.deps === 0) ready.push(d);
     };
     while (done < tasks.length) {
-      ready.sort((a, b) => b.prio - a.prio);
+      order();
       // Browser-free compute tasks complete instantly.
-      for (let i = ready.length - 1; i >= 0; i--) if (!ready[i]!.seg.app) finish(ready.splice(i, 1)[0]!);
+      for (let i = ready.length - 1; i >= 0; i--) if (!ready[i]!.seg.app) finish(take(i));
       let assigned = true;
       while (assigned && running.length < workers) {
         assigned = false;
@@ -86,9 +116,9 @@ export function simulate(input: SimulationInput): SimulationResult {
           if (!t.seg.app) continue;
           const cap = input.perAppCap?.[t.seg.app] ?? Infinity;
           if ((appRunning.get(t.seg.app) ?? 0) >= cap) continue;
-          const locked = t.seg.writes.some((w) => contended.has(w));
+          const locked = takesLock.get(t.seg.id)!;
           if (locked && lockBusy) continue;
-          ready.splice(i, 1);
+          take(i);
           appRunning.set(t.seg.app, (appRunning.get(t.seg.app) ?? 0) + 1);
           if (locked) lockBusy = true;
           running.push({ end: clock + t.ms, t });
@@ -106,7 +136,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       if (!next) break;
       clock = next.end;
       appRunning.set(next.t.seg.app!, appRunning.get(next.t.seg.app!)! - 1);
-      if (next.t.seg.writes.some((w) => contended.has(w))) lockBusy = false;
+      if (takesLock.get(next.t.seg.id)) lockBusy = false;
       finish(next.t);
     }
     phaseResults.push({ id: phase.id, items, ms: Math.round(clock - start), tasks: tasks.length });

@@ -83,7 +83,7 @@ unless noted.
 | Command | Result |
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
-| `npx vitest run --project unit` | 159 passed |
+| `npx vitest run --project unit` | 160 passed |
 | `npx vitest run --project integration` | 129 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `pnpm test:network-capability` | 34 passed |
@@ -97,6 +97,8 @@ unless noted.
 | `pnpm network:demo ... --conflict-arm --a-warm-cache ...` on the final code (no model spend) | Every check passed again after the batched-read change: X zero writes, B 10/10 in 3.3 s. After parallel rebinding, concurrent logins, and the startup browser pool: every check passed in 3 of 3 runs, B 1.81–1.92 s, X zero writes; the five-seed series without X passed 5 of 5, B median 2.05 s |
 | Warm 500 records, earlier code vs new code, trials alternated on two engines under the same machine load | Medians 16.2 s and 16.1 s, all 500/500, no model calls: no regression (the 14.8 s baseline ran with less background load on the machine) |
 | Same alternating trials, earlier code vs single-page table reads (plus one-call entry counts and checkbox detection) | Medians 14.8 s and 13.3 s (first verified write 8.2 s and 6.6 s), all 500/500, no model calls; an earlier pair under heavier load: 16.0 s and 14.1 s |
+| Same alternating trials, that code (an isolated copy) vs one selector-engine setup per page and the faster cost simulation | Two series: medians 13.78 s and 13.32 s (new faster in 3 of 3 pairs), then 14.00 s and 13.75 s (2 of 3, one tie); first verified write 7.3–7.6 s and about 6.9 s; all 500/500 |
+| Worker and browser counts on the current code, alternating | 4 browsers with 16 workers fastest (13.1 s, 14.6 s); 24 workers 13.5 s, 14.8 s; 8 browsers 14.5–15.4 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 
 Model spend on 2026-10-24 after noon: about $17.9 (benchmarks $7.1, network demos $7.6 including

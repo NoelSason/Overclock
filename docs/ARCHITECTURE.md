@@ -315,8 +315,19 @@ one browser and one thread it took 23–172 ms. What runs now:
   match, every earlier one with none) to a disabled control. An empty or still-rendering table,
   an ambiguous or missing control, a scoped locator, or a further page takes the full path. The
   two search reads per record dropped from 73 ms to 26 ms each. A collection field's entry count
-  during verification is likewise one call when its top strategy matches one region, and a fill
-  learns whether its field is a checkbox from the call that located it.
+  during verification is likewise one call when its top strategy matches one region.
+- **One selector-engine setup per page at most.** Playwright sets up its injected selector
+  engine once per document in each JavaScript world it uses, about 10 ms each: a page load costs
+  about 4.5 ms, a load plus one locator call 15 ms, plus locator calls in both worlds 32 ms
+  (uncontended). Actions run in Playwright's utility world, so a target's fast check is a strict
+  `isVisible` (also utility world) rather than an evaluation in the page's main world; a fill
+  tries text first (Playwright refuses a checkbox or radio at once, changing nothing) and asks
+  what the element is only then; XPath reads and XPath entry counts use plain page evaluations,
+  which need no selector engine. Order and verification pages now set up none, edit pages one,
+  search pages one.
+- **A faster cost simulation:** the list-scheduling simulator inserts newly ready tasks into its
+  priority order instead of re-sorting the ready list at every event (a unit test checks it
+  against the old algorithm). Choosing workers for 500 records took 270–320 ms and takes 65–120 ms.
 - **No lingering waiters:** a write's response, network failure, and timeout are page listeners
   removed as soon as the write settles.
 - **Constant-time scheduler counts** (active tasks per app).
@@ -354,11 +365,18 @@ Measured and not done:
 - **Skipping the route guard for plain GETs.** Interception costs about 1 ms per page load, and
   route patterns match URLs, not methods, so excluding GETs would also let a read-only page's
   POST through.
-- **Avoiding Playwright's selector engine on read-only pages.** The first locator call on a new
-  page costs about 10 ms (Playwright sets up its injected script per document; a plain
-  `page.evaluate` doesn't need it). Search pages need role and text strategies to find "next",
-  and reproducing those engines outside Playwright isn't worth the risk of a wrong last-page
-  decision.
+- **No selector engine on search pages either.** Search pages need role and text strategies to
+  find "next", and reproducing those engines outside Playwright isn't worth the risk of a wrong
+  last-page decision, so they keep one setup.
+- **A shorter viewport.** 16 concurrent pages loading arena pages ran 224–228 pages a second at
+  both 1280×860 and 1280×400, so drawing area isn't the cost. That rate is also the ceiling: a
+  warm 500-record run needs about 3,700 page loads and already sustains about 300 a second across
+  4 browsers, so only fewer page loads would make it much faster.
+- **More workers or browsers.** Alternating trials on the current code: 4 browsers with 16 workers
+  (the defaults) ran 13.1 s and 14.6 s; 24 workers 13.5 s and 14.8 s; 8 browsers 14.5–15.4 s.
+- **Starting the holds phase before the order writes finish.** Holds reads only the orders'
+  decisions, but a write's freshness check can invalidate a record and recompute its decision;
+  the phase barrier is what keeps holds from writing from a stale aggregate.
 - **Serving searches from a list scan.** The list tables carry the search results' columns, but
   a scan can't prove it returns the rows the server's search would.
 

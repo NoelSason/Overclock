@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-24T22:01:56.057Z",
+  "label": "utility-world-new",
+  "records": 500,
+  "workers": 16,
+  "trials": 1,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": null
+  },
+  "medianWallMs": 13576,
+  "results": [
+    {
+      "runId": "run_20261024220142_58b436",
+      "status": "completed",
+      "wallMs": 13576,
+      "firstVerifiedMs": 7020,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.977,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

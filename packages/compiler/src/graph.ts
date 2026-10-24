@@ -116,3 +116,14 @@ export function reachable(nodes: readonly DagNode[]): Map<string, Set<string>> {
   }
   return reach;
 }
+
+/**
+ * Task priority: earlier records first, and within a record the segment with the longest
+ * remaining path (bottom level, ms) first. Records then complete progressively, so verified
+ * results arrive from the first second; ordering by bottom level across all records instead ran
+ * every record's first read before any record's write (warm 500 records: first verified write
+ * 6.4–6.6 s against 0.8–0.9 s, same wall time). Bottom levels stay below 1e7 ms.
+ */
+export function recordFirstPriority(bottomLevelMs: number, recordIndex: number): number {
+  return -recordIndex * 1e7 + Math.min(bottomLevelMs, 1e7 - 1);
+}

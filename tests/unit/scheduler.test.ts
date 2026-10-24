@@ -95,26 +95,27 @@ describe("scheduler", () => {
     const h = harness();
     // Every record resolves to the same customer -> the write locks collide.
     const sharedCust = () => "C-SAME";
-    // Run all reads and computes first.
-    for (let i = 0; i < 50; i++) {
+    // Hold the first write's lease open and run everything else: while it is held no other
+    // record's write may be leased, and the scheduler reports the lock conflict.
+    let held: ReturnType<typeof h.s.lease> = null;
+    for (let i = 0; i < 500; i++) {
       const inl = h.s.takeInline();
       if (inl) {
         h.run(inl, sharedCust);
         continue;
       }
-      const t = h.s.lease("w1", () => true);
+      const t = h.s.lease(`w${i}`, () => true);
       if (!t) break;
       if (t.segment.kind === "write") {
-        // Hold the first write's lease open and try to lease another write.
-        const other = h.s.lease("w2", () => true);
-        expect(other?.segment.kind === "write").toBe(false);
-        expect(h.log.some((l) => l.startsWith("conflict") && l.includes("app:crm:customer:C-SAME"))).toBe(true);
-        h.run(t, sharedCust);
-        if (other) h.run(other, sharedCust);
-        break;
+        expect(held).toBeNull();
+        held = t;
+        continue;
       }
       h.run(t, sharedCust);
     }
+    expect(held).not.toBeNull();
+    expect(h.log.some((l) => l.startsWith("conflict") && l.includes("app:crm:customer:C-SAME"))).toBe(true);
+    h.run(held!, sharedCust);
   });
 
   it("prioritizes the critical path (long chains before leaves)", () => {
