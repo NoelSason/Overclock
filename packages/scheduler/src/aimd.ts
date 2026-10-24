@@ -1,10 +1,11 @@
 /**
  * Additive-increase / multiplicative-decrease concurrency controller per application.
  *
- * Every window it compares completed-task throughput and latency with the previous window:
- * it adds one slot while throughput keeps improving and errors stay low, and halves the limit
- * on throttling (429), timeouts, or an error-rate spike. Latency inflation without throughput
- * gain also stops growth (queueing at the server, not useful work).
+ * Every window it compares completed-task throughput and latency with the previous window. It
+ * starts in slow start, doubling the limit after each healthy window (like TCP), so a run reaches
+ * useful parallelism in seconds instead of minutes. After the first sign of congestion (a
+ * decrease, or latency rising without throughput gain) it adds one slot per healthy window. It
+ * halves the limit on throttling (429), timeouts, or an error-rate spike.
  */
 export interface AimdOptions {
   min: number;
@@ -34,6 +35,8 @@ export class AimdController {
   private win: Window;
   private prev: { throughput: number; p50: number } | null = null;
   private cooldownUntil = 0;
+  /** Doubling until the first congestion signal. */
+  private slowStart = true;
   readonly history: { t: number; limit: number; reason: string }[] = [];
 
   constructor(
@@ -63,6 +66,7 @@ export class AimdController {
   }
 
   private decrease(reason: string): AimdDecision {
+    this.slowStart = false;
     const next = Math.max(this.opts.min, Math.floor(this.limit / 2));
     const changed = next !== this.limit;
     this.limit = next;
@@ -90,10 +94,13 @@ export class AimdController {
     if (this.now() < this.cooldownUntil) return null;
     if (this.limit >= this.opts.max) return null;
     if (prev && throughput < prev.throughput * 1.03 && p50 > prev.p50 * 1.25) {
+      this.slowStart = false;
       return { limit: this.limit, changed: false, reason: "latency rising without throughput gain; holding" };
     }
-    this.limit++;
-    this.history.push({ t: this.now(), limit: this.limit, reason: prev ? `throughput ${throughput.toFixed(2)}/s (prev ${prev.throughput.toFixed(2)}/s), errors ${(errRate * 100).toFixed(0)}%` : "first window healthy" });
+    const doubled = this.slowStart;
+    this.limit = Math.min(this.opts.max, doubled ? this.limit * 2 : this.limit + 1);
+    const why = prev ? `throughput ${throughput.toFixed(2)}/s (prev ${prev.throughput.toFixed(2)}/s), errors ${(errRate * 100).toFixed(0)}%` : "first window healthy";
+    this.history.push({ t: this.now(), limit: this.limit, reason: doubled ? `slow start: ${why}` : why });
     return { limit: this.limit, changed: true, reason: this.history.at(-1)!.reason };
   }
 }

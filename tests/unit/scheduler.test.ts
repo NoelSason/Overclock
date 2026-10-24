@@ -295,4 +295,26 @@ describe("AIMD concurrency controller", () => {
     c.record({ ms: 0, ok: false, throttled: true });
     expect(c.limit).toBe(Math.floor(before / 2));
   });
+
+  it("doubles in slow start, then grows by one slot after the first congestion signal", () => {
+    let t = 0;
+    const c = new AimdController("Orders", { min: 1, max: 64, initial: 4, windowMs: 1000, errorThreshold: 0.2 }, () => t);
+    const window = (ms: number, n = 10) => {
+      for (let i = 0; i < n; i++) {
+        t += 1000 / n;
+        c.record({ ms, ok: true });
+      }
+    };
+    window(100, 10);
+    expect(c.limit).toBe(8);
+    window(100, 20);
+    expect(c.limit).toBe(16);
+    window(100, 40);
+    expect(c.limit).toBe(32);
+    // Latency up 4x with no throughput gain: hold, and leave slow start.
+    window(400, 40);
+    expect(c.limit).toBe(32);
+    window(100, 80);
+    expect(c.limit).toBe(33);
+  });
 });

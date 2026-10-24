@@ -111,6 +111,8 @@ export async function classifyEffects(jev: JevProvider | null, models: AppModel[
 /* --------------------------------------------------------- Adversarial Verifier: plan critique */
 
 const Critique = z.object({
+  /** Every rule or requirement the task states, and the steps that implement it. */
+  coverage: z.array(z.object({ rule: z.string(), stepIds: z.array(z.string()), implemented: z.boolean() })),
   risks: z.array(
     z.object({
       severity: z.enum(["high", "medium", "low"]),
@@ -122,7 +124,9 @@ const Critique = z.object({
 });
 export type CritiqueResult = z.infer<typeof Critique>;
 
-const CRITIQUE_SYSTEM = `You are the Adversarial Verifier of Overclock. You review an execution plan (Procedure DSL) for a browser workflow before it runs against real applications. Find concrete defects only:
+const CRITIQUE_SYSTEM = `You are the Adversarial Verifier of Overclock. You review an execution plan (Procedure DSL) for a browser workflow before it runs against real applications.
+First fill "coverage": every rule or requirement the task states (numbered as the task numbers them, in at most 12 words each), the ids of the steps that implement it, and whether the plan implements it completely, including rules that apply across records.
+Then find concrete defects only:
 - a write that can run when the rules don't require a change (missing or wrong "when"), or that changes fields the rules don't mention;
 - a decision that misreads a rule (wrong source of truth, wrong comparison, case-sensitivity bugs, missing branch, wrong precedence between rules);
 - reads that pick the wrong row (e.g. using the first search result without checking that it really matches);
@@ -154,5 +158,8 @@ export async function critiquePlan(claude: ClaudeProvider, args: { goal: string;
     if (args.signal?.aborted) throw err;
     return call(6000);
   });
-  return { result: r.data, ms: r.ms };
+  // A rule the plan doesn't implement produces a wrong result for every record it applies to.
+  const missing = r.data.coverage.filter((c) => !c.implemented);
+  const risks = [...missing.map((c) => ({ severity: "high" as const, stepId: c.stepIds[0] ?? "(none)", issue: `The plan does not implement this rule: ${c.rule}`, suggestion: "Add the steps that implement it." })), ...r.data.risks];
+  return { result: { coverage: r.data.coverage, risks }, ms: r.ms };
 }

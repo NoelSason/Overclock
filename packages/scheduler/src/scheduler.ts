@@ -85,6 +85,8 @@ export class Scheduler {
   private readonly phases: Map<string, PhaseInfo>;
   private readonly gates = new Map<string, SegmentGate>();
   private readonly canaryPassed = new Set<string>();
+  /** Tasks per segment in an active state (leased, running, verifying, repairing, reconciling). */
+  private readonly activeBySegment = new Map<string, number>();
   private readonly sealed = new Set<string>();
   private programSealed = false;
   private recordSeq = 0;
@@ -293,8 +295,16 @@ export class Scheduler {
     return (this.compiled.priority.get(seg.id) ?? 0) * 1000 - record.index;
   }
 
-  private setState(t: TaskInstance, state: TaskState, extra: { error?: string; workerId?: string; attempt?: number; ms?: number } = {}): void {
+  /** Every state change goes through here, so the per-segment active count stays exact. */
+  private assignState(t: TaskInstance, state: TaskState): void {
+    const was = ACTIVE.has(t.state);
+    const now = ACTIVE.has(state);
+    if (was !== now) this.activeBySegment.set(t.segmentId, (this.activeBySegment.get(t.segmentId) ?? 0) + (now ? 1 : -1));
     t.state = state;
+  }
+
+  private setState(t: TaskInstance, state: TaskState, extra: { error?: string; workerId?: string; attempt?: number; ms?: number } = {}): void {
+    this.assignState(t, state);
     if (extra.error) t.error = extra.error;
     this.hooks.onTaskState?.(t, state, extra);
   }
@@ -360,10 +370,9 @@ export class Scheduler {
     const gate = this.gates.get(t.segmentId) ?? "open";
     if (gate === "open") return true;
     if (gate === "deferred") return false;
-    // canary: one in flight at a time until one succeeds
+    // canary: one in flight at a time until one succeeds (O(1): a lease scan checks this per ready task)
     if (this.canaryPassed.has(t.segmentId)) return true;
-    for (const x of this.tasks.values()) if (x.segmentId === t.segmentId && ACTIVE.has(x.state)) return false;
-    return true;
+    return (this.activeBySegment.get(t.segmentId) ?? 0) === 0;
   }
 
   /** Called by the executor when a canary task of a segment verified; opens the gate. */
@@ -435,7 +444,7 @@ export class Scheduler {
     if (!t || TERMINAL_TASK_STATES.has(t.state)) return;
     this.release(t);
     t.notBefore = this.hooks.now() + delayMs;
-    t.state = "PENDING";
+    this.assignState(t, "PENDING");
     this.setState(t, "READY", { error, attempt: t.attempt });
     t.readyAt = this.hooks.now();
     this.insertReady(t);
@@ -458,7 +467,7 @@ export class Scheduler {
   unpark(taskId: string, approved: boolean, reason: string): void {
     const t = this.tasks.get(taskId);
     if (!t || !this.parked.delete(taskId)) return;
-    t.state = "PENDING";
+    this.assignState(t, "PENDING");
     if (!approved) return this.fail(taskId, "NEEDS_APPROVAL", reason);
     t.notBefore = this.hooks.now();
     this.setState(t, "READY", { error: reason, attempt: t.attempt });
@@ -552,7 +561,7 @@ export class Scheduler {
       this.ready = this.ready.filter((r) => r !== x);
       for (const nodeId of x.produced) delete x.record.scope.out[nodeId];
       x.produced = [];
-      x.state = "PENDING";
+      this.assignState(x, "PENDING");
       this.setState(x, "PENDING", { error: x === t ? reason : `invalidated by ${taskId}` });
     }
     for (const x of reset) if ([...x.deps].every((d) => ["VERIFIED", "COMPLETED", "SKIPPED"].includes(this.tasks.get(d)!.state))) this.makeReady(x);
