@@ -253,7 +253,7 @@ export function getPath(obj: unknown, path: string): unknown {
   let cur: unknown = obj;
   for (const part of path.split(".")) {
     if (cur === null || cur === undefined) return null;
-    if (typeof cur !== "object") return null;
+    if (typeof cur !== "object" || !Object.hasOwn(cur, part)) return null;
     cur = (cur as Record<string, unknown>)[part];
   }
   return cur === undefined ? null : cur;
@@ -407,7 +407,7 @@ export const FUNCTIONS: Record<string, Fn> = {
   any: { min: 1, max: 1, impl: ([l], ctx) => guardList(asList(l), ctx).some(truthy) },
   all: { min: 1, max: 1, impl: ([l], ctx) => guardList(asList(l), ctx).every(truthy) },
   toNumber: { min: 1, max: 1, impl: ([x]) => asNum(x) },
-  toString: { min: 1, max: 1, impl: ([x]) => asStr(x) },
+  toString: { min: 1, max: 1, impl: (args: unknown[]) => asStr(args[0]) },
   round: { min: 1, max: 1, impl: ([x]) => Math.round(asNum(x) ?? 0) },
   isEmpty: { min: 1, max: 1, impl: ([x]) => !truthy(x) },
 };
@@ -447,7 +447,7 @@ export function parseExpr(source: string): ParsedExpr {
         visit(a.index);
         break;
       case "call": {
-        const fn = FUNCTIONS[a.fn];
+        const fn = Object.hasOwn(FUNCTIONS, a.fn) ? FUNCTIONS[a.fn] : undefined;
         if (!fn) throw new ExprError(`Unknown function '${a.fn}'`, source);
         if (a.args.length < fn.min || a.args.length > fn.max) throw new ExprError(`Function '${a.fn}' takes ${fn.min}-${fn.max} arguments, got ${a.args.length}`, source);
         a.args.forEach(visit);
@@ -482,22 +482,22 @@ function evalAst(a: Ast, scope: Scope, ctx: EvalCtx): unknown {
     case "lit":
       return a.v;
     case "root":
-      return scope[a.name] ?? null;
+      return Object.hasOwn(scope, a.name) ? (scope[a.name] ?? null) : null;
     case "member": {
       const o = evalAst(a.obj, scope, ctx);
       if (o === null || o === undefined || typeof o !== "object") return null;
       if (a.prop === "length" && Array.isArray(o)) return o.length;
-      return (o as Record<string, unknown>)[a.prop] ?? null;
+      return Object.hasOwn(o, a.prop) ? ((o as Record<string, unknown>)[a.prop] ?? null) : null;
     }
     case "index": {
       const o = evalAst(a.obj, scope, ctx);
       const i = evalAst(a.index, scope, ctx);
       if (Array.isArray(o)) return o[asNum(i) ?? -1] ?? null;
-      if (o && typeof o === "object") return (o as Record<string, unknown>)[asStr(i)] ?? null;
+      if (o && typeof o === "object") return Object.hasOwn(o, asStr(i)) ? ((o as Record<string, unknown>)[asStr(i)] ?? null) : null;
       return null;
     }
     case "call": {
-      const fn = FUNCTIONS[a.fn];
+      const fn = Object.hasOwn(FUNCTIONS, a.fn) ? FUNCTIONS[a.fn] : undefined;
       if (!fn) throw new ExprError(`Unknown function '${a.fn}'`, ctx.src);
       // `if` is lazy in its branches
       if (a.fn === "if") return truthy(evalAst(a.args[0]!, scope, ctx)) ? evalAst(a.args[1]!, scope, ctx) : evalAst(a.args[2]!, scope, ctx);

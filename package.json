@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.15.0",
-  "engines": { "node": ">=22.15" },
+  "engines": {
+    "node": ">=22.15"
+  },
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "arena": "tsx apps/arena/src/main.ts",
@@ -29,6 +31,23 @@
     "@types/node": "^24.10.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "@overclock/contracts": "workspace:*",
+    "@overclock/telemetry": "workspace:*",
+    "@overclock/perception": "workspace:*",
+    "@overclock/browser-runtime": "workspace:*",
+    "@overclock/compiler": "workspace:*",
+    "@overclock/optimizer": "workspace:*",
+    "@overclock/scheduler": "workspace:*",
+    "@overclock/verifier": "workspace:*",
+    "@overclock/recovery": "workspace:*",
+    "@overclock/models": "workspace:*",
+    "@overclock/discovery": "workspace:*",
+    "@overclock/swarm": "workspace:*",
+    "@overclock/sdk": "workspace:*",
+    "@overclock/benchmarks": "workspace:*",
+    "@overclock/engine": "workspace:*",
+    "@overclock/arena": "workspace:*",
+    "playwright": "1.64.1"
   }
 }
