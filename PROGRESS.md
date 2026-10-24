@@ -72,30 +72,35 @@ is implemented with a known gap. **Proposed** means design only.
 | Every fast-mode run needed a repair round, and some failed closed | Plans matched CRM emails against a lowercased order email; the language couldn't normalize the list side | `filterBy(list, 'field', '~=', value)`; `tests/unit/expr.test.ts`. The critique then passed the same recorded plan 3/3 (0/3 before). |
 | The critique truncated and retried (about 14 s lost) | A 3,000-token budget for thinking plus the coverage list | 8,000 first, 16,000 on retry |
 | Seed 2222's first demo attempt: A's capability failed the validator's static analysis | Not recorded | The engine now runs the same analysis before publishing and records the reason; the rerun passed |
+| (Found while documenting, before any run used it on a network) The new browser server processes listened on every interface | Playwright's `launchServer` default | Bound to 127.0.0.1 |
 | (Found by review, not seen in a recorded run) A request for "rejected" could reuse a plan or capability learned for "approved" | The operation identity hashed a lossy goal (quoted values and numbers replaced by placeholders), for network lookup and the local plan cache; the importer took the top candidate without checking | The identity hashes the exact instructions and record schema (`op2:`); lookups return exact matches only; the importer re-checks the fetched artifact; static analysis rejects old identities; cache entries must match their key. `tests/unit/operation-identity.test.ts`, `tests/network-capability/operation-identity.test.ts`, and the demo's `--conflict-arm` (zero writes) |
 
 ## Test runs for this round
 
-Run on 2026-10-24 (afternoon) on the final source, with `OVERCLOCK_LIVE` unset (no model calls)
+Run on 2026-10-24 (evening) on the final source, with `OVERCLOCK_LIVE` unset (no model calls)
 unless noted.
 
 | Command | Result |
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
-| `npx vitest run --project unit` | 151 passed |
-| `npx vitest run --project integration` | 123 passed, 2 skipped (live) |
+| `npx vitest run --project unit` | 159 passed |
+| `npx vitest run --project integration` | 127 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
-| `pnpm test:network-capability` | 28 passed |
+| `pnpm test:network-capability` | 34 passed |
 | `pnpm test:network` | 26 passed |
-| `pnpm test:e2e` | 1 passed, with a developer's dashboard dev server still running on :3000 (the e2e server now uses its own build directory) |
-| `pnpm network:demo --records 10 --variation rename-save --warm-arm` (live, spends money) | Every acceptance check passed on seeds 4242, 1111, 2222 (rerun), 3333, 7777; seed 2222's first attempt failed at validation |
+| `pnpm test:e2e` | 1 passed, beside a developer's dashboard dev server on :3000 |
+| `pnpm network:demo --records 10 --variation rename-save --warm-arm` (live, spends money) | Every check passed on seeds 4242, 1111, 2222 (rerun), 3333, 7777; seed 2222's first attempt failed at validation |
 | `pnpm network:demo --records 10 --seed 5151 --variation fields-in-tab --expect-refusal --no-cold-arm` (live) | Every check passed: B refused, planned cold, 10/10 |
-| `pnpm network:demo --records 10 --seed 4242 --no-cold-arm` (live, final source) | Every check passed: A 22.5 s, B 3.1 s (`EXACT_COMPATIBLE`, 25 bound, 0 planner calls), both 10/10 |
+| `pnpm network:demo --records 10 --seed 4242 --no-cold-arm` (live) | Every check passed: A 22.5 s, B 3.1 s (`EXACT_COMPATIBLE`), both 10/10 |
+| `pnpm network:demo --records 10 --variation rename-save --conflict-arm --no-cold-arm` (live) | Every check passed at 13:17 (A cold) and at 13:40 on the final code (A reused its own cached plan, no model spend): X made zero writes, B 10/10 |
+| `tsx scripts/warm-bench.ts --records 500 --workers 16 --trials 3` (no model calls) | Median 17.2 s, 500/500 in every trial |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 
-Model spend on 2026-10-24 afternoon: about $15 (benchmarks $7.1, network demos about $6.3,
-offline critique evaluations $1.8, smoke tests $0.1), for a running total of about $47 against
-the $50 budget. The Stagehand baseline was not run.
+Model spend on 2026-10-24 after noon: about $17.9 (benchmarks $7.1, network demos $7.6 including
+the failed seed-2222 attempt, offline critique evaluations $1.8, three unplanned cold runs after
+the operation-identity change invalidated the warm cache $1.3, smoke tests $0.1), for a running
+total of about $49–50 against the $50 budget. No further model calls were made. The Stagehand
+baseline was not run.
 
 ## Known gaps
 

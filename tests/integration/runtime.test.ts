@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BrowserManager, BrowserWorker, runSegment, VerificationFailedError, WriteUncertainError, type RecordScope } from "@overclock/browser-runtime";
+import { BrowserManager, BrowserWorker, readBatch, runSegment, VerificationFailedError, WriteUncertainError, type RecordScope } from "@overclock/browser-runtime";
 import { startMiniApp, type MiniApp } from "../fixtures/mini-app";
 import { loc, node } from "../fixtures/ir";
 
@@ -100,6 +100,22 @@ describe("browser runtime (hand-written IR)", () => {
     expect((empty.outputs.none as { rows: unknown[] }).rows).toEqual([]);
     // An empty table on a settled server-rendered page is final at once (it used to wait 1.5 s).
     expect(performance.now() - t1).toBeLessThan(800);
+    await w.close();
+  });
+
+  it("reads XPath-anchored fields in one call only when each matches exactly one element", async () => {
+    const w = await worker();
+    const page = await w.context.newPage();
+    await page.goto(`${app.origin}/items/I-3`);
+    const x = (xpath: string) => loc({ kind: "css", selector: `xpath=${xpath}` });
+    const got = await readBatch(page, [
+      { loc: x('//dt[normalize-space()="Status"]/following-sibling::dd[1]'), attr: "text" }, // unique
+      { loc: x("//dd"), attr: "text" }, // two matches: resolved the full way
+      { loc: x('//dt[normalize-space()="Nope"]'), attr: "text" }, // no match
+      { loc: x('//dt[normalize-space()="Status"]/text()'), attr: "text" }, // a text node, not an element
+      { loc: loc({ kind: "role", role: "link", name: "Edit" }), attr: "href" }, // not an XPath: not batched
+    ]);
+    expect(got).toEqual([app.items.get("I-3")!.status, undefined, undefined, undefined, undefined]);
     await w.close();
   });
 

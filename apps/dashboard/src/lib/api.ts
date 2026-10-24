@@ -81,6 +81,8 @@ export interface TransferReport {
   at: string;
   passed: boolean;
   expectRefusal?: boolean;
+  /** Set on regression runs where runtime A reused its own cached plan instead of learning cold. */
+  aWarmCache?: string | null;
   records: number;
   seed: number;
   variation: string | null;

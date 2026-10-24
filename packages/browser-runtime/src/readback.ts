@@ -2,7 +2,7 @@ import type { Locator } from "playwright";
 import type { ActionNode, VerificationSpec } from "@overclock/contracts";
 import { looseEquals, resolveValue, toStr } from "@overclock/compiler";
 import { routePattern } from "@overclock/perception";
-import { exprScope, readControl, type ActionEnv, type RecordScope } from "./actions";
+import { exprScope, readBatch, readControl, type ActionEnv, type RecordScope } from "./actions";
 import { NavigationError } from "./errors";
 import { resolveLocator } from "./locate";
 
@@ -110,7 +110,9 @@ export async function readBack(env: ActionEnv, spec: VerificationSpec, opts: { t
   const fields: ReadBackField[] = [];
   if (entityMismatch) fields.push({ name: "entity", expected: entityIds(opts.entityUrl!).join(", "), actual: new URL(url).pathname, ok: false });
   let duplicate = false;
-  for (const f of spec.fields) {
+  // Plain fields whose top-ranked strategy is an XPath are read in one page call (see readBatch).
+  const batched = await readBatch(env.page, spec.fields.map((f) => ({ loc: f.target, attr: f.match === "entry" ? "text" : f.attr })));
+  for (const [i, f] of spec.fields.entries()) {
     const expected = normalize(resolveValue(f.equals, scope));
     if (f.match === "entry") {
       let counted: { matches: number; entries: number } | null = null;
@@ -127,11 +129,14 @@ export async function readBack(env: ActionEnv, spec: VerificationSpec, opts: { t
       continue;
     }
     let actual: unknown = null;
-    try {
-      const r = await resolveLocator(env.page, f.target, { timeoutMs: 2000 });
-      actual = normalize(await readText(r.locator, f.attr));
-    } catch {
-      actual = null;
+    if (batched[i] !== undefined) actual = normalize(batched[i]!);
+    else {
+      try {
+        const r = await resolveLocator(env.page, f.target, { timeoutMs: 2000 });
+        actual = normalize(await readText(r.locator, f.attr));
+      } catch {
+        actual = null;
+      }
     }
     const ok = looseEquals(actual, expected) || (typeof actual === "string" && typeof expected === "string" && actual.toLowerCase() === expected.toLowerCase());
     fields.push({ name: f.name, expected, actual, ok });

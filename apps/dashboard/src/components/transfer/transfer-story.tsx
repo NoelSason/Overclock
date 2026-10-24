@@ -15,7 +15,8 @@ export function TransferStory() {
   const { data, error, loading } = usePolling((signal) => engine.transfers(signal), 0, []);
   const [picked, setPicked] = useState<string | null>(null);
   const reports = data ?? [];
-  const r = reports.find((x) => x.name === picked) ?? reports.find((x) => x.passed && !x.expectRefusal && x.variation) ?? reports[0];
+  // Default: the newest passing changed-UI recording in which A learned cold (not a regression run).
+  const r = reports.find((x) => x.name === picked) ?? reports.find((x) => x.passed && !x.expectRefusal && x.variation && !x.aWarmCache) ?? reports[0];
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-3 p-3">
       {loading && !data ? (
@@ -57,7 +58,8 @@ function Header({ report: r, reports, onPick }: { report: TransferReport; report
             {reports.map((x) => (
               <option key={x.name} value={x.name}>
                 {new Date(x.at).toLocaleString()} · seed {x.seed} · {x.variation ?? "no change"}
-                {x.expectRefusal ? " (refusal)" : ""} · {x.passed ? "pass" : "fail"}
+                {x.expectRefusal ? " (refusal)" : ""}
+                {x.aWarmCache ? " (regression: A reused its cache)" : ""} · {x.passed ? "pass" : "fail"}
               </option>
             ))}
           </select>

@@ -104,43 +104,77 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
   }
 }
 
-/**
- * Reads the single element a locator matched, in the page. Returns the match count, and the value
- * only when exactly one element matched. Self-contained, because Playwright runs it in the page.
- * The text of a titled region (section, article, role=region) is its content without headings and
- * form chrome: the same value perception records as a region fact.
- */
-function readUnique(els: Element[], attr: "text" | "value" | "href"): { n: number; v?: string } {
-  if (els.length !== 1) return { n: els.length };
-  const el = els[0]!;
-  if (attr === "href") return { n: 1, v: el.getAttribute("href") ?? "" };
-  if (attr === "value") {
-    if (el instanceof HTMLSelectElement) return { n: 1, v: el.value };
-    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) return { n: 1, v: String(el.checked) };
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return { n: 1, v: el.value };
-    return { n: 1, v: (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "" };
-  }
-  if (el instanceof HTMLSelectElement) return { n: 1, v: el.selectedOptions[0]?.textContent?.trim() ?? el.value };
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return { n: 1, v: el.value };
-  if (el.matches("section,article,[role=region]")) {
-    const c = el.cloneNode(true) as HTMLElement;
-    for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
-    const parts: string[] = [];
-    const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
-    while (walk.nextNode()) {
-      const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
-      if (t) parts.push(t);
-    }
-    return { n: 1, v: parts.join(" ") };
-  }
-  return { n: 1, v: ((el as HTMLElement).innerText ?? el.textContent ?? "").trim() };
+type ReadAttr = "text" | "value" | "href";
+interface ReadArgs {
+  attrs: ReadAttr[];
+  /** Batch mode: one XPath per target (null: not batched). */
+  paths?: (string | null)[];
 }
 
-/** Read a control's value (see readUnique). The locator must match one element (resolveLocator's result). */
-export async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
-  const r = await locator.evaluateAll(readUnique, attr);
-  if (r.n !== 1) throw new LocatorNotFoundError(`Expected one element to read, found ${r.n}`, undefined);
+/**
+ * In-page reader, self-contained because Playwright runs it in the page. Two call shapes:
+ * `locator.evaluateAll(readTargets, { attrs: [attr] })` reads the elements a locator matched, and
+ * `page.evaluate(readTargets, { attrs, paths })` resolves several XPaths in one call, the way
+ * Playwright's XPath engine does (document.evaluate, element nodes only, no shadow roots). Each
+ * target yields its match count, and its value only when exactly one element matched. The text of
+ * a titled region (section, article, role=region) is its content without headings and form
+ * chrome: the same value perception records as a region fact.
+ */
+function readTargets(a: Element[] | ReadArgs, b?: ReadArgs): { n: number; v?: string }[] {
+  const read = (el: Element, attr: ReadAttr): string => {
+    if (attr === "href") return el.getAttribute("href") ?? "";
+    if (attr === "value") {
+      if (el instanceof HTMLSelectElement) return el.value;
+      if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) return String(el.checked);
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
+      return (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "";
+    }
+    if (el instanceof HTMLSelectElement) return el.selectedOptions[0]?.textContent?.trim() ?? el.value;
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
+    if (el.matches("section,article,[role=region]")) {
+      const c = el.cloneNode(true) as HTMLElement;
+      for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
+      const parts: string[] = [];
+      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) {
+        const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (t) parts.push(t);
+      }
+      return parts.join(" ");
+    }
+    return ((el as HTMLElement).innerText ?? el.textContent ?? "").trim();
+  };
+  if (Array.isArray(a)) return [a.length === 1 ? { n: 1, v: read(a[0]!, b!.attrs[0]!) } : { n: a.length }];
+  return (a.paths ?? []).map((path, i) => {
+    if (!path) return { n: -1 };
+    const els: Element[] = [];
+    const it = document.evaluate(path, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    for (let node = it.iterateNext(); node; node = it.iterateNext()) if (node.nodeType === Node.ELEMENT_NODE) els.push(node as Element);
+    return els.length === 1 ? { n: 1, v: read(els[0]!, a.attrs[i]!) } : { n: els.length };
+  });
+}
+
+/** Read a control's value (see readTargets). The locator must match one element (resolveLocator's result). */
+export async function readControl(locator: Locator, attr: ReadAttr): Promise<string> {
+  const [r] = await locator.evaluateAll(readTargets, { attrs: [attr] });
+  if (r?.n !== 1) throw new LocatorNotFoundError(`Expected one element to read, found ${r?.n ?? 0}`, undefined);
   return r.v ?? "";
+}
+
+/**
+ * Reads several controls in one page call where possible: each target whose top-ranked strategy
+ * is an XPath (label-anchored facts) and has no scope. A value comes back only for a target whose
+ * XPath matched exactly one element, the element resolveLocator would pick on its first probe;
+ * every other target is undefined, and the caller resolves it the full way.
+ */
+export async function readBatch(page: Page, targets: { loc: SemanticLocator; attr: ReadAttr }[]): Promise<(string | undefined)[]> {
+  const paths = targets.map(({ loc }) => {
+    const s = loc.strategies[0];
+    return !loc.scope && s?.kind === "css" && s.selector.startsWith("xpath=") ? s.selector.slice("xpath=".length) : null;
+  });
+  if (!paths.some((p) => p !== null)) return targets.map(() => undefined);
+  const results = await page.evaluate(readTargets, { attrs: targets.map((t) => t.attr), paths }).catch(() => null);
+  return targets.map((_, i) => (results?.[i]?.n === 1 ? (results[i]!.v ?? "") : undefined));
 }
 
 function parseValue(raw: string, parse: ExtractField["parse"]): unknown {
@@ -280,15 +314,21 @@ async function extractFields(env: ActionEnv, node: ActionNode, fields: ExtractFi
   const start = performance.now();
   const out: Record<string, unknown> = {};
   let worstTier = 0;
-  for (const f of fields) {
+  const locs = fields.map((f) => env.locatorOverrides.get(`${node.id}#${f.name}`) ?? f.target);
+  // Fast path: every field with a top-ranked XPath read in one page call (see readBatch).
+  const batched = await readBatch(env.page, fields.map((f, i) => ({ loc: locs[i]!, attr: f.attr })));
+  for (const [i, f] of fields.entries()) {
     try {
-      const override = env.locatorOverrides.get(`${node.id}#${f.name}`);
-      const loc = override ?? f.target;
-      // Fast path, one browser call: when the top-ranked strategy matches exactly one element,
-      // that is the element resolveLocator would pick on its first probe, so read it directly.
-      // Anything else (no match yet, several, a scoped locator) takes the full path below.
+      const loc = locs[i]!;
+      if (batched[i] !== undefined) {
+        out[f.name] = parseValue(batched[i]!, f.parse);
+        continue;
+      }
+      // Next fastest, one browser call: the top-ranked strategy (not an XPath) matches exactly
+      // one element, the one resolveLocator would pick on its first probe. Anything else (no
+      // match yet, several, a scoped locator) takes the full path below.
       if (!loc.scope && loc.strategies[0]) {
-        const quick = await strategyToLocator(env.page, loc.strategies[0]).evaluateAll(readUnique, f.attr).catch(() => null);
+        const [quick] = (await strategyToLocator(env.page, loc.strategies[0]).evaluateAll(readTargets, { attrs: [f.attr] }).catch(() => null)) ?? [];
         if (quick?.n === 1) {
           out[f.name] = parseValue(quick.v ?? "", f.parse);
           continue;

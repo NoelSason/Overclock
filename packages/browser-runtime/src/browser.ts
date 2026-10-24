@@ -4,6 +4,11 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 
 const SERVER_SCRIPT = fileURLToPath(new URL("../browser-server.mjs", import.meta.url));
 
+/** Extra Chromium command-line switches (OVERCLOCK_CHROMIUM_ARGS, space-separated). */
+function chromiumArgs(): string[] {
+  return (process.env.OVERCLOCK_CHROMIUM_ARGS ?? "").split(/\s+/).filter(Boolean);
+}
+
 /** Start a browser server process and return its endpoint (first stdout line). */
 async function startBrowserServer(headless: boolean): Promise<{ child: ChildProcess; wsEndpoint: string }> {
   const child = spawn(process.execPath, [SERVER_SCRIPT], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, OVERCLOCK_HEADLESS: headless ? "1" : "0" } });
@@ -95,7 +100,7 @@ export class BrowserManager {
         const { child, wsEndpoint } = await startBrowserServer(headless);
         this.servers[i] = child;
         launched = await chromium.connect(wsEndpoint);
-      } else launched = await chromium.launch({ headless });
+      } else launched = await chromium.launch({ headless, args: chromiumArgs() });
       this.browsers[i] = launched;
       this.launching[i] = null;
       return launched;

@@ -34,6 +34,10 @@
  * With --expect-refusal (for a variation rebinding can't prove safe, e.g. fields-in-tab), the
  * checks invert: B must refuse the capability with reasons, plan cold instead, and still pass.
  *
+ * With --a-warm-cache <dir> (a regression run, not a learning run), runtime A starts with that
+ * program cache (a plan it learned and reviewed in an earlier run) and reuses it instead of
+ * planning, so the run spends no model money; the report says so.
+ *
  * With --conflict-arm, before B runs, a fourth runtime X (own identity, own data dir, no model
  * access) asks for the same task with one value changed ("Tier 2" becomes "Tier 1"). Its
  * operation differs, so it must find no capability to reuse and, with no planner, make zero
@@ -44,7 +48,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserManager, SessionManager } from "@overclock/browser-runtime";
 import type { PublisherRole } from "@overclock/network-contracts";
@@ -169,6 +173,7 @@ async function main(): Promise<void> {
   const expectRefusal = argv.includes("--expect-refusal");
   const warmArm = argv.includes("--warm-arm");
   const conflictArm = argv.includes("--conflict-arm");
+  const aWarmCache = argValue(argv, "--a-warm-cache");
   const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
@@ -191,6 +196,12 @@ async function main(): Promise<void> {
   for (const label of runtimes) await (await enroll(admin, label, "publisher", true)).close();
   console.log(`identities: admin, validator, ${runtimes.join(", ")} (separate tokens, all authorized)`);
 
+  if (aWarmCache) {
+    const dest = join(DEMO_DIR, "runtime-a", "program-cache");
+    mkdirSync(dest, { recursive: true });
+    for (const f of readdirSync(aWarmCache)) copyFileSync(join(aWarmCache, f), join(dest, f));
+    console.log(`A: regression run, starting from its own cached plan in ${aWarmCache} (no planning)`);
+  }
   const a = startEngine("runtime-a", 4010);
   const b = startEngine("runtime-b", 4020);
   const c = coldArm ? startEngine("runtime-c", 4030, false) : null;
@@ -225,7 +236,7 @@ async function main(): Promise<void> {
     await arena.resetVariations();
     const scenarioA = await arena.loadScenario({ seed, template: "t1-order-reconcile", records });
     console.log(`\nA: ${scenarioA.title} (${scenarioA.records.length} records), network-read-and-contribute`);
-    const resA = await engineA.execute(configFromScenario(scenarioA, { mode, knowledge: "network-read-and-contribute", thumbnails: false }));
+    const resA = await engineA.execute(configFromScenario(scenarioA, { mode, knowledge: "network-read-and-contribute", thumbnails: false, ...(aWarmCache ? { cache: "warm" as const } : {}) }));
     const outA = brief("runtime-a", resA, await arena.check());
     console.log(JSON.stringify(outA, null, 2));
     const eventsA = await engineA.events(resA.runId, 0, 10_000);
@@ -364,7 +375,9 @@ async function main(): Promise<void> {
         ok: policyB?.type === "policy.decision" && policyB.intelligence === "network-import" && selectedB?.type === "candidate.selected" && selectedB.candidateId === "network",
         detail: `policy ${policyB?.type === "policy.decision" ? policyB.intelligence : "?"}, selected ${selectedB?.type === "candidate.selected" ? selectedB.candidateId : "?"}`,
       },
-      { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
+      aWarmCache
+        ? { check: "B made no planner call (A reused its cached plan: regression run)", ok: plannerB === 0, detail: `A ${plannerA}, B ${plannerB}` }
+        : { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
       ...(outC ? [{ check: "C (strict-cold comparison arm) passes the independent ground-truth check", ok: groundTruthOk(outC), detail: JSON.stringify(outC.checker) }] : []),
       ...(outW ? [{ check: "C's local warm replay passes the independent ground-truth check", ok: groundTruthOk(outW), detail: JSON.stringify(outW.checker) }] : []),
     ])];
@@ -391,7 +404,7 @@ async function main(): Promise<void> {
     for (const [k, d] of [["A", diagA], ["B", diagB], ["C", diagC]] as const) if (d) console.log(`${k} model calls: ${JSON.stringify(d.modelCallsByPurpose)}; fallbacks ${d.fallbacks.length}; recoveries ${d.recoveries}`);
     const transfer = { identities: { a: idA ?? null, b: idB ?? null, publisher: imp?.publisher?.slice(0, 16) ?? null }, bCacheBefore, variations: variation ? variationsB : null, relabeled: imp?.relabeled ?? [], writeCanary: imp?.writeCanary ?? false, canaryPassed: canaryB, refused: imp?.refused ?? [], importOutcome: imp?.outcome ?? null, actionsB, verifiedB };
     console.log(`transfer: ${JSON.stringify(transfer)}`);
-    const report = { at: new Date().toISOString(), passed, expectRefusal, conflict, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
+    const report = { at: new Date().toISOString(), passed, expectRefusal, aWarmCache: aWarmCache ?? null, conflict, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
     // A copy beside the benchmark results, for the dashboard's Transfer page and for review.
     const recordDir = join(REPO_ROOT, "benchmarks", "results", "network");

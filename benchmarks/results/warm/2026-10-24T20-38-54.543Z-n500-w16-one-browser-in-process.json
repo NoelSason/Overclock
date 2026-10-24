@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-24T20:38:54.543Z",
+  "label": "one-browser-in-process",
+  "records": 500,
+  "workers": 16,
+  "trials": 3,
+  "seed": 4242,
+  "env": {
+    "OVERCLOCK_BROWSERS": "1"
+  },
+  "medianWallMs": 23906,
+  "results": [
+    {
+      "runId": "run_20261024203743_4776a7",
+      "status": "completed",
+      "wallMs": 23959,
+      "firstVerifiedMs": 13649,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.988,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024203807_e350b3",
+      "status": "completed",
+      "wallMs": 23906,
+      "firstVerifiedMs": 13867,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.987,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    },
+    {
+      "runId": "run_20261024203831_614370",
+      "status": "completed",
+      "wallMs": 22614,
+      "firstVerifiedMs": 12665,
+      "modelCalls": 0,
+      "modelCostUsd": 0,
+      "workerUtilization": 0.986,
+      "maxConcurrency": 16,
+      "check": {
+        "correct": 500,
+        "total": 500,
+        "duplicateWrites": 0,
+        "collateralWrites": 0
+      }
+    }
+  ]
+}

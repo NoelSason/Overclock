@@ -12,7 +12,10 @@ verified execution programs instead of reasoning about every action.
 > buttons were renamed, a second, independent runtime imported the first runtime's capability
 > through SpacetimeDB, rebound it, and finished 10 records in a median 3.3 s with no planning
 > call, against 18.8 s for a fresh cold runtime: 5 of 5 seeds, all records correct
-> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). See [Benchmark
+> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). A request that differs in any value, threshold,
+> or condition never reuses another operation's plan: in a live run it found no capability and
+> made zero writes. Warm, the engine reconciles 500 records across three apps in a median 17.2 s
+> with every write verified (500/500). See [Benchmark
 > results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
@@ -253,6 +256,24 @@ critique). Result files: `benchmarks/results/*@e2-*.json` and `*@c-*.json`.
   duplicate and 0 collateral writes, $0.45. Planning and critique take the first 22.5 s while
   reads run underneath; the write canaries take about 3 s; then 16 workers verify about 25–36
   writes per second. The earlier 500/500 run took about 120 s.
+
+### Execution throughput (2026-10-24, evening)
+
+Warm runs reuse a cached, reviewed plan and make no model calls, so they measure execution alone.
+`scripts/warm-bench.ts`, t1 seed 4242, 500 records, 16 workers, one excluded warm-up, then 3
+trials; results in `benchmarks/results/warm/`.
+
+| Engine | Median wall (range) | First verified write | Correct |
+| --- | --- | --- | --- |
+| Final (4 browsers, each behind its own server process) | **17.2 s** (17.0–17.3) | 9.1–9.6 s | 500/500 in every trial, 0 duplicate, 0 collateral writes |
+| Same code, one browser in the engine's process | 23.9 s | — | 500/500 |
+| Before today's execution changes (same script and procedure, not recorded to a file) | 29.1 s | 17.4 s | 500/500 |
+
+The limit was the engine's single thread and Chromium's main process, not the apps: one worker
+runs an action in 6–20 ms, while 16 workers on one browser and one thread took 23–172 ms. See
+[Execution throughput](docs/ARCHITECTURE.md#execution-throughput). One cold 500-record run on
+the new execution code (a cache miss after the operation-identity change, not a planned
+benchmark) took 27.9 s and was 500/500 correct.
 
 ## Quick start
 

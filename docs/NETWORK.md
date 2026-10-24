@@ -408,6 +408,22 @@ Transfer page renders them.
   The adaptive-concurrency change landed while this series ran: seeds 4242 and 1111 ran before
   it, seeds 2222 (rerun), 3333, and 7777 after.
 
+### A conflicting request reuses nothing (live, 2026-10-24)
+
+`pnpm network:demo --records 10 --variation rename-save --conflict-arm --no-cold-arm`: after A
+published, a fourth runtime X (its own identity and data dir, no model access) asked for the same
+task with one value changed (the damage-ticket owner "Tier 2" became "Tier 1"), on B's records.
+Under the earlier lossy identity, X would have matched A's capability and written "Tier 2".
+
+| Run | X: lookup | X: arena writes | X: receipts, planner calls | B (identical operation, renamed buttons) |
+| --- | --- | --- | --- | --- |
+| 13:17 PDT, A learned cold | `NO_CAPABILITY` (0 candidates for its operation) | 0 | 0, 0 (run failed: no model to plan with) | 10/10, 0 duplicate, 0 collateral, 3.2 s, 0 planner calls |
+| 13:40 PDT, final code (A reused its own cached plan from the 13:17 run: a regression run, no model spend) | `NO_CAPABILITY` | 0 | 0, 0 | 10/10, 0, 0, 3.2 s, 0 planner calls |
+
+The first attempt at 13:15 reported a failed check because of two bugs in the demo's own
+measurement (it read the arena's write counters wrongly and took a non-final run status); the
+run itself made the same zero writes. Its report is kept in `benchmarks/results/network/`.
+
 ### A change rebinding can't prove safe (seed 5151)
 
 `--variation fields-in-tab --expect-refusal --no-cold-arm` moves every edit form's fields into a
