@@ -35,7 +35,9 @@
     "network:deploy": "tsx scripts/network-deploy.ts",
     "network:probe": "tsx scripts/network-probe.ts",
     "network:authorize": "tsx scripts/network-authorize.ts",
-    "network:demo": "tsx scripts/network-demo.ts"
+    "network:demo": "tsx scripts/network-demo.ts",
+    "extension:demo": "tsx scripts/extension-demo.ts",
+    "extension:build": "pnpm --filter @overclock/extension build"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

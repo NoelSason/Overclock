@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { z } from "zod";
 import { ApprovalDecision, RunConfigSchema } from "@overclock/contracts";
 import type { BenchmarkResultFile, CreateRunResponse, EventsPage, RunStatus, RunStatusResponse } from "@overclock/contracts";
+import { EXTENSION_PREFIX, registerExtensionRoutes, type ExtensionRoutesOptions } from "./extension";
 import { parseLastEventId, streamRun, type SseStream } from "./sse";
 import type { RunHandle, RunManager } from "./types";
 
@@ -21,6 +22,8 @@ export interface EngineServerOptions {
   logger?: boolean;
   /** SSE heartbeat interval; defaults to 15 s. */
   heartbeatMs?: number;
+  /** The Chrome extension's authenticated gateway (`/api/x/*`); absent: not served. */
+  extension?: Omit<ExtensionRoutesOptions, "streams" | "heartbeatMs" | "manager"> | undefined;
 }
 
 export interface EngineServer {
@@ -158,8 +161,10 @@ export async function createEngineServer(opts: EngineServerOptions): Promise<Eng
     (defaultJson as (r: typeof req, b: string, d: typeof done) => void)(req, text, done);
   });
 
-  // CORS for local dev origins (any port), including preflight for every route.
+  // CORS for local dev origins (any port), including preflight for every route. The extension
+  // gateway has its own origin, host, and token checks (extension.ts).
   app.addHook("onRequest", async (req, reply) => {
+    if (req.url.startsWith(EXTENSION_PREFIX)) return;
     const headers = corsHeaders(req);
     for (const [k, v] of Object.entries(headers)) reply.header(k, v);
     if (req.method !== "OPTIONS") return;
@@ -297,6 +302,8 @@ export async function createEngineServer(opts: EngineServerOptions): Promise<Eng
 
   // Recorded network transfer demos (A learns, B imports): one report per `pnpm network:demo` run.
   app.get("/api/transfers", async () => listTransfers(join(opts.benchmarksDir, "network")));
+
+  if (opts.extension) registerExtensionRoutes(app, { ...opts.extension, manager, streams, heartbeatMs: opts.heartbeatMs });
 
   // ------------------------------------------------------------- lifecycle
 

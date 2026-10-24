@@ -34,6 +34,20 @@ export interface CachedProgram {
   review?: PlanReview | undefined;
   /** The cache key it was stored under; a read must match it exactly (entries without it are ignored). */
   key?: string | undefined;
+  /** What the workflow was learned for (the workflow library shows and reruns it; none of it is record data). */
+  learned?: LearnedWorkflow | undefined;
+}
+
+export interface LearnedWorkflow {
+  /** The exact instructions; with the record fields and origins they make up the cache key. */
+  goal: string;
+  recordFields: string[];
+  applications: { name: string; origin: string }[];
+  /** Records in the run that stored it. */
+  records: number;
+  at: number;
+  /** Where the plan came from: planned here, or imported from the Overclock Network. */
+  source: { kind: "local" } | { kind: "network"; versionId: string; publisher?: string | undefined };
 }
 
 export interface ProgramCache {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppModel, DslPlan } from "@overclock/contracts";
 import { BrowserManager, SessionManager, type Credentials, type StorageState } from "@overclock/browser-runtime";
@@ -79,6 +79,20 @@ export class FileProgramCache implements ProgramCache {
   }
   put(key: string, value: CachedProgram): void {
     writeFileSync(this.path(key), JSON.stringify({ ...value, key }));
+  }
+  /** Every readable entry that carries its key, for the workflow library. */
+  list(): (CachedProgram & { key: string })[] {
+    const out: (CachedProgram & { key: string })[] = [];
+    for (const f of readdirSync(this.dir)) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const entry = JSON.parse(readFileSync(join(this.dir, f), "utf8")) as CachedProgram;
+        if (typeof entry.key === "string" && this.path(entry.key) === join(this.dir, f)) out.push(entry as CachedProgram & { key: string });
+      } catch {
+        // unreadable: not listed
+      }
+    }
+    return out;
   }
 }
 

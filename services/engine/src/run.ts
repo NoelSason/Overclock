@@ -160,7 +160,10 @@ export class RunController implements RunHandle {
       get: (key: string) => localCache?.get(key),
       put: (key: string, value: import("@overclock/swarm").CachedProgram) => {
         this.finalPlan = value;
-        this.runtime.cache.put(key, value);
+        const recordFields = [...new Set(this.config.records.flatMap((r) => Object.keys(r)))].sort();
+        const applications = this.config.applications.map((a) => ({ name: a.name, origin: new URL(a.origin).origin }));
+        const source = imported ? { kind: "network" as const, versionId: imported.versionId } : { kind: "local" as const };
+        this.runtime.cache.put(key, { ...value, learned: { goal: this.config.goal, recordFields, applications, records: this.config.records.length, at: Date.now(), source } });
       },
     };
     const swarmDeps = {
