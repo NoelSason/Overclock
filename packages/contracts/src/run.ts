@@ -34,6 +34,12 @@ export const RunConfigSchema = z.object({
   thumbnails: z.boolean().default(true),
   /** cold = ignore cached app models / compiled programs; warm = reuse when fingerprints match. */
   cache: z.enum(["cold", "warm"]).default("cold"),
+  /**
+   * Knowledge policy (Overclock Network). When omitted it is derived from `cache` and stays
+   * backward compatible: cold -> "strict-cold", warm -> "local-only". Network policies require
+   * OVERCLOCK_NETWORK_ENABLED=true on the engine.
+   */
+  knowledge: z.enum(["strict-cold", "local-only", "network-read", "network-read-and-contribute"]).optional(),
   budgetUsd: z.number().positive().optional(),
   label: z.string().optional(),
   /** Ablation switches (benchmarks). */
@@ -183,6 +189,21 @@ export const RunSummary = z.object({
   overlapMs: z.number().default(0),
   recoveryMs: z.number().default(0),
   stageMs: z.record(z.string(), z.number()).default({}),
+  knowledge: z.string().optional(),
+  network: z
+    .object({
+      lookups: z.number(),
+      hits: z.number(),
+      outcome: z.string().optional(),
+      capabilityId: z.string().optional(),
+      version: z.number().optional(),
+      lookupMs: z.number(),
+      fetchMs: z.number(),
+      rebindMs: z.number(),
+      published: z.boolean(),
+      repairs: z.number(),
+    })
+    .optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 

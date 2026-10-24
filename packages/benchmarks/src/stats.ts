@@ -119,6 +119,12 @@ export interface AggregateRow extends BenchmarkAggregate {
   recoveryMs: { median: number };
   /** Total cost / total checker-correct records over completed runs; null when nothing was correct. */
   costPerCorrectUsd: number | null;
+  /** Engine-claimed share of records VERIFIED (summary.recordsVerified / summary.records). */
+  verifiedPct: { median: number };
+  tokens: { median: number };
+  utilization: { median: number };
+  /** Summary discovery / compile / execution medians (fallback when no stage breakdown is reported). */
+  phaseMs: { discovery: number; compile: number; execution: number };
   /** Median ms per pipeline stage (summary.stageMs) over completed runs that report stages. */
   stageMs: Record<string, number>;
   stageRuns: number;
@@ -178,6 +184,14 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     firstActionMs: { median: nullableMedian(finite(ok.map((r) => r.firstActionMs))) },
     overlapMs: { median: median(finite(ok.map((r) => r.overlapMs))) },
     recoveryMs: { median: median(finite(ok.map((r) => r.recoveryMs))) },
+    verifiedPct: { median: median(finite(ok.map((r) => (r.summary && r.summary.records > 0 ? r.summary.recordsVerified / r.summary.records : NaN)))) },
+    tokens: { median: median(ok.map((r) => r.inputTokens + r.outputTokens)) },
+    utilization: { median: median(finite(ok.filter((r) => r.summary).map((r) => r.workerUtilization))) },
+    phaseMs: {
+      discovery: median(ok.filter((r) => r.summary).map((r) => r.discoveryMs)),
+      compile: median(ok.filter((r) => r.summary).map((r) => r.compileMs)),
+      execution: median(ok.filter((r) => r.summary).map((r) => r.executionMs)),
+    },
     stageMs,
     stageRuns: staged.length,
     writes: {

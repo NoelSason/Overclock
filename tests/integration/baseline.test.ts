@@ -300,6 +300,7 @@ describe.skipIf(!LIVE)("sequential baseline (live Claude)", () => {
         stopReason: result.stopReason ?? null,
         episodes: result.episodes.map((e) => ({ key: e.recordKey, outcome: e.outcome, steps: e.steps, writes: e.writes, summary: e.summary, error: e.error })),
         mismatches: check.mismatches,
+        batchNotesChars: result.batchNotes.length,
         batchNotes: result.batchNotes,
       };
       console.log(`[baseline live] ${JSON.stringify(report, null, 2)}`);

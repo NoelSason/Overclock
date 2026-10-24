@@ -238,16 +238,19 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
         calls += repair.modelCalls;
         result.modelCalls += repair.modelCalls;
       }
-      if (!repair?.dismiss || repair.confirmsWrite) {
+      if (!repair || repair.confirmsWrite) {
         fail(node, calls, err);
         throw err;
       }
-      try {
-        await clickControl(page, repair.dismiss, node.id, 2000);
-      } catch {
-        // Stale dismiss control: the next round re-asks recovery with a higher attempt number.
+      // No dismiss control means the dialog already closed; the next round re-checks.
+      if (repair.dismiss) {
+        try {
+          await clickControl(page, repair.dismiss, node.id, 2000);
+        } catch {
+          // Stale dismiss control: the next round re-asks recovery with a higher attempt number.
+        }
+        await page.waitForLoadState("domcontentloaded").catch(() => undefined);
       }
-      await page.waitForLoadState("domcontentloaded").catch(() => undefined);
     }
   };
 
@@ -310,9 +313,11 @@ export async function runSegment(worker: BrowserWorker, input: SegmentInput, hoo
       } catch (applyErr) {
         // Write outcomes (uncertain, rejected) and other failures are never retried here.
         if (!isRepairable(applyErr)) throw applyErr;
-        // The repair could not be applied (stale rule). Ask again; if a dialog is still open,
-        // re-raise it without re-running the node so a pending submit is not clicked twice.
-        pending = err instanceof UnexpectedDialogError && (await openDialogText(page)) ? err : null;
+        // Confirming raised another dialog: that one is the failure to repair next.
+        if (applyErr instanceof UnexpectedDialogError) pending = applyErr;
+        // Otherwise the repair could not be applied (stale rule). Ask again; if the dialog is still
+        // open, re-raise it without re-running the node so a pending submit is not clicked twice.
+        else pending = err instanceof UnexpectedDialogError && (await openDialogText(page)) ? err : null;
       }
     }
     if (node.type === "navigate") modelCalls += await clearLoadDialogs(node);

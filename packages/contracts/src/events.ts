@@ -50,6 +50,12 @@ export type EventPayload =
   | E<"stage", { stage: StageName; phase: "start" | "end"; detail?: string }>
   /** A scout loaded and observed a page (live discovery progress). */
   | E<"scout.page", { agentId: string; app: string; url: string; routePattern: string; loadMs: number; controls: number }>
+  /** Overclock Network: capability lookup / import / publication / repair / live updates. */
+  | E<"network.lookup", { origins: string[]; outcome: string; source: string; candidates: number; ms: number; capabilityId?: string; version?: number }>
+  | E<"network.import", { capabilityId: string; version: number; outcome: string; bound: number; unbound: number; rebindMs: number; fetchMs: number; source: string; avoided?: { modelCalls: number; discoveryMs: number; estimated: true } }>
+  | E<"network.publish", { capabilityId: string; version: number; state: string; ms: number; redactions: number; bytes: number; rejected?: string }>
+  | E<"network.repair", { capabilityId: string; jobId: string; phase: "reported" | "claimed" | "waiting" | "proposed" | "validated" | "promoted" | "fallback" | "released" | "lost-lease"; fencingToken?: number; ms?: number; detail?: string }>
+  | E<"network.update", { capabilityId: string; version: number; state: string; propagationMs?: number }>
   /** Incrementally compiled executable fragment lifecycle. */
   | E<"fragment", { fragmentId: string; phaseId: string; segmentIds: string[]; state: FragmentState; label: string; reason?: string; effect?: string }>;
 

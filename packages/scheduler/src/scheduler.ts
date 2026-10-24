@@ -1,6 +1,6 @@
 import type { TaskState } from "@overclock/contracts";
 import { TERMINAL_TASK_STATES } from "@overclock/contracts";
-import { evaluate, renderTemplate, toStr, type CompiledProgram, type CompiledSegment, type PhaseInfo } from "@overclock/compiler";
+import { bottomLevels, evaluate, renderTemplate, toStr, type CompiledProgram, type CompiledSegment, type PhaseInfo } from "@overclock/compiler";
 import { LockManager } from "./locks";
 
 /** Record scope shared by every segment of one record (mirrors browser-runtime's RecordScope). */
@@ -63,6 +63,14 @@ export interface SchedulerOptions {
 
 const ACTIVE: ReadonlySet<TaskState> = new Set(["LEASED", "RUNNING", "VERIFYING", "REPAIRING", "RECONCILING"]);
 
+/**
+ * Release gate per segment template:
+ *  - open: every record's task may run;
+ *  - canary: one record at a time until one succeeds, then the gate opens (fan-out after proof);
+ *  - deferred: nothing runs yet (a safety gate such as "phase not sealed" is pending).
+ */
+export type SegmentGate = "open" | "canary" | "deferred";
+
 export class Scheduler {
   readonly tasks = new Map<string, TaskInstance>();
   readonly records = new Map<string, RecordState>();
@@ -73,6 +81,10 @@ export class Scheduler {
   private ready: TaskInstance[] = [];
   private readonly suspended = new Map<string, string>();
   private readonly phases: Map<string, PhaseInfo>;
+  private readonly gates = new Map<string, SegmentGate>();
+  private readonly canaryPassed = new Set<string>();
+  private readonly sealed = new Set<string>();
+  private programSealed = false;
   private recordSeq = 0;
   /** Duplicate record keys seen during expansion (same task arriving twice). */
   readonly duplicatesDropped: string[] = [];
@@ -87,7 +99,123 @@ export class Scheduler {
     for (const p of compiled.phases) this.phaseState.set(p.id, "pending");
   }
 
-  start(): void {
+  /* ------------------------------------------------------------ incremental program assembly */
+
+  /** Register a phase whose segments will arrive incrementally (streaming compilation). */
+  addPhase(phase: PhaseInfo): void {
+    if (this.phases.has(phase.id)) return;
+    this.compiled.phases.push(phase);
+    this.phases.set(phase.id, phase);
+    this.phaseState.set(phase.id, "pending");
+    this.expandReadyPhases();
+  }
+
+  /**
+   * Add compiled segments to a phase. Existing records of an already-expanded phase get tasks for
+   * them immediately; dependencies on segments that already finished are satisfied at once.
+   */
+  addSegments(phaseId: string, segments: CompiledSegment[], gate: SegmentGate = "open"): TaskInstance[] {
+    const phase = this.phases.get(phaseId);
+    if (!phase) throw new Error(`Unknown phase ${phaseId}`);
+    for (const seg of segments) {
+      if (this.compiled.segments.has(seg.id)) continue;
+      this.compiled.segments.set(seg.id, seg);
+      phase.segmentIds.push(seg.id);
+      this.gates.set(seg.id, gate);
+    }
+    this.recomputePriorities(phase);
+    if (this.phaseState.get(phaseId) !== "expanded") return [];
+    const created: TaskInstance[] = [];
+    for (const record of this.records.values()) {
+      if (record.phaseId !== phaseId) continue;
+      for (const seg of segments) {
+        const t = this.createTask(seg, record);
+        if (t) created.push(t);
+      }
+      for (const t of created) if (t.record === record) for (const d of t.deps) this.tasks.get(d)?.dependents.add(t.taskId);
+    }
+    this.hooks.onTasksCreated?.(created);
+    for (const t of created) if ([...t.deps].every((d) => this.isDoneOk(d))) this.makeReady(t);
+    return created;
+  }
+
+  setGate(segmentId: string, gate: SegmentGate): void {
+    this.gates.set(segmentId, gate);
+  }
+
+  gateOf(segmentId: string): SegmentGate {
+    return this.gates.get(segmentId) ?? "open";
+  }
+
+  /** No more segments will be added to this phase. */
+  sealPhase(phaseId: string): void {
+    this.sealed.add(phaseId);
+    this.checkPhase(phaseId);
+  }
+
+  /** No more phases will be added; phases still unknown can never become ready. */
+  sealProgram(): void {
+    this.programSealed = true;
+    for (const p of this.compiled.phases) this.sealed.add(p.id);
+    for (const p of this.compiled.phases) this.checkPhase(p.id);
+    this.expandReadyPhases();
+  }
+
+  isSealed(phaseId: string): boolean {
+    return this.sealed.has(phaseId);
+  }
+
+  private recomputePriorities(phase: PhaseInfo): void {
+    const segs = phase.segmentIds.map((id) => this.compiled.segments.get(id)!);
+    const bl = bottomLevels(
+      segs.map((x) => ({ id: x.id, deps: x.dependsOn.filter((d) => phase.segmentIds.includes(d)) })),
+      (n) => this.compiled.segments.get(n.id)!.estimatedMs,
+    );
+    for (const [id, v] of bl) this.compiled.priority.set(id, v);
+    for (const t of this.tasks.values()) if (t.phaseId === phase.id) t.priority = this.priorityOf(t.segment, t.record);
+    this.ready.sort((a, b) => b.priority - a.priority);
+  }
+
+  private isDoneOk(taskId: string): boolean {
+    const s = this.tasks.get(taskId)?.state;
+    return s === "VERIFIED" || s === "COMPLETED" || s === "SKIPPED";
+  }
+
+  private createTask(seg: CompiledSegment, record: RecordState): TaskInstance | null {
+    const taskId = `${seg.id}@${record.key}`;
+    if (this.tasks.has(taskId)) {
+      this.duplicatesDropped.push(taskId);
+      return null;
+    }
+    const t: TaskInstance = {
+      taskId,
+      phaseId: record.phaseId,
+      segmentId: seg.id,
+      recordKey: record.key,
+      segment: seg,
+      record,
+      deps: new Set(seg.dependsOn.map((d) => `${d}@${record.key}`)),
+      dependents: new Set(),
+      state: "PENDING",
+      attempt: 0,
+      priority: this.priorityOf(seg, record),
+      notBefore: 0,
+      lockKeys: [],
+      inline: !seg.app,
+      produced: [],
+    };
+    this.tasks.set(taskId, t);
+    record.tasks.set(seg.id, t);
+    this.phaseTasks.get(record.phaseId)?.add(taskId);
+    return t;
+  }
+
+  /** Start with the program as given. `incremental` keeps phases open for streaming additions. */
+  start(opts: { incremental?: boolean } = {}): void {
+    if (!opts.incremental) {
+      this.programSealed = true;
+      for (const p of this.compiled.phases) this.sealed.add(p.id);
+    }
     this.expandReadyPhases();
   }
 
@@ -96,6 +224,7 @@ export class Scheduler {
       if (this.phaseState.get(p.id) !== "pending") continue;
       if (!p.dependsOn.every((d) => this.phaseState.get(d) === "done" || this.phaseState.get(d) === "error")) continue;
       this.expand(p);
+      if (this.phaseState.get(p.id) !== "expanded") continue;
     }
   }
 
@@ -130,7 +259,7 @@ export class Scheduler {
       this.expandReadyPhases();
       return;
     }
-    const ids = new Set<string>();
+    const ids = this.phaseTasks.get(phase.id) ?? new Set<string>();
     this.phaseTasks.set(phase.id, ids);
     const segs = phase.segmentIds.map((id) => this.compiled.segments.get(id)!);
     for (const item of items) {
@@ -143,38 +272,17 @@ export class Scheduler {
       };
       this.records.set(`${phase.id}|${item.key}`, record);
       for (const seg of segs) {
-        const taskId = `${seg.id}@${item.key}`;
-        if (this.tasks.has(taskId)) {
-          this.duplicatesDropped.push(taskId);
-          continue;
+        const t = this.createTask(seg, record);
+        if (t) {
+          ids.add(t.taskId);
+          created.push(t);
         }
-        const t: TaskInstance = {
-          taskId,
-          phaseId: phase.id,
-          segmentId: seg.id,
-          recordKey: item.key,
-          segment: seg,
-          record,
-          deps: new Set(seg.dependsOn.map((d) => `${d}@${item.key}`)),
-          dependents: new Set(),
-          state: "PENDING",
-          attempt: 0,
-          priority: this.priorityOf(seg, record),
-          notBefore: 0,
-          lockKeys: [],
-          inline: !seg.app,
-          produced: [],
-        };
-        this.tasks.set(taskId, t);
-        record.tasks.set(seg.id, t);
-        ids.add(taskId);
-        created.push(t);
       }
       for (const t of record.tasks.values()) for (const d of t.deps) this.tasks.get(d)?.dependents.add(t.taskId);
     }
     this.hooks.onTasksCreated?.(created);
     for (const t of created) if (t.deps.size === 0) this.makeReady(t);
-    if (ids.size === 0) this.finishPhase(phase.id);
+    this.checkPhase(phase.id);
   }
 
   private priorityOf(seg: CompiledSegment, record: RecordState): number {
@@ -224,6 +332,7 @@ export class Scheduler {
     for (let i = 0; i < this.ready.length; i++) {
       const t = this.ready[i]!;
       if (t.inline || t.notBefore > now || this.suspended.has(t.segmentId)) continue;
+      if (!this.gatePermits(t)) continue;
       if (!canRun(t.segment.app!)) continue;
       const keys = this.renderLocks(t);
       if (keys.length) {
@@ -245,9 +354,27 @@ export class Scheduler {
     return null;
   }
 
+  private gatePermits(t: TaskInstance): boolean {
+    const gate = this.gates.get(t.segmentId) ?? "open";
+    if (gate === "open") return true;
+    if (gate === "deferred") return false;
+    // canary: one in flight at a time until one succeeds
+    if (this.canaryPassed.has(t.segmentId)) return true;
+    for (const x of this.tasks.values()) if (x.segmentId === t.segmentId && ACTIVE.has(x.state)) return false;
+    return true;
+  }
+
+  /** Called by the executor when a canary task of a segment verified; opens the gate. */
+  canarySucceeded(segmentId: string): boolean {
+    if (this.gates.get(segmentId) !== "canary" || this.canaryPassed.has(segmentId)) return false;
+    this.canaryPassed.add(segmentId);
+    this.gates.set(segmentId, "open");
+    return true;
+  }
+
   /** Take a ready browser-free (compute) task. */
   takeInline(): TaskInstance | null {
-    const i = this.ready.findIndex((t) => t.inline && !this.suspended.has(t.segmentId));
+    const i = this.ready.findIndex((t) => t.inline && !this.suspended.has(t.segmentId) && this.gatePermits(t));
     if (i < 0) return null;
     const [t] = this.ready.splice(i, 1);
     t!.attempt++;
@@ -386,6 +513,7 @@ export class Scheduler {
   private checkPhase(phaseId: string): void {
     const ids = this.phaseTasks.get(phaseId);
     if (!ids || this.phaseState.get(phaseId) !== "expanded") return;
+    if (!this.sealed.has(phaseId)) return;
     for (const id of ids) if (!TERMINAL_TASK_STATES.has(this.tasks.get(id)!.state)) return;
     this.finishPhase(phaseId);
   }
@@ -407,6 +535,7 @@ export class Scheduler {
   }
 
   isDone(): boolean {
+    if (!this.programSealed) return false;
     for (const s of this.phaseState.values()) if (s === "pending" || s === "expanded") return false;
     return true;
   }

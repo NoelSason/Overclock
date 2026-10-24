@@ -2,18 +2,18 @@ import { createHash } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
-import {
+import type {
+  BenchmarkResultFile,
+  BenchmarkRunRecord,
+  CheckResult,
+  PublicScenario,
+  RecordOutcome,
+  RunConfigInput,
+  RunResultResponse,
+  TaskTemplateId,
   VariationConfig,
-  type BenchmarkResultFile,
-  type BenchmarkRunRecord,
-  type CheckResult,
-  type PublicScenario,
-  type RecordOutcome,
-  type RunConfigInput,
-  type RunResultResponse,
-  type TaskTemplateId,
 } from "@overclock/contracts";
-import type { PlannedRun, RunOverrides } from "./suites";
+import { conditionVariations, HOLDOUT_FREEZE_ENV, type PlannedRun, type RunOverrides } from "./suites";
 
 /**
  * Benchmark harness: executes planned runs one at a time against a live engine and arena and
@@ -23,7 +23,8 @@ import type { PlannedRun, RunOverrides } from "./suites";
 
 export interface EngineClient {
   start(config: RunConfigInput): Promise<{ runId: string }>;
-  waitForCompletion(runId: string): Promise<unknown>;
+  /** Follow the run until it finishes; aborting `signal` stops following (the run keeps going). */
+  waitForCompletion(runId: string, opts?: { signal?: AbortSignal | undefined }): Promise<unknown>;
   result(runId: string): Promise<RunResultResponse>;
   metrics(runId: string): Promise<unknown>;
   cancel(runId: string): Promise<unknown>;
@@ -37,11 +38,51 @@ export interface ArenaClient {
   setVariations(v: VariationConfig): Promise<unknown>;
 }
 
+/** What an external browser-agent baseline reports for one run. The arena checker supplies accuracy. */
+export interface ExternalResult {
+  wallMs: number;
+  firstActionMs: number | null;
+  modelCalls: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  error?: string | undefined;
+}
+
+export type ExternalRunner = (config: RunConfigInput, scenario: PublicScenario) => Promise<ExternalResult>;
+
+/** Validate an external adapter's return value; throws with the offending field on bad input. */
+export function parseExternalResult(v: unknown): ExternalResult {
+  if (typeof v !== "object" || v === null) throw new Error("external baseline returned a non-object result");
+  const o = v as Record<string, unknown>;
+  const num = (k: string): number => {
+    const x = o[k];
+    if (typeof x !== "number" || !Number.isFinite(x) || x < 0) throw new Error(`external baseline result.${k} must be a non-negative number`);
+    return x;
+  };
+  const first = o.firstActionMs;
+  if (first !== null && first !== undefined && (typeof first !== "number" || !Number.isFinite(first) || first < 0)) {
+    throw new Error("external baseline result.firstActionMs must be a non-negative number or null");
+  }
+  if (o.error !== undefined && typeof o.error !== "string") throw new Error("external baseline result.error must be a string");
+  return {
+    wallMs: num("wallMs"),
+    firstActionMs: typeof first === "number" ? first : null,
+    modelCalls: num("modelCalls"),
+    costUsd: num("costUsd"),
+    inputTokens: num("inputTokens"),
+    outputTokens: num("outputTokens"),
+    error: typeof o.error === "string" ? o.error : undefined,
+  };
+}
+
 export interface HarnessDeps {
   engine: EngineClient;
   arena: ArenaClient;
   /** Usually the SDK's `configFromScenario`. */
   buildConfig(scenario: PublicScenario, overrides: RunOverrides): RunConfigInput;
+  /** External baseline adapter; external runs are skipped with a note when absent. */
+  external?: ExternalRunner | undefined;
 }
 
 export interface HarnessOptions {
@@ -52,11 +93,13 @@ export interface HarnessOptions {
   runTimeoutMs: number;
   /** After a timeout or interrupt, how long to wait for the cancelled run to settle. */
   cancelGraceMs?: number;
+  /** Code-freeze identifier; required when the plan contains holdout runs. */
+  holdoutFreezeId?: string | undefined;
   /** Notes recorded at the top of the result file (engine version, models, …). */
   notes?: string[];
   machine?: BenchmarkResultFile["machine"];
   now?: () => number;
-  /** Filename stem; defaults to the ISO timestamp of the first run (colons replaced). */
+  /** Filename stem; defaults to the ISO timestamp of the start (colons replaced). */
   stem?: string;
   log?: (line: string) => void;
   signal?: AbortSignal;
@@ -67,7 +110,7 @@ export interface HarnessOptions {
 export interface HarnessResult {
   file: BenchmarkResultFile;
   path: string;
-  /** Planned runs that were never executed (budget cap, interrupt, or failed prerequisite). */
+  /** Planned runs that were never executed (budget cap, interrupt, missing adapter, or failed prerequisite). */
   notExecuted: PlannedRun[];
 }
 
@@ -114,27 +157,35 @@ function datasetHash(s: PublicScenario): string {
   return createHash("sha256").update(JSON.stringify({ goal: s.goal, records: s.records, applications: s.applications })).digest("hex");
 }
 
-type WaitOutcome = "done" | "timeout" | "aborted";
+type Raced<T> = { kind: "done"; value: T } | { kind: "timeout" } | { kind: "aborted" };
 
-async function waitFor(engine: EngineClient, runId: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<WaitOutcome> {
+/** Race a promise against a timeout and an abort signal. `onSettle` runs once the race is decided. */
+async function race<T>(p: Promise<T>, timeoutMs: number, signal: AbortSignal | undefined, onSettle?: () => void): Promise<Raced<T>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: (() => void) | undefined;
   try {
-    return await Promise.race<WaitOutcome>([
-      engine.waitForCompletion(runId).then(() => "done" as const),
-      new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), timeoutMs);
+    return await Promise.race<Raced<T>>([
+      p.then((value) => ({ kind: "done" as const, value })),
+      new Promise<Raced<T>>((resolve) => {
+        timer = setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
       }),
-      new Promise<"aborted">((resolve) => {
-        if (signal?.aborted) return resolve("aborted");
-        onAbort = () => resolve("aborted");
+      new Promise<Raced<T>>((resolve) => {
+        if (signal?.aborted) return resolve({ kind: "aborted" });
+        onAbort = () => resolve({ kind: "aborted" });
         signal?.addEventListener("abort", onAbort, { once: true });
       }),
     ]);
   } finally {
     clearTimeout(timer);
     if (onAbort) signal?.removeEventListener("abort", onAbort);
+    onSettle?.();
   }
+}
+
+/** Follow an engine run with a timeout; the stream is closed whichever way the race ends. */
+function follow(engine: EngineClient, runId: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Raced<unknown>> {
+  const stop = new AbortController();
+  return race(engine.waitForCompletion(runId, { signal: stop.signal }), timeoutMs, signal, () => stop.abort());
 }
 
 interface Collected {
@@ -144,30 +195,35 @@ interface Collected {
   startedAt: number;
   endedAt: number;
   result: RunResultResponse | null;
+  external: ExternalResult | null;
   check: CheckResult | null;
   metrics: unknown;
   error?: string;
   interrupted: boolean;
 }
 
-/** Build the stored record. Numbers come from the engine summary and the arena checker only. */
+/** Build the stored record. Numbers come from the engine summary (or external adapter) and the arena checker only. */
 export function buildRecord(run: PlannedRun, c: Collected): BenchmarkRunRecord {
-  const summary = c.result?.summary ?? null;
+  const external = run.kind === "external";
+  const summary = external ? null : (c.result?.summary ?? null);
+  const ext = external ? c.external : null;
   const check = c.check;
   let error = c.error;
-  if (!error && !summary) error = "engine returned no run summary";
-  if (!error && c.result && c.result.status !== "completed") error = `run ended with status "${c.result.status}"`;
+  if (!error && external && !ext) error = "external baseline returned no result";
+  if (!error && ext?.error) error = `external baseline: ${ext.error}`;
+  if (!error && !external && !summary) error = "engine returned no run summary";
+  if (!error && !external && c.result && c.result.status !== "completed") error = `run ended with status "${c.result.status}"`;
   if (!error && !check) error = "arena check unavailable";
   if (!error && check && c.scenario && check.scenarioId !== c.scenario.scenarioId) {
     error = `arena check is for scenario ${check.scenarioId}, expected ${c.scenario.scenarioId}`;
   }
-  // Without an engine summary, the only measured duration is the harness clock.
-  const wallMs = summary ? summary.wallMs : Math.max(0, c.endedAt - c.startedAt);
+  // Without a reported duration, the only measured duration is the harness clock.
+  const wallMs = summary?.wallMs ?? ext?.wallMs ?? Math.max(0, c.endedAt - c.startedAt);
   const correctPerMin = check && wallMs > 0 ? check.correctRecords / (wallMs / 60_000) : 0;
   const record: BenchmarkRunRecord = {
     suite: run.suite,
     label: run.label,
-    mode: run.overrides.mode,
+    mode: run.mode,
     scenarioId: c.scenario?.scenarioId ?? check?.scenarioId ?? "",
     template: run.template,
     seed: run.seed,
@@ -184,13 +240,20 @@ export function buildRecord(run: PlannedRun, c: Collected): BenchmarkRunRecord {
     compileMs: summary?.compileMs ?? 0,
     executionMs: summary?.executionMs ?? 0,
     correctPerMin,
-    modelCalls: summary?.modelCalls ?? 0,
-    inputTokens: summary?.inputTokens ?? 0,
-    outputTokens: summary?.outputTokens ?? 0,
-    costUsd: summary?.modelCostUsd ?? 0,
+    modelCalls: summary?.modelCalls ?? ext?.modelCalls ?? 0,
+    inputTokens: summary?.inputTokens ?? ext?.inputTokens ?? 0,
+    outputTokens: summary?.outputTokens ?? ext?.outputTokens ?? 0,
+    costUsd: summary?.modelCostUsd ?? ext?.costUsd ?? 0,
     workerUtilization: summary?.workerUtilization ?? 0,
     maxConcurrency: summary?.maxConcurrency ?? 0,
     verifiedButWrong: check && c.result ? countVerifiedButWrong(c.result.outcomes, check) : 0,
+    firstActionMs: summary ? (summary.firstActionMs ?? null) : (ext?.firstActionMs ?? null),
+    firstVerifiedMs: summary?.firstVerifiedMs ?? null,
+    overlapMs: summary?.overlapMs ?? 0,
+    recoveryMs: summary?.recoveryMs ?? 0,
+    duplicateWrites: check?.duplicateWrites ?? 0,
+    collateralWrites: check?.collateralWrites ?? 0,
+    condition: run.condition,
     config: c.config,
   };
   if (error) record.error = error;
@@ -199,10 +262,13 @@ export function buildRecord(run: PlannedRun, c: Collected): BenchmarkRunRecord {
 
 /**
  * Execute a plan. Runs are strictly sequential so they never share the arena. The result file is
- * rewritten after every run. Scheduling stops once cumulative engine-reported model cost reaches
- * the budget; runs that were not executed are listed in the notes, never estimated.
+ * rewritten after every run. Scheduling stops once cumulative reported model cost reaches the
+ * budget; runs that were not executed are listed in the notes, never estimated.
  */
 export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, opts: HarnessOptions): Promise<HarnessResult> {
+  if (plan.some((r) => r.holdout) && !opts.holdoutFreezeId) {
+    throw new Error(`The plan contains holdout runs. Set ${HOLDOUT_FREEZE_ENV} to the code-freeze identifier (for example a git tag or commit) before running them.`);
+  }
   const now = opts.now ?? Date.now;
   const log = opts.log ?? (() => {});
   const createdAt = now();
@@ -222,15 +288,16 @@ export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, op
     runs: [],
     notes: [...(opts.notes ?? [])],
   };
+  if (plan.some((r) => r.holdout)) file.notes.push(`Holdout code freeze: ${opts.holdoutFreezeId}.`);
   const notExecuted: PlannedRun[] = [];
   const failedIndexes = new Set<number>();
   const datasets = new Map<string, { scenarioId: string; hash: string }>();
-  const defaultVariations = VariationConfig.parse({});
+  let externalSkipNoted = false;
   const save = () => writeJsonAtomic(path, file);
 
   for (let i = 0; i < plan.length; i++) {
     const run = plan[i]!;
-    const tag = `[${i + 1}/${plan.length}] ${run.label} ${run.template} seed=${run.seed} records=${run.records} trial=${run.trial} ${run.cache}`;
+    const tag = `[${i + 1}/${plan.length}] ${run.label} ${run.template} seed=${run.seed} records=${run.records} trial=${run.trial} ${run.condition} ${run.cache}`;
 
     if (opts.signal?.aborted) {
       notExecuted.push(...plan.slice(i));
@@ -242,7 +309,7 @@ export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, op
       notExecuted.push(...rest);
       file.notes.push(
         `Budget cap reached: spent $${file.spentUsd.toFixed(4)} of $${opts.budgetUsd.toFixed(2)}. ${rest.length} planned runs not executed: ${rest
-          .map((r) => `${r.label} (${r.records} records, trial ${r.trial}, ${r.cache})`)
+          .map((r) => `${r.label} (${r.records} records, ${r.condition}, trial ${r.trial}, ${r.cache})`)
           .join("; ")}.`,
       );
       log(`budget cap reached ($${file.spentUsd.toFixed(4)} ≥ $${opts.budgetUsd.toFixed(2)}); stopping`);
@@ -251,18 +318,36 @@ export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, op
     if (run.after !== undefined && failedIndexes.has(run.after)) {
       notExecuted.push(run);
       failedIndexes.add(run.index);
-      file.notes.push(`Skipped ${run.label} ${run.cache} trial ${run.trial} (${run.records} records): its prerequisite run #${run.after + 1} failed.`);
+      file.notes.push(`Skipped ${run.label} ${run.cache} trial ${run.trial} (${run.records} records, ${run.condition}): its prerequisite run #${run.after + 1} failed.`);
       log(`${tag} skipped: prerequisite #${run.after + 1} failed`);
+      continue;
+    }
+    if (run.kind === "external" && !deps.external) {
+      notExecuted.push(run);
+      if (!externalSkipNoted) file.notes.push("External baseline runs skipped: no external baseline adapter is available.");
+      externalSkipNoted = true;
+      log(`${tag} skipped: no external baseline adapter`);
       continue;
     }
 
     log(`${tag} starting`);
-    const c: Collected = { scenario: null, config: { goal: "", applications: [], ...run.overrides }, runId: null, startedAt: now(), endedAt: now(), result: null, check: null, metrics: undefined, interrupted: false };
+    const t0 = now();
+    const c: Collected = {
+      scenario: null,
+      config: { goal: "", applications: [], ...run.overrides },
+      runId: null,
+      startedAt: t0,
+      endedAt: t0,
+      result: null,
+      external: null,
+      check: null,
+      metrics: undefined,
+      interrupted: false,
+    };
     try {
-      // 1. Identical starting state: the same scenario (or a reset of it) and default variations.
+      // 1. Identical starting state: the same scenario (or a reset of it), then the run's condition.
       if (run.prepare === "load") await deps.arena.loadScenario({ seed: run.seed, template: run.template, records: run.records });
       else await deps.arena.reset();
-      await deps.arena.setVariations(defaultVariations);
       const scenario = await deps.arena.scenario();
       c.scenario = scenario;
       if (scenario.seed !== run.seed || scenario.template !== run.template || scenario.records.length !== run.records) {
@@ -277,32 +362,49 @@ export async function runPlan(plan: readonly PlannedRun[], deps: HarnessDeps, op
         throw new Error(`arena returned a different dataset for ${dsKey} than earlier runs in this suite; runs would not be comparable`);
       }
       datasets.set(dsKey, { scenarioId: scenario.scenarioId, hash });
+      await deps.arena.setVariations(conditionVariations(run.condition, scenario));
 
-      // 2. Config: scenario goal/apps/records + mode overrides. Overrides are re-applied so they always win.
+      // 2. Config: scenario goal/apps/records + overrides. Overrides are re-applied so they always win.
       const config: RunConfigInput = { ...deps.buildConfig(scenario, run.overrides), ...run.overrides };
       c.config = config;
       if ((config.records?.length ?? 0) !== scenario.records.length) {
         throw new Error(`run config has ${config.records?.length ?? 0} records but the scenario has ${scenario.records.length}`);
       }
 
-      // 3. Start, follow to completion, then collect check/result/metrics immediately.
-      c.startedAt = now();
-      const started = await deps.engine.start(config);
-      c.runId = started.runId;
-      const outcome = await waitFor(deps.engine, started.runId, opts.runTimeoutMs, opts.signal);
-      if (outcome !== "done") {
-        c.error = outcome === "timeout" ? `timed out after ${Math.round(opts.runTimeoutMs / 1000)} s; run cancelled` : "interrupted; run cancelled";
-        c.interrupted = outcome === "aborted";
-        await deps.engine.cancel(started.runId).catch((err: unknown) => log(`cancel failed: ${message(err)}`));
-        await waitFor(deps.engine, started.runId, graceMs, undefined).catch(() => "timeout");
+      // 3. Execute, then collect the checker result (and engine result/metrics) immediately.
+      if (run.kind === "external" && deps.external) {
+        c.startedAt = now();
+        const out = await race(deps.external(config, scenario), opts.runTimeoutMs, opts.signal);
+        c.endedAt = now();
+        if (out.kind === "done") c.external = parseExternalResult(out.value);
+        else {
+          c.error = out.kind === "timeout" ? `timed out after ${Math.round(opts.runTimeoutMs / 1000)} s (external runs cannot be cancelled)` : "interrupted";
+          c.interrupted = out.kind === "aborted";
+        }
+        try {
+          c.check = await deps.arena.check();
+        } catch (err) {
+          c.error ??= `arena check failed: ${message(err)}`;
+        }
+      } else {
+        c.startedAt = now();
+        const started = await deps.engine.start(config);
+        c.runId = started.runId;
+        const outcome = await follow(deps.engine, started.runId, opts.runTimeoutMs, opts.signal);
+        if (outcome.kind !== "done") {
+          c.error = outcome.kind === "timeout" ? `timed out after ${Math.round(opts.runTimeoutMs / 1000)} s; run cancelled` : "interrupted; run cancelled";
+          c.interrupted = outcome.kind === "aborted";
+          await deps.engine.cancel(started.runId).catch((err: unknown) => log(`cancel failed: ${message(err)}`));
+          await follow(deps.engine, started.runId, graceMs, undefined).catch(() => undefined);
+        }
+        c.endedAt = now();
+        const [check, result, metrics] = await Promise.allSettled([deps.arena.check(), deps.engine.result(started.runId), deps.engine.metrics(started.runId)]);
+        if (check.status === "fulfilled") c.check = check.value;
+        else c.error ??= `arena check failed: ${message(check.reason)}`;
+        if (result.status === "fulfilled") c.result = result.value;
+        else c.error ??= `engine result failed: ${message(result.reason)}`;
+        if (metrics.status === "fulfilled") c.metrics = metrics.value;
       }
-      c.endedAt = now();
-      const [check, result, metrics] = await Promise.allSettled([deps.arena.check(), deps.engine.result(started.runId), deps.engine.metrics(started.runId)]);
-      if (check.status === "fulfilled") c.check = check.value;
-      else c.error ??= `arena check failed: ${message(check.reason)}`;
-      if (result.status === "fulfilled") c.result = result.value;
-      else c.error ??= `engine result failed: ${message(result.reason)}`;
-      if (metrics.status === "fulfilled") c.metrics = metrics.value;
     } catch (err) {
       c.endedAt = now();
       c.error = message(err);

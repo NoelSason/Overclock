@@ -81,7 +81,8 @@ export const SEQUENTIAL_AGENT_ID = "sequential-agent";
 export const SEQUENTIAL_WORKER_ID = "w1";
 export const SEQUENTIAL_WRAPUP_TASK_ID = "sequential.wrapup";
 const WRAPUP_KEY = "batch";
-const MAX_BATCH_NOTES = 16_000;
+/** ~12k tokens: room for one line per record on 100+ record batches. */
+const MAX_BATCH_NOTES = 48_000;
 const MAX_CONSECUTIVE_MODEL_ERRORS = 3;
 const MAX_SAME_FAILURE = 3;
 
