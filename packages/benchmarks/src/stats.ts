@@ -2,7 +2,7 @@ import type { BenchmarkAggregate, BenchmarkRunRecord } from "@overclock/contract
 
 /**
  * Aggregation math for benchmark reports. Every statistic is computed from recorded runs only;
- * an empty sample yields NaN (rendered "n/a"), never a substitute value.
+ * an empty sample yields NaN or null (rendered "n/a"), never a substitute value.
  */
 
 /** Linear-interpolation percentile (the common "type 7" definition). `q` is in [0, 1]. Empty input → NaN. */
@@ -33,12 +33,21 @@ export function p95(xs: readonly number[]): number | null {
   return xs.length >= P95_MIN_N ? percentile(xs, 0.95) : null;
 }
 
+function finite(xs: readonly unknown[]): number[] {
+  return xs.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+}
+
+/** Runs of the external baseline have no engine summary by design. */
+export function isExternalRun(r: BenchmarkRunRecord): boolean {
+  return r.mode === "external";
+}
+
 /**
- * A run counts as failed when the harness recorded an error, or when either the engine summary
- * or the checker result is missing (no ground truth means no accuracy claim).
+ * A run counts as failed when the harness recorded an error, when the checker result is missing
+ * (no ground truth means no accuracy claim), or when an engine run has no engine summary.
  */
 export function isFailedRun(r: BenchmarkRunRecord): boolean {
-  return typeof r.error === "string" || r.summary === null || r.check === null;
+  return typeof r.error === "string" || r.check === null || (r.summary === null && !isExternalRun(r));
 }
 
 /** Checker accuracy for one run: correctRecords / totalRecords. */
@@ -55,15 +64,25 @@ export interface GroupKey {
   seed: number;
   records: number;
   cache: "cold" | "warm";
+  condition: string;
   holdout: boolean;
 }
 
 export function keyOf(r: BenchmarkRunRecord): GroupKey {
-  return { suite: r.suite, label: r.label, template: r.template, seed: r.seed, records: r.records, cache: r.cache, holdout: r.holdout };
+  return {
+    suite: r.suite,
+    label: r.label,
+    template: r.template,
+    seed: r.seed,
+    records: r.records,
+    cache: r.cache,
+    condition: typeof r.condition === "string" ? r.condition : "unknown",
+    holdout: r.holdout,
+  };
 }
 
 export function keyString(k: GroupKey): string {
-  return [k.suite, k.label, k.template, k.seed, k.records, k.cache, k.holdout ? "holdout" : "dev"].join("|");
+  return [k.suite, k.label, k.template, k.seed, k.records, k.cache, k.condition, k.holdout ? "holdout" : "dev"].join("|");
 }
 
 export interface RunGroup {
@@ -73,7 +92,7 @@ export interface RunGroup {
   firstIndex: number;
 }
 
-/** Group runs by suite, label, scenario (template + seed), records, cache state, and holdout. */
+/** Group runs by suite, label, scenario (template + seed), records, cache state, condition, and holdout. */
 export function groupRuns(runs: readonly BenchmarkRunRecord[]): RunGroup[] {
   const groups = new Map<string, RunGroup>();
   runs.forEach((r, i) => {
@@ -93,31 +112,48 @@ export interface AggregateRow extends BenchmarkAggregate {
   seed: number;
   /** Runs attempted = n (completed) + failedRuns. */
   attempted: number;
+  /** Completed runs that never produced a verified action (excluded from the firstVerifiedMs median). */
+  neverVerified: number;
+  firstActionMs: { median: number | null };
+  overlapMs: { median: number };
+  recoveryMs: { median: number };
   /** Total cost / total checker-correct records over completed runs; null when nothing was correct. */
   costPerCorrectUsd: number | null;
-  discoveryMs: { median: number };
-  compileMs: { median: number };
-  executionMs: { median: number };
-  /** Median of wallMs − (discovery + compile + execution) per run; negative means the phases overlap. */
-  unattributedMs: { median: number };
+  /** Median ms per pipeline stage (summary.stageMs) over completed runs that report stages. */
+  stageMs: Record<string, number>;
+  stageRuns: number;
+  /** Checker-observed write safety, summed over every run with a checker result (failed or not). */
+  writes: { checkedRuns: number; incorrectRecords: number; duplicateWrites: number; collateralWrites: number };
   /** maxWorkers from the run configs when every run in the group used the same value. */
   maxWorkers: number | null;
   firstIndex: number;
 }
 
+function nullableMedian(xs: readonly number[]): number | null {
+  return xs.length ? median(xs) : null;
+}
+
 /**
  * Aggregate one group. `n` counts completed runs; every median is over completed runs only.
- * Failed runs are counted in `failedRuns`. `verifiedButWrong` sums over every run that has a
- * checker result, failed or not, because a false VERIFIED claim matters either way.
+ * Failed runs are counted in `failedRuns`. Write-safety counts and `verifiedButWrong` sum over
+ * every run that has a checker result, failed or not, because damage done counts either way.
  */
 export function aggregateGroup(group: RunGroup): AggregateRow {
   const ok = group.runs.filter((r) => !isFailedRun(r));
+  const checked = group.runs.filter((r) => r.check !== null);
   const wall = ok.map((r) => r.wallMs);
-  const acc = ok.map(runAccuracy).filter((x) => !Number.isNaN(x));
+  const acc = finite(ok.map(runAccuracy));
   const totalCost = sum(ok.map((r) => r.costUsd));
   const totalCorrect = sum(ok.map((r) => r.check?.correctRecords ?? 0));
+  const firstVerified = finite(ok.map((r) => r.firstVerifiedMs));
   const workers = new Set(group.runs.map((r) => r.config.maxWorkers));
   const onlyWorkers = workers.size === 1 ? [...workers][0] : undefined;
+
+  const staged = ok.filter((r) => r.summary && Object.keys(r.summary.stageMs ?? {}).length > 0);
+  const stageKeys = new Set(staged.flatMap((r) => Object.keys(r.summary?.stageMs ?? {})));
+  const stageMs: Record<string, number> = {};
+  for (const k of stageKeys) stageMs[k] = median(staged.map((r) => r.summary?.stageMs?.[k] ?? 0));
+
   return {
     label: group.key.label,
     suite: group.key.suite,
@@ -125,6 +161,7 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     seed: group.key.seed,
     records: group.key.records,
     cache: group.key.cache,
+    condition: group.key.condition,
     holdout: group.key.holdout,
     n: ok.length,
     attempted: group.runs.length,
@@ -135,17 +172,26 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     costUsd: { median: median(ok.map((r) => r.costUsd)) },
     costPerCorrectUsd: totalCorrect > 0 ? totalCost / totalCorrect : null,
     modelCalls: { median: median(ok.map((r) => r.modelCalls)) },
-    verifiedButWrong: sum(group.runs.filter((r) => r.check !== null).map((r) => r.verifiedButWrong)),
-    discoveryMs: { median: median(ok.map((r) => r.discoveryMs)) },
-    compileMs: { median: median(ok.map((r) => r.compileMs)) },
-    executionMs: { median: median(ok.map((r) => r.executionMs)) },
-    unattributedMs: { median: median(ok.map((r) => r.wallMs - (r.discoveryMs + r.compileMs + r.executionMs))) },
+    verifiedButWrong: sum(checked.map((r) => r.verifiedButWrong)),
+    firstVerifiedMs: { median: nullableMedian(firstVerified) },
+    neverVerified: ok.length - firstVerified.length,
+    firstActionMs: { median: nullableMedian(finite(ok.map((r) => r.firstActionMs))) },
+    overlapMs: { median: median(finite(ok.map((r) => r.overlapMs))) },
+    recoveryMs: { median: median(finite(ok.map((r) => r.recoveryMs))) },
+    stageMs,
+    stageRuns: staged.length,
+    writes: {
+      checkedRuns: checked.length,
+      incorrectRecords: sum(checked.map((r) => (r.check ? r.check.totalRecords - r.check.correctRecords : 0))),
+      duplicateWrites: sum(checked.map((r) => r.check?.duplicateWrites ?? 0)),
+      collateralWrites: sum(checked.map((r) => r.check?.collateralWrites ?? 0)),
+    },
     maxWorkers: typeof onlyWorkers === "number" ? onlyWorkers : null,
     firstIndex: group.firstIndex,
   };
 }
 
-/** Aggregate every group, ordered by suite, then holdout, cache, records, and first appearance. */
+/** Aggregate every group, ordered by suite, then holdout, cache, condition, records, scenario, and first appearance. */
 export function aggregateRuns(runs: readonly BenchmarkRunRecord[]): AggregateRow[] {
   const suiteOrder = new Map<string, number>();
   runs.forEach((r, i) => {
@@ -158,6 +204,7 @@ export function aggregateRuns(runs: readonly BenchmarkRunRecord[]): AggregateRow
         (suiteOrder.get(a.suite) ?? 0) - (suiteOrder.get(b.suite) ?? 0) ||
         Number(a.holdout) - Number(b.holdout) ||
         Number(a.cache === "warm") - Number(b.cache === "warm") ||
+        a.condition.localeCompare(b.condition) ||
         a.records - b.records ||
         a.template.localeCompare(b.template) ||
         a.seed - b.seed ||
@@ -169,11 +216,13 @@ export type Comparability = { ok: true } | { ok: false; reason: string };
 
 /**
  * Two aggregates are comparable only when they ran the same scenario (template + seed), the same
- * record count, the same cache state, and the same holdout status, and both have completed runs.
+ * record count, the same cache state, the same condition, and the same holdout status, and both
+ * have completed runs.
  */
 export function comparable(a: AggregateRow, b: AggregateRow): Comparability {
   if (a.records !== b.records) return { ok: false, reason: `records differ (${a.records} vs ${b.records})` };
   if (a.cache !== b.cache) return { ok: false, reason: `cache state differs (${a.cache} vs ${b.cache})` };
+  if (a.condition !== b.condition) return { ok: false, reason: `condition differs (${a.condition} vs ${b.condition})` };
   if (a.holdout !== b.holdout) return { ok: false, reason: "holdout status differs" };
   if (a.template !== b.template || a.seed !== b.seed) return { ok: false, reason: `scenario differs (${a.template}/${a.seed} vs ${b.template}/${b.seed})` };
   if (a.n === 0 || b.n === 0) return { ok: false, reason: "a group has no completed runs" };
@@ -185,6 +234,7 @@ export interface Speedup {
   candidate: string;
   records: number;
   cache: "cold" | "warm";
+  condition: string;
   holdout: boolean;
   template: string;
   seed: number;
@@ -192,6 +242,8 @@ export interface Speedup {
   nCandidate: number;
   /** baseline median wall / candidate median wall (> 1 means the candidate is faster). */
   wallRatio: number;
+  /** baseline / candidate median time to first verified action; null when either is missing. */
+  firstVerifiedRatio: number | null;
   /** candidate median correct/min / baseline median correct/min; null when the baseline's is 0. */
   correctPerMinRatio: number | null;
 }
@@ -203,6 +255,8 @@ export function computeSpeedup(baseline: AggregateRow, candidate: AggregateRow):
   const c = comparable(baseline, candidate);
   if (!c.ok) return c;
   if (!(candidate.wallMs.median > 0)) return { ok: false, reason: "candidate median wall time is not positive" };
+  const bf = baseline.firstVerifiedMs.median;
+  const cf = candidate.firstVerifiedMs.median;
   return {
     ok: true,
     value: {
@@ -210,12 +264,14 @@ export function computeSpeedup(baseline: AggregateRow, candidate: AggregateRow):
       candidate: candidate.label,
       records: baseline.records,
       cache: baseline.cache,
+      condition: baseline.condition,
       holdout: baseline.holdout,
       template: baseline.template,
       seed: baseline.seed,
       nBaseline: baseline.n,
       nCandidate: candidate.n,
       wallRatio: baseline.wallMs.median / candidate.wallMs.median,
+      firstVerifiedRatio: bf !== null && cf !== null && cf > 0 ? bf / cf : null,
       correctPerMinRatio: baseline.correctPerMin.median > 0 ? candidate.correctPerMin.median / baseline.correctPerMin.median : null,
     },
   };

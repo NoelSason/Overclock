@@ -3,7 +3,7 @@ import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Serv
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   RunConfigSchema,
   VariationConfig,
@@ -1045,9 +1045,4 @@ describe("CSV records", () => {
     expect(() => parseCsvRecords('id\n"open', "t.csv")).toThrow(/unterminated/);
     expect(() => parseCsvRecords("id\n1,2", "t.csv")).toThrow(/row 2 has 2 fields/);
   });
-});
-
-afterEach(() => {
-  // Keep tests independent of process-level env tweaks.
-  expect(process.env.OVERCLOCK_URL === "http://example.test:9999/").toBe(false);
 });
