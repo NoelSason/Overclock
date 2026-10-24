@@ -5,6 +5,7 @@ import { critiquePlan, generatePlan, PlanStreamWatcher, strategyDirectives } fro
 import type { RecoveryEngine } from "@overclock/recovery";
 import { SwarmContext, cacheKey, type SwarmDeps } from "@overclock/swarm";
 import { Executor } from "./executor";
+import { AccessPathController } from "./accessPaths";
 import type { RunController } from "./run";
 
 export interface StreamingArgs {
@@ -81,6 +82,8 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
   // 3. Executor starts empty and grows as fragments are released.
   const compiled = emptyProgram(run.runId, d);
   const fragmentOf = new Map<string, string>();
+  let executorRef: Executor | null = null;
+  const access = new AccessPathController({ executor: () => executorRef!, models, latency: d.latency, emit, now: () => d.now(), enabled: d.config.ablation.accessPaths !== false && d.config.ablation.onlineReoptimization !== false });
   const executor = new Executor({
     runId: run.runId,
     config: d.config,
@@ -101,11 +104,14 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
       const seg = compiled.segments.get(segId);
       emit({ type: "fragment", fragmentId: fragmentOf.get(segId) ?? segId, phaseId: seg?.phaseId ?? "", segmentIds: [segId], state: "released", label: seg?.label ?? segId, reason: "canary record verified; fanned out to every record", effect: seg?.kind === "write" ? "write" : "read" });
     },
+    onTaskFinished: (t) => access.onTaskFinished(t),
+    substitute: (t) => access.substitute(t),
     onCanaryFailed: (segId, reason) => {
       const seg = compiled.segments.get(segId);
       emit({ type: "fragment", fragmentId: fragmentOf.get(segId) ?? segId, phaseId: seg?.phaseId ?? "", segmentIds: [segId], state: "rejected", label: seg?.label ?? segId, reason: `canary failed: ${reason.slice(0, 200)}`, effect: seg?.kind === "write" ? "write" : "read" });
     },
   });
+  executorRef = executor;
   a.setExecutor(executor);
   const execP = executor.start({ incremental: true });
 
@@ -129,10 +135,13 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
       } else emit({ type: "fragment", fragmentId: fid, phaseId, segmentIds: [seg.id], state: "canary", label: seg.label, reason: "running for one record before fan-out", effect: "read" });
       executor.scheduler.addSegments(phaseId, [seg], r.write ? "deferred" : "canary");
     }
+    access.onReleased(rel.map((r) => r.segment));
     if (firstRelease) {
       firstRelease = false;
       run.setStatus("running");
     }
+    // The compiled graph grows while the plan streams; re-publish it so viewers see it grow.
+    emit({ type: "program.compiled", programId: compiled.program.id, strategy: "streaming", phases: compiled.phases.map((p) => ({ id: p.id, kind: p.kind, dependsOn: p.dependsOn, segmentIds: [...p.segmentIds] })), segments: [...compiled.segments.values()].map(({ nodes: _n, ...x }) => x), passes: [], nodeCount: [...compiled.segments.values()].reduce((k, x) => k + x.nodes.length, 0), compileMs: Math.round(ic.compileMs) });
     executor.wake();
   };
   const watcher = new PlanStreamWatcher({

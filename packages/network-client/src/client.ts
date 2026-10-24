@@ -15,7 +15,7 @@ import {
   type RepairJobView,
   type RepairLease,
 } from "@overclock/network-contracts";
-import { DisconnectedError, Identity, SenderError, UnknownCallResultError, setGlobalLogLevel } from "spacetimedb";
+import { DisconnectedError, Identity, SenderError, UnknownCallResultError, or, setGlobalLogLevel, type BooleanExpr, type TypedTableDef } from "spacetimedb";
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from "./generated/index";
 import type { CapabilityVersions, RepairJobs } from "./generated/types";
 import {
@@ -51,6 +51,13 @@ type FetchResult = Awaited<ReturnType<INetworkClient["fetchArtifact"]>>;
 /** Event kinds that reflect a committed transaction (as opposed to initial subscription sync). */
 function isLiveEvent(ctx: EventContext): boolean {
   return ctx.event.tag === "Reducer" || ctx.event.tag === "Transaction";
+}
+
+/** OR together one equality per origin (subscription WHERE clause). */
+function anyOf<T extends TypedTableDef>(exprs: BooleanExpr<T>[]): BooleanExpr<T> {
+  const [first, ...rest] = exprs;
+  if (first === undefined) throw new Error("at least one origin is required");
+  return rest.reduce<BooleanExpr<T>>((acc, e) => or(acc, e), first);
 }
 
 function errorMessage(e: unknown): string {
@@ -393,16 +400,12 @@ export class NetworkClient implements INetworkClient {
   // ------------------------------------------------------------------------------------------
 
   private subscribeOrigins(conn: DbConnection, origins: string[]): void {
-    const byOrigin = <T extends { origin: { eq(v: string): unknown } }>(r: T) => {
-      const exprs = origins.map((o) => r.origin.eq(o) as { or(x: unknown): unknown });
-      return exprs.reduce((a, b) => a.or(b) as { or(x: unknown): unknown });
-    };
     // Rows linked to the origins through capability_apps (two-table semijoins on indexed columns).
-    const linked = tables.capabilityApps.where((ca) => byOrigin(ca) as ReturnType<typeof ca.origin.eq>);
+    const linked = tables.capabilityApps.where((ca) => anyOf(origins.map((o) => ca.origin.eq(o))));
     const queries = [
-      tables.applications.where((a) => byOrigin(a) as ReturnType<typeof a.origin.eq>),
-      tables.uiVariants.where((u) => byOrigin(u) as ReturnType<typeof u.origin.eq>),
-      tables.activity.where((a) => byOrigin(a) as ReturnType<typeof a.origin.eq>),
+      tables.applications.where((a) => anyOf(origins.map((o) => a.origin.eq(o)))),
+      tables.uiVariants.where((u) => anyOf(origins.map((o) => u.origin.eq(o)))),
+      tables.activity.where((a) => anyOf(origins.map((o) => a.origin.eq(o)))),
       linked,
       linked.rightSemijoin(tables.capabilities, (ca, c) => ca.capabilityId.eq(c.capabilityId)),
       linked.rightSemijoin(tables.capabilityVersions, (ca, v) => ca.capabilityId.eq(v.capabilityId)),

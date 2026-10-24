@@ -1,4 +1,5 @@
 // HOLDOUT FIXTURE — engine/prompt developers must not read this file.
+import { createHash } from "node:crypto";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import {
@@ -89,6 +90,29 @@ export async function createHoldoutServer(ctx: ServerContext): Promise<FastifyIn
   const fail = (reply: FastifyReply, status: number, error: string, message: string) => json(reply, status, { error, message });
 
   installTraffic(f, ctx, APP);
+
+  /**
+   * Fingerprint of the variation settings the browser script renders with. Every JSON response
+   * carries it, so an open page picks up a judge surprise on its next request (like the
+   * server-rendered apps do on their next page view).
+   */
+  const uiVersion = () => {
+    const v = variations();
+    const ui = {
+      t: v.renameButtons[APP] ?? {},
+      confirm: v.confirmModal[APP] === true,
+      tabs: v.editInTab[APP] === true,
+      shuffle: v.shuffleFields[APP] ?? 0,
+      pageSize: v.pageSize[APP] ?? DEFAULT_LIMIT,
+      theme: v.theme,
+      announce: v.announcementModal[APP] === true ? ctx.variations.announcementEpoch(APP) : -1,
+    };
+    return createHash("sha1").update(JSON.stringify(ui)).digest("hex").slice(0, 16);
+  };
+  f.addHook("onSend", async (req, reply, payload) => {
+    if ((req.url.split("?")[0] ?? "").startsWith("/svc/")) reply.header("x-rw-ui", uiVersion());
+    return payload;
+  });
 
   f.addHook("preHandler", async (req, reply) => {
     const path = req.url.split("?")[0] ?? "/";
@@ -182,6 +206,7 @@ export async function createHoldoutServer(ctx: ServerContext): Promise<FastifyIn
     const session = sessionFor(req)!;
     const key = `${session.publicId}.${ctx.variations.announcementEpoch(APP)}`;
     return json(reply, 200, {
+      version: uiVersion(),
       user: session.username,
       product: HOLDOUT_DISPLAY_NAME,
       t: v.renameButtons[APP] ?? {},

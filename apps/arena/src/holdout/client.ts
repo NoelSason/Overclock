@@ -210,22 +210,35 @@ function shuffled(xs, seed) {
 }
 
 // ---------- network
+var refreshing = null;
 function api(method, path, body) {
   var init = { method: method, headers: { accept: "application/json" }, credentials: "same-origin" };
   if (body !== undefined) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(body); }
   return fetch(path, init).then(function (r) {
+    var version = r.headers.get("x-rw-ui");
     return r.text().then(function (txt) {
       var data = null;
       try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
-      if (r.status === 401) { location.assign("/signin" + qs({ next: "/" + location.hash })); }
-      if (!r.ok) {
-        var err = new Error((data && data.message) || ("The request failed (" + r.status + ")."));
-        err.status = r.status;
-        throw err;
+      function finish() {
+        if (r.status === 401) { location.assign("/signin" + qs({ next: "/" + location.hash })); }
+        if (!r.ok) {
+          var err = new Error((data && data.message) || ("The request failed (" + r.status + ")."));
+          err.status = r.status;
+          throw err;
+        }
+        return data;
       }
-      return data;
+      // Workspace settings changed since this page loaded: re-render with them before continuing.
+      if (CFG && version && version !== CFG.version && path !== "/svc/boot") return refreshConfig().then(finish, finish);
+      return finish();
     });
   }, function () { throw new Error("The registry could not be reached. Check your connection and try again."); });
+}
+function refreshConfig() {
+  if (!refreshing) {
+    refreshing = api("GET", "/svc/boot").then(function (cfg) { refreshing = null; applyConfig(cfg); }, function () { refreshing = null; });
+  }
+  return refreshing;
 }
 
 // ---------- status messages
@@ -798,13 +811,26 @@ function renderUnit(res) {
 var LISTS = { specimens: specimenList, participants: participantList, storage: storageList };
 var DETAILS = { specimens: openSpecimen, participants: openParticipant, storage: openUnit };
 
+function applyConfig(cfg) {
+  CFG = cfg;
+  L = cfg.labels;
+  current.view = null;
+  renderFrame();
+  route();
+  syncInert();
+  announce();
+}
+
+var announcing = false;
 function announce() {
   var a = CFG.announce;
-  if (!a) return;
-  var d = dialog("What's new in Rimewell");
+  if (!a || announcing) return;
+  announcing = true;
+  var d = dialog("What's new in Rimewell", function () { announcing = false; });
   d.body.appendChild(h("p", { text: a.text }));
   var ok = button("Got it", { primary: true, onclick: function () {
     document.cookie = a.cookie + "=" + enc(a.key) + "; path=/; SameSite=Lax";
+    announcing = false;
     d.close();
   } });
   d.actions.appendChild(ok);

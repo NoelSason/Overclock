@@ -1,6 +1,6 @@
 import type { DslStep, LocatorStrategy } from "@overclock/contracts";
 import { parseExpr, parseTemplate, type Ast } from "@overclock/compiler";
-import type { PortableCapability, PortableControl } from "@overclock/network-contracts";
+import { PortableCapability, type PortableControl } from "@overclock/network-contracts";
 import { withArtifactHash } from "./hash";
 
 /**
@@ -225,10 +225,36 @@ function exprLiterals(source: string): { strings: string[]; numbers: number[]; p
 
 const SAFE_QUERY_VALUE = /^[A-Za-z_][A-Za-z0-9_ -]{0,30}$/;
 
+/** Keys present in `a` but dropped by schema parsing (unknown fields such as `sample` or `exampleUrl`). */
+function strippedKeys(a: unknown, b: unknown, path: string, out: string[]): void {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    a.forEach((x, i) => strippedKeys(x, b[i], `${path}.${i}`, out));
+    return;
+  }
+  if (a && typeof a === "object" && b && typeof b === "object" && !Array.isArray(a)) {
+    for (const k of Object.keys(a)) {
+      const p = path ? `${path}.${k}` : k;
+      if (!(k in b)) out.push(p);
+      else strippedKeys((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], p, out);
+    }
+  }
+}
+
 export function sanitizeCapability(input: PortableCapability, opts: SanitizeOptions = {}): SanitizeResult {
-  const cap = structuredClone(input);
   const findings: Finding[] = [];
   let redactions = 0;
+  const parsed = PortableCapability.safeParse(input);
+  if (!parsed.success) {
+    const reasons = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`);
+    return { ok: false, capability: input, redactions: 0, findings: reasons.map((r) => ({ path: r.split(":")[0] ?? "", kind: "format" as const, action: "rejected" as const, detail: `schema: ${r}` })), rejected: reasons.map((r) => `schema: ${r}`) };
+  }
+  const cap = structuredClone(parsed.data);
+  const unknown: string[] = [];
+  strippedKeys(input, parsed.data, "", unknown);
+  for (const p of unknown) {
+    findings.push({ path: p, kind: "free-text", action: "redacted", detail: "unknown field removed (artifacts carry schema fields only; no samples, example URLs, or traces)" });
+    redactions++;
+  }
   const schema: string[] = [];
   for (const c of cap.controls) {
     schema.push(c.name, c.label ?? "", c.tabPanel ?? "", ...(c.headers ?? []));

@@ -521,7 +521,7 @@ export class Scheduler {
       this.ready = this.ready.filter((x) => x !== t);
       this.setState(t, "CANCELLED", { error: reason });
     }
-    for (const p of this.compiled.phases) if (this.phaseState.get(p.id) === "pending") this.phaseState.set(p.id, "error");
+    for (const p of this.compiled.phases) if (this.phaseState.get(p.id) !== "done") this.phaseState.set(p.id, "error");
   }
 
   private checkPhase(phaseId: string): void {

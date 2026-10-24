@@ -231,9 +231,12 @@ function freeSpecimen(skip: ReadonlySet<string> = new Set()) {
   return db().getSpecimen(acc)!;
 }
 
+/** Full page load (not a same-document hash change), so each step starts from a clean page. */
 async function openSpecimen(p: Page, accession: string): Promise<void> {
+  await p.goto("about:blank");
   await p.goto(`${origin}/#/specimens/${encodeURIComponent(accession)}`);
   await p.getByRole("heading", { level: 2, name: accession }).waitFor();
+  await p.getByRole("button", { name: "Change state…" }).first().waitFor({ state: "attached" });
 }
 
 beforeAll(async () => {
@@ -339,6 +342,8 @@ describe("browser session", () => {
     await dialog.waitFor({ state: "detached" });
     await expect.poll(() => db().getSpecimen(s.accession)!.state).toBe("reserved");
     expect(db().getSpecimen(s.accession)!.version).toBe(s.version + 1);
+    // The panel re-renders with the saved record before the next edit.
+    await page.locator(".rw-detail .rw-pill", { hasText: "Reserved" }).waitFor();
 
     await page.getByRole("button", { name: "Add entry" }).click();
     await page.getByLabel("New entry").fill(`Checked by browser test <b>${s.accession}</b>`);
@@ -351,10 +356,13 @@ describe("browser session", () => {
 
   it("places a review hold through the row menu and edits a storage unit per field", async () => {
     const s = freeSpecimen();
+    await page.goto("about:blank");
     await page.goto(`${origin}/#/specimens`);
     await page.getByRole("searchbox", { name: "Search specimens" }).fill(s.label_code);
+    const sameLabel = db().dump().specimens.filter((x) => x.label_code === s.label_code).length;
+    await expect.poll(() => page.locator("ul.rw-rows > li[data-key]").count()).toBe(sameLabel);
+    await page.getByText(`Showing ${sameLabel} of ${sameLabel}`).waitFor();
     const row = page.locator(`[data-key="${s.accession}"]`);
-    await row.waitFor();
     await row.getByRole("button", { name: `Actions for ${s.accession}` }).click();
     await page.getByRole("menuitem", { name: "Place review hold…" }).click();
     const dialog = page.getByRole("dialog", { name: "Place review hold" });
@@ -410,6 +418,20 @@ describe("viewer role", () => {
 });
 
 describe("variations on the fourth app", () => {
+  it("applies a surprise to an open page on its next request, without a reload", async () => {
+    await page.goto("about:blank");
+    await page.goto(`${origin}/#/specimens`);
+    await page.locator("[data-key]").first().waitFor();
+    expect(await page.getByRole("tab", { name: "Storage" }).count()).toBe(1);
+    vary({ renameButtons: { [APP]: { Storage: "Freezers" } } });
+    await page.getByRole("tab", { name: "Participants" }).click();
+    await page.getByRole("tab", { name: "Freezers" }).waitFor();
+    expect(await page.getByRole("tab", { name: "Storage" }).count()).toBe(0);
+    arena.setVariations(defaults());
+    await page.getByRole("tab", { name: "Freezers" }).click();
+    await page.getByRole("tab", { name: "Storage" }).waitFor();
+  });
+
   it("renames the apply button and asks for confirmation before writing", async () => {
     vary({ renameButtons: { [APP]: { "Apply change": "Commit change" } }, confirmModal: { [APP]: true } });
     const s = freeSpecimen();
@@ -471,8 +493,8 @@ describe("variations on the fourth app", () => {
 
   it("applies page size, tabs, field shuffling, and the announcement overlay", async () => {
     vary({ pageSize: { [APP]: 5 } });
+    await page.goto("about:blank");
     await page.goto(`${origin}/#/specimens`);
-    await page.reload();
     const rows = page.locator("ul.rw-rows > li[data-key]");
     await expect.poll(() => rows.count()).toBe(5);
     await page.getByRole("button", { name: "Load more" }).click();
