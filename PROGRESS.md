@@ -32,6 +32,7 @@ is implemented with a known gap. **Proposed** means design only.
 | Live recovery on the arena | One run | Support save buttons renamed mid-run: 10/10, 0 duplicates; resolved by a lower-ranked locator, no model call |
 | Read-only pages block risky GETs | Working (tested) | `tests/integration/runtime.test.ts` (browser level; fails without the fix) |
 | Saturation-aware adaptive concurrency | Working (tested) | `tests/unit/scheduler.test.ts` (demand-limited windows) |
+| Execution throughput (browser pool, browser server processes, one-call reads, grouped observability commits) | Working (tested, measured) | `tests/integration/event-durability.test.ts`, `tests/integration/runtime.test.ts` (client-rendered and empty tables); warm 500-record runs in `benchmarks/results/warm/` (`scripts/warm-bench.ts`) |
 | Online access-path substitution | Partial | Wired into mode E; no test |
 | Other online re-optimization | Proposed | Not implemented |
 | Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts`, `tests/unit/arena-oracle.test.ts` |

@@ -289,6 +289,35 @@ record `VERIFIED`. The task now fails instead
 
 Backoff is `min(8 s, base × 2^(attempt − 1))` with ±25% jitter.
 
+### Execution throughput
+
+Measured on warm 500-record runs (no model calls), the limit was never the arena or the browser
+pages: it was the engine's single Node thread and Chromium's main process, which every worker's
+protocol traffic passes through. With one worker an action takes 6–20 ms; with 16 workers sharing
+one browser and one thread it took 23–172 ms. What runs now:
+
+- **Several browser processes** (`OVERCLOCK_BROWSERS`, default 4); a new worker context goes to
+  the browser with the fewest open contexts.
+- **Each behind its own Playwright server process** (`OVERCLOCK_BROWSER_SERVERS`, default on in
+  the engine), so Playwright's server side runs on other cores. The route guard (allowlist,
+  read-only pages, risky GETs) still runs in the engine for every request: route handlers are
+  client side.
+- **One browser call where two were made:** reading a field and finding a click target check
+  "exactly one element matched" (and, for targets, visibility) in the same page call that reads
+  or locates it. If the top-ranked locator strategy doesn't match exactly one element, the full
+  resolution path runs unchanged.
+- **No lingering waiters:** a write's response, network failure, and timeout are page listeners
+  removed as soon as the write settles.
+- **Constant-time scheduler counts** (active tasks per app).
+- **Grouped commits for observability events** (worker states, browser actions), described in
+  the store's durability note; task states and receipts are still committed before
+  `appendEvent` returns.
+- **No source-mapped stack traces** in the engine (`OVERCLOCK_SOURCE_MAPS=1` restores them):
+  Playwright captures a stack for every browser call, and mapping it was the largest single cost.
+
+What remains on the engine thread is mostly Playwright's per-call stack capture and the event
+store; more workers than about 16–24 don't help on a 16-core machine.
+
 ### Adaptive concurrency (AIMD)
 
 Each app gets its own additive-increase, multiplicative-decrease controller. Every 2.5 s

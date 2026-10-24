@@ -95,7 +95,10 @@ export class EngineRuntime {
 
   constructor(readonly config: EngineConfig) {
     mkdirSync(config.dataDir, { recursive: true });
-    this.browser = new BrowserManager({ headless: config.headless });
+    // Each pooled browser behind its own server process (OVERCLOCK_BROWSER_SERVERS=0 disables):
+    // Playwright's server side then runs off the engine's main thread (warm 500 records: 21.6–22.0 s
+    // in-process, 18.1–18.7 s with server processes; 2026-10-24).
+    this.browser = new BrowserManager({ headless: config.headless, servers: process.env.OVERCLOCK_BROWSER_SERVERS !== "0" });
     this.executeSessions = new SessionManager(this.browser, executionCredentials);
     this.exploreSessions = new SessionManager(this.browser, explorationCredentials);
     this.ledger = new ModelLedger(config.budgetUsd);

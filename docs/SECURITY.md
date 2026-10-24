@@ -61,6 +61,15 @@ A dry run executes a candidate's read segments for its first record in an explor
 Write segments, and everything downstream of them, are never executed in a dry run. Each
 context counts what it blocked, and the counts appear in app-model and risk-report artifacts.
 
+## Browser server processes
+
+**Status: Working (measured).** The engine runs each pooled browser behind its own Playwright
+server process (`packages/browser-runtime/browser-server.mjs`). Each server listens on
+127.0.0.1 only, on a random port with an unguessable path, and the endpoint is passed to the engine
+over the child's stdout and never logged. The route guard (origin allowlist, read-only pages,
+risky GETs) runs in the engine for every request, as before. A server exits when the engine
+closes its stdin, exits, or sends SIGTERM.
+
 ## Read-only explorer role
 
 **Status: Working (tested)** in the arena (`tests/integration/arena.test.ts`); the engine side

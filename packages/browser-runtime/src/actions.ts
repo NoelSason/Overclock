@@ -3,7 +3,7 @@ import type { ActionNode, Condition, ExtractField, ExtractTable, SemanticLocator
 import { evaluate, evaluateBool, looseEquals, resolveValue, toStr, type Scope } from "@overclock/compiler";
 import { AssertionFailedError, HiddenTargetError, LocatorNotFoundError, NavigationError, OriginBlockedError, PreconditionFailedError, RuntimeError, UnexpectedDialogError, WriteRejectedError, WriteUncertainError } from "./errors";
 import { settle } from "./browser";
-import { resolveLocator } from "./locate";
+import { resolveLocator, strategyToLocator } from "./locate";
 
 export interface RecordScope {
   key: string;
@@ -61,9 +61,27 @@ export async function openDialogText(page: Page): Promise<string | null> {
     .catch(() => null);
 }
 
+/**
+ * Match count of a locator and whether its single match is visible, in one page call. Visible
+ * follows Playwright's definition: a non-empty bounding box and no `visibility: hidden`.
+ */
+function uniqueVisible(els: Element[]): { n: number; visible: boolean } {
+  if (els.length !== 1) return { n: els.length, visible: false };
+  const r = els[0]!.getBoundingClientRect();
+  return { n: 1, visible: r.width > 0 && r.height > 0 && getComputedStyle(els[0]!).visibility !== "hidden" };
+}
+
 async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Locator; tier: number }> {
   const loc = env.locatorOverrides.get(node.id) ?? node.target;
   if (!loc) throw new RuntimeError(`Node ${node.id} (${node.type}) has no target`, node.id);
+  // Fast path, one browser call: the top-ranked strategy matches exactly one visible element, the
+  // element resolveLocator and the visibility check below would accept. The action itself still
+  // runs Playwright's actionability checks. Anything else takes the full path.
+  if (!loc.scope && loc.strategies[0]) {
+    const first = strategyToLocator(env.page, loc.strategies[0]);
+    const quick = await first.evaluateAll(uniqueVisible).catch(() => null);
+    if (quick?.n === 1 && quick.visible) return { locator: first, tier: 0 };
+  }
   try {
     const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
     if (!(await r.locator.isVisible())) {
@@ -87,35 +105,42 @@ async function target(env: ActionEnv, node: ActionNode): Promise<{ locator: Loca
 }
 
 /**
- * Read a control's value. The text of a titled region (section, article, role=region) is its
- * content without headings and form chrome: the same value perception records as a region fact.
+ * Reads the single element a locator matched, in the page. Returns the match count, and the value
+ * only when exactly one element matched. Self-contained, because Playwright runs it in the page.
+ * The text of a titled region (section, article, role=region) is its content without headings and
+ * form chrome: the same value perception records as a region fact.
  */
-export async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
-  if (attr === "href") return (await locator.getAttribute("href")) ?? "";
+function readUnique(els: Element[], attr: "text" | "value" | "href"): { n: number; v?: string } {
+  if (els.length !== 1) return { n: els.length };
+  const el = els[0]!;
+  if (attr === "href") return { n: 1, v: el.getAttribute("href") ?? "" };
   if (attr === "value") {
-    return locator.evaluate((el) => {
-      if (el instanceof HTMLSelectElement) return el.value;
-      if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) return String(el.checked);
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
-      return (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "";
-    });
+    if (el instanceof HTMLSelectElement) return { n: 1, v: el.value };
+    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) return { n: 1, v: String(el.checked) };
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return { n: 1, v: el.value };
+    return { n: 1, v: (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "" };
   }
-  return locator.evaluate((el) => {
-    if (el instanceof HTMLSelectElement) return el.selectedOptions[0]?.textContent?.trim() ?? el.value;
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
-    if (el.matches("section,article,[role=region]")) {
-      const c = el.cloneNode(true) as HTMLElement;
-      for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
-      const parts: string[] = [];
-      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
-      while (walk.nextNode()) {
-        const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
-        if (t) parts.push(t);
-      }
-      return parts.join(" ");
+  if (el instanceof HTMLSelectElement) return { n: 1, v: el.selectedOptions[0]?.textContent?.trim() ?? el.value };
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return { n: 1, v: el.value };
+  if (el.matches("section,article,[role=region]")) {
+    const c = el.cloneNode(true) as HTMLElement;
+    for (const x of Array.from(c.querySelectorAll("h1,h2,h3,h4,h5,h6,form,label,input,select,textarea,button,script,style"))) x.remove();
+    const parts: string[] = [];
+    const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const t = (walk.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (t) parts.push(t);
     }
-    return ((el as HTMLElement).innerText ?? el.textContent ?? "").trim();
-  });
+    return { n: 1, v: parts.join(" ") };
+  }
+  return { n: 1, v: ((el as HTMLElement).innerText ?? el.textContent ?? "").trim() };
+}
+
+/** Read a control's value (see readUnique). The locator must match one element (resolveLocator's result). */
+export async function readControl(locator: Locator, attr: "text" | "value" | "href"): Promise<string> {
+  const r = await locator.evaluateAll(readUnique, attr);
+  if (r.n !== 1) throw new LocatorNotFoundError(`Expected one element to read, found ${r.n}`, undefined);
+  return r.v ?? "";
 }
 
 function parseValue(raw: string, parse: ExtractField["parse"]): unknown {
@@ -258,7 +283,18 @@ async function extractFields(env: ActionEnv, node: ActionNode, fields: ExtractFi
   for (const f of fields) {
     try {
       const override = env.locatorOverrides.get(`${node.id}#${f.name}`);
-      const r = await resolveLocator(env.page, override ?? f.target, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
+      const loc = override ?? f.target;
+      // Fast path, one browser call: when the top-ranked strategy matches exactly one element,
+      // that is the element resolveLocator would pick on its first probe, so read it directly.
+      // Anything else (no match yet, several, a scoped locator) takes the full path below.
+      if (!loc.scope && loc.strategies[0]) {
+        const quick = await strategyToLocator(env.page, loc.strategies[0]).evaluateAll(readUnique, f.attr).catch(() => null);
+        if (quick?.n === 1) {
+          out[f.name] = parseValue(quick.v ?? "", f.parse);
+          continue;
+        }
+      }
+      const r = await resolveLocator(env.page, loc, { timeoutMs: Math.min(node.timeoutMs, 2500), nodeId: node.id });
       worstTier = Math.max(worstTier, r.strategyIndex);
       out[f.name] = parseValue(await readControl(r.locator, f.attr), f.parse);
     } catch (err) {

@@ -1,4 +1,30 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+
+const SERVER_SCRIPT = fileURLToPath(new URL("../browser-server.mjs", import.meta.url));
+
+/** Start a browser server process and return its endpoint (first stdout line). */
+async function startBrowserServer(headless: boolean): Promise<{ child: ChildProcess; wsEndpoint: string }> {
+  const child = spawn(process.execPath, [SERVER_SCRIPT], { stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, OVERCLOCK_HEADLESS: headless ? "1" : "0" } });
+  const wsEndpoint = await new Promise<string>((resolve, reject) => {
+    let buf = "";
+    const timer = setTimeout(() => reject(new Error("browser server did not start within 30 s")), 30_000);
+    child.stdout!.on("data", (d: Buffer) => {
+      buf += d.toString();
+      const nl = buf.indexOf("\n");
+      if (nl >= 0) {
+        clearTimeout(timer);
+        resolve(buf.slice(0, nl).trim());
+      }
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`browser server exited with code ${code}`));
+    });
+  });
+  return { child, wsEndpoint };
+}
 
 export interface ContextOptions {
   /** Origins (scheme://host:port) the context may load. Everything else is aborted. */
@@ -42,24 +68,40 @@ export class BrowserManager {
   private readonly browsers: (Browser | null)[];
   private readonly launching: (Promise<Browser> | null)[];
   private readonly contextsOn: number[];
+  /** Server processes, when each browser runs behind its own (OVERCLOCK_BROWSER_SERVERS=1). */
+  private readonly servers: (ChildProcess | null)[];
+  private readonly useServers: boolean;
   readonly guardStats = new WeakMap<BrowserContext, GuardStats>();
   private readonly readOnlyPages = new WeakSet<Page>();
 
-  constructor(private readonly opts: { headless?: boolean; browsers?: number } = {}) {
+  constructor(private readonly opts: { headless?: boolean; browsers?: number; servers?: boolean } = {}) {
     const n = Math.max(1, Math.floor(opts.browsers ?? (Number(process.env.OVERCLOCK_BROWSERS) || 4)));
     this.browsers = Array.from({ length: n }, () => null);
     this.launching = Array.from({ length: n }, () => null);
     this.contextsOn = Array.from({ length: n }, () => 0);
+    this.servers = Array.from({ length: n }, () => null);
+    this.useServers = opts.servers ?? process.env.OVERCLOCK_BROWSER_SERVERS === "1";
   }
 
   /** The first browser (launching it if needed); contexts come from newContext. */
   async get(i = 0): Promise<Browser> {
     const b = this.browsers[i];
     if (b?.isConnected()) return b;
-    this.launching[i] ??= chromium.launch({ headless: this.opts.headless ?? process.env.OVERCLOCK_HEADLESS !== "0" }).then((launched) => {
+    const headless = this.opts.headless ?? process.env.OVERCLOCK_HEADLESS !== "0";
+    this.launching[i] ??= (async () => {
+      let launched: Browser;
+      if (this.useServers) {
+        this.servers[i]?.kill("SIGTERM");
+        const { child, wsEndpoint } = await startBrowserServer(headless);
+        this.servers[i] = child;
+        launched = await chromium.connect(wsEndpoint);
+      } else launched = await chromium.launch({ headless });
       this.browsers[i] = launched;
       this.launching[i] = null;
       return launched;
+    })().catch((err: unknown) => {
+      this.launching[i] = null;
+      throw err;
     });
     return this.launching[i]!;
   }
@@ -144,6 +186,8 @@ export class BrowserManager {
     const open = this.browsers.filter((b): b is Browser => b !== null);
     this.browsers.fill(null);
     await Promise.all(open.map((b) => b.close().catch(() => undefined)));
+    for (const c of this.servers) c?.kill("SIGTERM");
+    this.servers.fill(null);
   }
 }
 
