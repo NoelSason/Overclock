@@ -104,6 +104,8 @@ export interface RunView {
   reopt: { t: number; switched: boolean; reason: string; remainingMs: number; alternativeMs: number | null; alternative?: string | undefined }[];
   approvals: Record<string, { approvalId: string; taskId: string; nodeId: string; description: string; resolved?: boolean | undefined; approved?: boolean | undefined }>;
   logs: { t: number; level: string; message: string }[];
+  /** Review rounds of plans before their writes (see the `review` event). */
+  reviews: { t: number; subject: string; round: number; status: string; highRisks: number; reason?: string | undefined; ms?: number | undefined }[];
   summary?: RunSummary | undefined;
   /** Stage intervals for the overlap (Gantt) view; open intervals have end undefined. */
   stages: { stage: StageName; start: number; end?: number | undefined; detail?: string | undefined }[];
@@ -147,6 +149,7 @@ export function createRunView(runId: string): RunView {
     reopt: [],
     approvals: {},
     logs: [],
+    reviews: [],
     stages: [],
     fragments: {},
     scoutPages: [],
@@ -335,6 +338,9 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       }
       break;
     }
+    case "review":
+      view.reviews.push({ t: ev.t, subject: ev.subject, round: ev.round, status: ev.status, highRisks: ev.highRisks, reason: ev.reason, ms: ev.ms });
+      break;
     case "log":
       view.logs.push({ t: ev.t, level: ev.level, message: ev.message });
       if (view.logs.length > MAX_LOGS) view.logs.shift();

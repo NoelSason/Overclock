@@ -6,6 +6,7 @@ import { buildCatalog, classifyEffects, crawlApp, critiquePlan, dryRunCandidate,
 import type { ClaudeProvider, JevProvider } from "@overclock/models";
 import { estimateCost, recommendWorkers, selectCandidate, type LatencyModel } from "@overclock/optimizer";
 import { decidePolicy, type PolicyDecision } from "./policy";
+import { blockingRisks, reviewPlan, type Assessment, type PlanReview } from "./review";
 
 export interface SwarmDeps {
   runId: string;
@@ -26,9 +27,16 @@ export interface SwarmDeps {
   imported?: { plan: DslPlan; models: AppModel[]; label: string; reason: string } | undefined;
 }
 
+/** A cached plan, with the review it passed before its writes ran (absent in entries written before reviews were recorded). */
+export interface CachedProgram {
+  plan: DslPlan;
+  models: AppModel[];
+  review?: PlanReview | undefined;
+}
+
 export interface ProgramCache {
-  get(key: string): { plan: DslPlan; models: AppModel[] } | undefined;
-  put(key: string, value: { plan: DslPlan; models: AppModel[] }): void;
+  get(key: string): CachedProgram | undefined;
+  put(key: string, value: CachedProgram): void;
 }
 
 export interface CompiledCandidate {
@@ -44,6 +52,8 @@ export interface CompiledCandidate {
   critique?: CritiqueResult | undefined;
   planningMs: number;
   repaired: boolean;
+  /** Set once the candidate passed the review its policy requires. */
+  review?: PlanReview | undefined;
 }
 
 export interface SwarmResult {
@@ -53,6 +63,8 @@ export interface SwarmResult {
   policy: PolicyDecision;
   workers: number;
   reason: string;
+  /** Review the selected plan passed; stored with it in the cache and required for publication. */
+  review: PlanReview;
 }
 
 /** Stable signature of a task, independent of record counts and concrete values. */
@@ -218,12 +230,18 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
       ctx.estimate(c);
       d.emit({ type: "candidate.evaluated", candidateId: "network", estimate: c.estimate, valid: true, issues: [] });
       d.emit({ type: "candidate.selected", candidateId: "network", reason: imp.reason, ranking: [{ candidateId: "network", totalMs: c.estimate?.totalMs ?? null }] });
-      return { selected: c, candidates: [c], models: imp.models, policy: { intelligence: "network-import", candidates: 0, catalog: false, critique: false, dryRun: false, reason: imp.reason, features }, workers: c.workers, reason: imp.reason };
+      const review: PlanReview = { status: "not-required", reason: "imported capability: reviewed by its publisher (publication requires a passed review), admitted by the network validator, rebound here" };
+      return { selected: c, candidates: [c], models: imp.models, policy: { intelligence: "network-import", candidates: 0, catalog: false, critique: false, dryRun: false, reason: imp.reason, features }, workers: c.workers, reason: imp.reason, review };
     }
     d.emit({ type: "log", level: "warn", message: `imported plan did not compile here (${issues.filter((i) => i.severity === "error").map((i) => i.message).slice(0, 2).join("; ")}); discovering cold` });
   }
   const key = cacheKey(d.config);
-  const cached = d.config.cache === "warm" ? d.cache?.get(key) : undefined;
+  let cached = d.config.cache === "warm" ? d.cache?.get(key) : undefined;
+  if (cached && cached.review?.status !== "passed" && decidePolicy(d.config, cached.models, strategyDirectives(cached.models).length, false).critique) {
+    // A warm start skips the critique, so it may only reuse a plan that passed one when this task's policy requires it.
+    d.emit({ type: "log", level: "warn", message: `warm cache: the cached plan has no passed review (${cached.review ? cached.review.reason : "recorded before reviews were tracked"}) and this task requires one; planning cold` });
+    cached = undefined;
+  }
 
   let models: AppModel[];
   if (cached) models = cached.models;
@@ -241,7 +259,7 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
       ctx.estimate(c);
       d.emit({ type: "candidate.evaluated", candidateId: "warm", estimate: c.estimate, valid: true, issues: [] });
       d.emit({ type: "candidate.selected", candidateId: "warm", reason: "warm start: reused the locally cached compiled program", ranking: [{ candidateId: "warm", totalMs: c.estimate?.totalMs ?? null }] });
-      return { selected: c, candidates: [c], models, policy, workers: c.workers, reason: "warm cache" };
+      return { selected: c, candidates: [c], models, policy, workers: c.workers, reason: "warm cache", review: cached.review ?? { status: "not-required", reason: "cached before reviews were recorded; this task's policy requires none" } };
     }
   }
 
@@ -264,46 +282,52 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
   });
   const candidates = await ctx.stage("planning", `${chosen.length} candidate(s)`, () => Promise.all(chosen.map((dir, i) => ctx.planCandidate(models, dir, catalog || undefined, i).catch((err) => failed(i, dir.name, err)))));
 
-  // Adversarial verification: critique + read-only dry-run probes, in parallel per candidate.
+  // Adversarial verification: critique + read-only dry-run probes, in parallel per candidate. A
+  // candidate whose review fails closed (critique unavailable, repair failed, risks remain) is invalid.
   if (policy.critique || policy.dryRun) {
     await ctx.stage("critique", "adversarial verifier", () =>
-      ctx.agent("adversarial-verifier", "adversarial-verifier", "Adversarial Verifier", { model: d.claude.modelFor("helper") }, async () => {
+      ctx.agent("adversarial-verifier", "adversarial-verifier", "Adversarial Verifier", { model: d.claude.modelFor("critic") }, async () => {
         await Promise.all(
           candidates
             .filter((c) => c.valid && c.compiled)
             .map(async (c) => {
-              const [crit, dry] = await Promise.all([
-                policy.critique ? critiquePlan(d.claude, { goal: d.config.goal, plan: c.plan, models, issues: c.issues, signal: d.signal }).then((r) => r.result).catch(() => undefined) : Promise.resolve(undefined),
-                policy.dryRun ? dryRunCandidate({ compiled: c.compiled!, browser: d.browser, storageState: d.exploreState, apps: d.config.applications, inputs: { records: d.config.records }, latency: d.latency, signal: d.signal }).catch(() => undefined) : Promise.resolve(undefined),
-              ]);
-              if (policy.critique && !crit) {
-                // The review this policy requires didn't happen (even after a retry): the candidate can't run.
+              const directive = chosen.find((x) => c.candidateId.endsWith(x.name)) ?? chosen[0]!;
+              const assess = async (plan: DslPlan, compiled: CompiledProgram): Promise<Assessment> => {
+                const [crit, dry] = await Promise.all([
+                  policy.critique ? critiquePlan(d.claude, { goal: d.config.goal, plan, models, issues: c.issues, signal: d.signal }).then((r) => r.result).catch(() => undefined) : Promise.resolve(undefined),
+                  policy.dryRun ? dryRunCandidate({ compiled, browser: d.browser, storageState: d.exploreState, apps: d.config.applications, inputs: { records: d.config.records }, latency: d.latency, signal: d.signal }).catch(() => undefined) : Promise.resolve(undefined),
+                ]);
+                c.critique = crit;
+                c.dryRun = dry;
+                const high = crit?.risks.filter((r) => r.severity === "high") ?? [];
+                d.saveArtifact("adversarial-verifier", "risk-report", `Risks: ${c.name}`, `${crit ? `${crit.risks.length} risk(s), ${high.length} high` : policy.critique ? "critique unavailable" : "no critique"}; dry run ${dry ? (dry.ok ? `passed (${dry.segments.filter((s) => s.ok && !s.skipped).length} segments, ${dry.ms} ms, ${dry.blockedMutations} mutations blocked)` : `failed: ${dry.failures.join("; ").slice(0, 200)}`) : "skipped"}`, { critique: crit, dryRun: dry }, { risks: crit?.risks.length ?? 0, high: high.length });
+                return { available: !policy.critique || !!crit, problems: [...(crit ? blockingRisks(crit) : []), ...(dry && !dry.ok ? dry.failures.map((f) => `[dry run] ${f}`) : [])], critique: crit };
+              };
+              const review = await reviewPlan({
+                subject: c.candidateId,
+                plan: c.plan,
+                compiled: c.compiled!,
+                assess,
+                repair: async (plan, problems) => {
+                  const fixed = (await repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, catalog: catalog || undefined, previous: { plan, issues: problems.map((message) => ({ severity: "error", message })) }, signal: d.signal })).data;
+                  const r = ctx.compile(fixed, models, c.candidateId);
+                  if (!r.compiled) throw new Error(`the repaired plan does not compile: ${r.issues.filter((i) => i.severity === "error").map((i) => i.message).slice(0, 2).join("; ")}`);
+                  c.issues = r.issues;
+                  return { plan: fixed, compiled: r.compiled };
+                },
+                maxRepairs: 1,
+                emit: d.emit,
+                now: d.now,
+              });
+              if (!review.ok) {
                 c.valid = false;
-                c.issues = [...c.issues, { severity: "error", code: "critique-unavailable", message: "critique unavailable after a retry" }];
+                c.issues = [...c.issues, { severity: "error", code: "review-rejected", message: review.reason }];
                 return;
               }
-              c.critique = crit;
-              c.dryRun = dry;
-              const high = crit?.risks.filter((r) => r.severity === "high") ?? [];
-              d.saveArtifact("adversarial-verifier", "risk-report", `Risks: ${c.name}`, `${crit ? `${crit.risks.length} risk(s), ${high.length} high` : "no critique"}; dry run ${dry ? (dry.ok ? `passed (${dry.segments.filter((s) => s.ok && !s.skipped).length} segments, ${dry.ms} ms, ${dry.blockedMutations} mutations blocked)` : `failed: ${dry.failures.join("; ").slice(0, 200)}`) : "skipped"}`, { critique: crit, dryRun: dry }, { risks: crit?.risks.length ?? 0, high: high.length });
-              if (high.length || (dry && !dry.ok)) {
-                // One repair round with the verifier's findings.
-                const issues = [...high.map((r) => ({ severity: "error", message: `[verifier] step ${r.stepId}: ${r.issue} — ${r.suggestion}` })), ...(dry?.failures ?? []).map((f) => ({ severity: "error", message: `[dry run] ${f}` }))];
-                try {
-                  const directive = chosen.find((x) => c.candidateId.endsWith(x.name)) ?? chosen[0]!;
-                  const plan = (await repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, catalog: catalog || undefined, previous: { plan: c.plan, issues }, signal: d.signal })).data;
-                  const r = ctx.compile(plan, models, c.candidateId);
-                  if (r.compiled) {
-                    c.plan = plan;
-                    c.compiled = r.compiled;
-                    c.issues = r.issues;
-                    c.repaired = true;
-                    if (policy.dryRun) c.dryRun = await dryRunCandidate({ compiled: r.compiled, browser: d.browser, storageState: d.exploreState, apps: d.config.applications, inputs: { records: d.config.records }, latency: d.latency, signal: d.signal }).catch(() => c.dryRun);
-                  }
-                } catch {
-                  // keep the original candidate
-                }
-              }
+              c.plan = review.plan;
+              c.compiled = review.compiled;
+              c.repaired ||= review.repaired;
+              c.review = policy.critique ? { status: "passed", rounds: review.rounds } : { status: "not-required", reason: policy.reason };
             }),
         );
       }),
@@ -333,5 +357,6 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
     throw new Error(`No valid strategy: ${candidates.flatMap((c) => c.issues.filter((i) => i.severity === "error").map((i) => i.message)).slice(0, 5).join(" | ") || "planner produced no candidate"}`);
   }
   d.emit({ type: "candidate.selected", candidateId: selected.candidateId, reason: result.reason, ranking: result.ranking });
-  return { selected, candidates, models, policy, workers: selected.workers, reason: result.reason };
+  const review: PlanReview = selected.review ?? { status: "not-required", reason: policy.reason };
+  return { selected, candidates, models, policy, workers: selected.workers, reason: result.reason, review };
 }

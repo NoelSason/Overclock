@@ -22,6 +22,8 @@ export type EventPayload =
   | E<"run.created", { config: RunConfig }>
   | E<"run.status", { status: RunStatus; reason?: string }>
   | E<"run.completed", { summary: RunSummary }>
+  /** Adversarial review of a plan before its writes may run: one event per round, then a rejection if it fails closed. */
+  | E<"review", { subject: string; round: number; status: "passed" | "risks" | "unavailable" | "rejected"; highRisks: number; reason?: string; ms?: number }>
   | E<"policy.decision", { intelligence: "single-planner" | "parallel-scout" | "warm-cache" | "network-import"; candidates: number; reason: string; features: Record<string, number | string | boolean> }>
   | E<"agent.started", { agentId: string; role: AgentRole; label: string; model?: string; app?: string }>
   | E<"agent.artifact", { agentId: string; artifact: ArtifactSummary }>

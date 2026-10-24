@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { AppModel, DslPlan } from "@overclock/contracts";
 import { BrowserManager, SessionManager, type Credentials, type StorageState } from "@overclock/browser-runtime";
 import { claudeConfigFromEnv, jevConfigFromEnv, ModelLedger } from "@overclock/models";
-import type { ProgramCache } from "@overclock/swarm";
+import type { CachedProgram, ProgramCache } from "@overclock/swarm";
 import { repoRoot } from "@overclock/telemetry";
 import { NetworkService } from "./network";
 
@@ -62,16 +62,16 @@ export class FileProgramCache implements ProgramCache {
   private path(key: string): string {
     return join(this.dir, `${key.replace(/[^a-z0-9|.,:-]/gi, "_").replace(/[|:,]/g, "_").slice(0, 180)}.json`);
   }
-  get(key: string): { plan: DslPlan; models: AppModel[] } | undefined {
+  get(key: string): CachedProgram | undefined {
     const p = this.path(key);
     if (!existsSync(p)) return undefined;
     try {
-      return JSON.parse(readFileSync(p, "utf8")) as { plan: DslPlan; models: AppModel[] };
+      return JSON.parse(readFileSync(p, "utf8")) as CachedProgram;
     } catch {
       return undefined;
     }
   }
-  put(key: string, value: { plan: DslPlan; models: AppModel[] }): void {
+  put(key: string, value: CachedProgram): void {
     writeFileSync(this.path(key), JSON.stringify(value));
   }
 }

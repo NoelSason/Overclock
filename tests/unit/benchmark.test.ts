@@ -295,6 +295,15 @@ describe("benchmark planning", () => {
     expect(planSuite("all", { ...opts, conditions: ["local"] }).every((r) => r.condition === "local")).toBe(true);
   });
 
+  it("reports the engine-verified share only for runs that count unique input records", () => {
+    // A pre-fix summary claimed 27 of 25 (derived hold records counted): excluded, not clamped.
+    const [legacy] = aggregateRuns([rec({ s: { recordsVerified: 27 } })]);
+    expect(Number.isNaN(legacy!.verifiedPct.median)).toBe(true);
+    const [fixed] = aggregateRuns([rec({ s: { recordsVerified: 24, recordsAccounting: "input-records" } }), rec({ trial: 2, s: { recordsVerified: 25, recordsAccounting: "input-records" } })]);
+    expect(fixed!.verifiedPct.median).toBeLessThanOrEqual(1);
+    expect(fixed!.verifiedPct.median).toBeCloseTo(0.98, 6);
+  });
+
   it("separates wrong records the engine called VERIFIED from ones it called SKIPPED", () => {
     const outcomes = [
       { recordKey: "a", status: "VERIFIED" as const, writes: 1, receipts: [], notes: [] },

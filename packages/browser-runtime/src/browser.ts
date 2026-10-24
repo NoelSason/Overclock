@@ -30,7 +30,7 @@ export const RISKY_GET = /(\/|\b)(log-?out|sign-?out|logoff|delete|destroy|remov
  *
  * Execution contexts additionally enforce a per-page mutation policy: the scheduler marks a page
  * read-only while it runs a read fragment, so an early-released read fragment cannot write even
- * if a click unexpectedly triggers a state-changing request.
+ * if a click unexpectedly triggers a state-changing request (non-GET, or a GET matching RISKY_GET).
  */
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -98,7 +98,9 @@ export class BrowserManager {
         stats.blockedMutations++;
         return route.abort("blockedbyclient");
       }
-      if (opts.blockMutations && RISKY_GET.test(parsed.pathname + parsed.search)) {
+      // A read-only execution page (a released read fragment) gets the same GET screen as an
+      // exploration context: following a logout or delete link would change state as surely as a POST.
+      if (readOnly && RISKY_GET.test(parsed.pathname + parsed.search)) {
         stats.blockedRiskyGets++;
         return route.abort("blockedbyclient");
       }

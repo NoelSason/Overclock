@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ArtifactSummary, EventPayload, RecordOutcome, RunConfig, RunEvent, RunResultResponse, RunStatus, RunSummary, RunView } from "@overclock/contracts";
-import { applyEvent, createRunView, deriveMetrics, RunSummary as RunSummarySchema } from "@overclock/contracts";
+import { applyEvent, countInputRecordsVerified, createRunView, deriveMetrics, RunSummary as RunSummarySchema } from "@overclock/contracts";
 import { ClaudeProvider, JevProvider, ModelLedger } from "@overclock/models";
 import { LatencyModel } from "@overclock/optimizer";
 import { RecoveryEngine } from "@overclock/recovery";
@@ -68,7 +68,7 @@ export class RunController implements RunHandle {
   readonly jev: JevProvider;
   private recoveryStats?: () => unknown;
   /** Plan and models the run executed (staged, streamed, or imported), for publication. */
-  private finalPlan: { plan: import("@overclock/contracts").DslPlan; models: import("@overclock/contracts").AppModel[] } | null = null;
+  private finalPlan: import("@overclock/swarm").CachedProgram | null = null;
 
   constructor(
     readonly config: RunConfig,
@@ -153,7 +153,7 @@ export class RunController implements RunHandle {
     const localCache = knowledge === "local-only" || knowledge.startsWith("network") ? this.runtime.cache : undefined;
     const cache = {
       get: (key: string) => localCache?.get(key),
-      put: (key: string, value: { plan: import("@overclock/contracts").DslPlan; models: import("@overclock/contracts").AppModel[] }) => {
+      put: (key: string, value: import("@overclock/swarm").CachedProgram) => {
         this.finalPlan = value;
         this.runtime.cache.put(key, value);
       },
@@ -217,7 +217,7 @@ export class RunController implements RunHandle {
       });
       await this.executor.start({ incremental: false });
       this.emit({ type: "stage", stage: "execution", phase: "end" });
-      if (!this.abort.signal.aborted) cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models });
+      if (!this.abort.signal.aborted) cache.put(cacheKey(this.config), { plan: swarm.selected.plan, models: swarm.models, review: swarm.review });
     }
     this.outcomesList = this.executor?.outcomes() ?? [];
     if (knowledge.startsWith("network") && !this.abort.signal.aborted) await this.contributeToNetwork(knowledge, imported);
@@ -267,6 +267,11 @@ export class RunController implements RunHandle {
       this.emit({ type: "log", level: "info", message: "network: not publishing; only runs where every record verified are contributed" });
       return;
     }
+    if (this.finalPlan.review?.status !== "passed") {
+      // Importers run a capability without their own critique, so only reviewed plans enter the network.
+      this.emit({ type: "log", level: "info", message: `network: not publishing; the plan did not pass an adversarial review (${this.finalPlan.review ? this.finalPlan.review.reason : "no review recorded"})` });
+      return;
+    }
     await publishCapability({ client, config: this.config, plan: this.finalPlan.plan, models: this.finalPlan.models, verifiedReceipts: this.viewState.receipts.VERIFIED, emit: (e) => this.emit(e) });
   }
 
@@ -310,7 +315,8 @@ export class RunController implements RunHandle {
       unconfirmed: outcomes.filter((o) => o.status === "UNCONFIRMED").length,
       skipped: outcomes.filter((o) => o.status === "SKIPPED").length,
       needsApproval: outcomes.filter((o) => o.status === "NEEDS_APPROVAL").length,
-      recordsVerified: outcomes.filter((o) => o.scope !== "derived" && (o.status === "VERIFIED" || o.status === "SKIPPED")).length,
+      recordsVerified: countInputRecordsVerified(outcomes),
+      recordsAccounting: "input-records",
       recoveries: v.recoveries.filter((r) => r.phase === "succeeded").length,
       modelCalls: totals.calls,
       inputTokens: totals.inputTokens,

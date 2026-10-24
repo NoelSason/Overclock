@@ -119,7 +119,7 @@ export interface AggregateRow extends BenchmarkAggregate {
   recoveryMs: { median: number };
   /** Total cost / total checker-correct records over completed runs; null when nothing was correct. */
   costPerCorrectUsd: number | null;
-  /** Engine-claimed share of input records VERIFIED or SKIPPED (summary.recordsVerified / summary.records), at most 1. */
+  /** Engine-claimed share of input records VERIFIED or SKIPPED (summary.recordsVerified / summary.records); NaN when no run counted input records only. */
   verifiedPct: { median: number };
   tokens: { median: number };
   utilization: { median: number };
@@ -185,8 +185,8 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     firstActionMs: { median: nullableMedian(finite(ok.map((r) => r.firstActionMs))) },
     overlapMs: { median: median(finite(ok.map((r) => r.overlapMs))) },
     recoveryMs: { median: median(finite(ok.map((r) => r.recoveryMs))) },
-    // Capped at 1: result files from before outcomes were scoped counted derived records (a cross-record hold) as input records.
-    verifiedPct: { median: median(finite(ok.map((r) => (r.summary && r.summary.records > 0 ? Math.min(1, r.summary.recordsVerified / r.summary.records) : NaN)))) },
+    // Only summaries that count unique input records; older ones also counted derived records and aren't comparable.
+    verifiedPct: { median: median(finite(ok.map((r) => (r.summary && r.summary.recordsAccounting === "input-records" && r.summary.records > 0 ? r.summary.recordsVerified / r.summary.records : NaN)))) },
     tokens: { median: median(ok.map((r) => r.inputTokens + r.outputTokens)) },
     utilization: { median: median(finite(ok.filter((r) => r.summary).map((r) => r.workerUtilization))) },
     phaseMs: {

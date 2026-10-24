@@ -48,7 +48,8 @@ export class ModelOutputError extends Error {
   }
 }
 
-export type ClaudeRole = "planner" | "helper";
+/** planner: plans and repairs. critic: the adversarial review that gates writes. helper: everything else. */
+export type ClaudeRole = "planner" | "helper" | "critic";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ClaudeConfig {
@@ -58,15 +59,28 @@ export interface ClaudeConfig {
   helperEffort: Effort;
   /** Inference speed for planner-role calls. `fast` applies only to models in FAST_PRICES. */
   plannerSpeed: Speed;
+  /** Inference speed for helper-role calls (summaries, catalogs); same rule as plannerSpeed. */
+  helperSpeed: Speed;
+  criticModel: string;
+  criticEffort: Effort;
+  /** Inference speed for the critique; same rule as plannerSpeed. */
+  criticSpeed: Speed;
 }
 
 export function claudeConfigFromEnv(): ClaudeConfig {
+  const helperModel = process.env.OVERCLOCK_HELPER_MODEL || "claude-haiku-5-5";
+  const helperEffort = (process.env.OVERCLOCK_HELPER_EFFORT as Effort) || "low";
+  const speed = (v: string | undefined): Speed => (v === "fast" ? "fast" : "standard");
   return {
     plannerModel: process.env.OVERCLOCK_PLANNER_MODEL || "claude-opus-5-5",
-    helperModel: process.env.OVERCLOCK_HELPER_MODEL || "claude-haiku-5-5",
+    helperModel,
     plannerEffort: (process.env.OVERCLOCK_PLANNER_EFFORT as Effort) || "low",
-    helperEffort: (process.env.OVERCLOCK_HELPER_EFFORT as Effort) || "low",
-    plannerSpeed: process.env.OVERCLOCK_PLANNER_SPEED === "fast" ? "fast" : "standard",
+    helperEffort,
+    plannerSpeed: speed(process.env.OVERCLOCK_PLANNER_SPEED),
+    helperSpeed: speed(process.env.OVERCLOCK_HELPER_SPEED),
+    criticModel: process.env.OVERCLOCK_CRITIC_MODEL || helperModel,
+    criticEffort: (process.env.OVERCLOCK_CRITIC_EFFORT as Effort) || helperEffort,
+    criticSpeed: speed(process.env.OVERCLOCK_CRITIC_SPEED),
   };
 }
 
@@ -166,13 +180,13 @@ export class ClaudeProvider {
   }
 
   modelFor(role: ClaudeRole): string {
-    return role === "planner" ? this.config.plannerModel : this.config.helperModel;
+    return role === "planner" ? this.config.plannerModel : role === "critic" ? this.config.criticModel : this.config.helperModel;
   }
 
   /** The speed a call is sent at: fast only when asked for, priced, and not paused after a refusal. */
   speedFor(req: { role: ClaudeRole; speed?: Speed | undefined }): Speed {
     const model = this.modelFor(req.role);
-    const want = req.speed ?? (req.role === "planner" ? this.config.plannerSpeed : "standard");
+    const want = req.speed ?? (req.role === "planner" ? this.config.plannerSpeed : req.role === "critic" ? this.config.criticSpeed : this.config.helperSpeed);
     return want === "fast" && model in FAST_PRICES && Date.now() >= fastPausedUntil ? "fast" : "standard";
   }
 
@@ -183,7 +197,7 @@ export class ClaudeProvider {
   }
 
   private effortFor(req: ParseRequest<z.ZodType>): Effort {
-    return req.effort ?? (req.role === "planner" ? this.config.plannerEffort : this.config.helperEffort);
+    return req.effort ?? (req.role === "planner" ? this.config.plannerEffort : req.role === "critic" ? this.config.criticEffort : this.config.helperEffort);
   }
 
   /** Body fields shared by every request: server-side fallbacks and the inference speed. */

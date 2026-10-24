@@ -152,11 +152,13 @@ export async function critiquePlan(claude: ClaudeProvider, args: { goal: string;
     `<plan>\n${JSON.stringify(args.plan)}\n</plan>`,
     warnings.length ? `<compiler_warnings>\n${warnings.map((i) => `- ${i.message}`).join("\n")}\n</compiler_warnings>` : "",
   ].join("\n\n");
-  const call = (maxTokens: number) => claude.parse({ role: "helper", purpose: "verifier.critique", system: CRITIQUE_SYSTEM, user, schema: Critique, maxTokens, signal: args.signal });
-  // One retry with a larger budget: callers treat a critique that is still unavailable as a closed gate.
-  const r = await call(3000).catch((err: unknown) => {
+  const call = (maxTokens: number) => claude.parse({ role: "critic", purpose: "verifier.critique", system: CRITIQUE_SYSTEM, user, schema: Critique, maxTokens, signal: args.signal });
+  // Thinking plus the coverage list needs about 3.5k tokens on a three-app task, so a 3k budget
+  // truncated routinely and cost a second call. One retry with a larger budget: callers treat a
+  // critique that is still unavailable as a closed gate.
+  const r = await call(8000).catch((err: unknown) => {
     if (args.signal?.aborted) throw err;
-    return call(6000);
+    return call(16_000);
   });
   // A rule the plan doesn't implement produces a wrong result for every record it applies to.
   const missing = r.data.coverage.filter((c) => !c.implemented);

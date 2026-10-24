@@ -3,7 +3,7 @@ import type { StorageState } from "@overclock/browser-runtime";
 import { compileProgram, hasErrors, IncrementalCompiler, lowerPlan, validateProgram, type CompiledProgram } from "@overclock/compiler";
 import { critiquePlan, generatePlan, PlanStreamWatcher, repairPlan, strategyDirectives } from "@overclock/discovery";
 import type { RecoveryEngine } from "@overclock/recovery";
-import { SwarmContext, cacheKey, type SwarmDeps } from "@overclock/swarm";
+import { ReviewRejectedError, SwarmContext, blockingRisks, cacheKey, reviewPlan, type PlanReview, type SwarmDeps } from "@overclock/swarm";
 import { Executor } from "./executor";
 import { AccessPathController } from "./accessPaths";
 import type { RunController } from "./run";
@@ -39,8 +39,9 @@ function emptyProgram(runId: string, d: SwarmDeps): CompiledProgram {
  *    expressions, read-only effects), first for one record (canary), then for every record;
  *    its pages are read-only at the network layer while it runs;
  *  - a write fragment is deferred until its phase is sealed, the whole plan validates, side
- *    effects are classified, and the critique (when enabled) passed; then one record writes and
- *    verifies by read-back before the template fans out;
+ *    effects are classified, and the critique (when enabled) passed for that exact plan; a
+ *    repaired plan is critiqued again, and an unavailable critique rejects the plan (fail-closed);
+ *    then one record writes and verifies by read-back before the template fans out;
  *  - phases that depend on other phases (cross-record aggregates) wait for those phases to finish.
  */
 export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
@@ -193,63 +194,101 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     throw err;
   }
 
-  // 5. Whole-plan validation. Anything the stream missed (or a repaired plan) falls back to staged execution.
+  // 5. Whole-plan validation. Anything the stream missed (or a repaired plan) can't run as streamed:
+  //    it is repaired and runs staged instead.
   const issues = ic.finalize(plan);
   const streamedSteps = new Set(ic.releasedOrder.flatMap((r) => r.segment.nodeIds));
   const allSteps = plan.phases.flatMap((p) => p.steps.map((s) => s.id));
   const missing = allSteps.filter((id) => !streamedSteps.has(id));
-  let fallback: string | null = null;
-  if (repaired) fallback = "the planner's first output needed a repair round, so the streamed fragments may not match the final plan";
-  else if (hasErrors(issues)) fallback = `whole-plan validation failed: ${issues.filter((i) => i.severity === "error").map((i) => i.message).slice(0, 3).join("; ")}`;
-  else if (missing.length) fallback = `${missing.length} step(s) did not arrive as valid fragments (${missing.slice(0, 5).join(", ")})`;
+  let structural: string | null = null;
+  if (repaired) structural = "the planner's first output needed a repair round, so the streamed fragments may not match the final plan";
+  else if (hasErrors(issues)) structural = `whole-plan validation failed: ${issues.filter((i) => i.severity === "error").map((i) => i.message).slice(0, 3).join("; ")}`;
+  else if (missing.length) structural = `${missing.length} step(s) did not arrive as valid fragments (${missing.slice(0, 5).join(", ")})`;
 
-  // 6. Critique gates the writes (runs while reads keep executing).
-  if (!fallback) {
-    await effectsP;
-    if (critique) {
-      const crit = await ctx
-        .stage("critique", "adversarial verifier on the streamed plan", () => ctx.agent("adversarial-verifier", "adversarial-verifier", "Adversarial Verifier", { model: d.claude.modelFor("helper") }, () => critiquePlan(d.claude, { goal: d.config.goal, plan, models, issues, signal: d.signal })))
-        .catch(() => null);
-      const high = crit?.result.risks.filter((r) => r.severity === "high") ?? [];
-      d.saveArtifact("adversarial-verifier", "risk-report", `Risks: ${plan.strategy.name}`, crit ? `${crit.result.risks.length} risk(s), ${high.length} high` : "critique unavailable", crit?.result ?? null, { risks: crit?.result.risks.length ?? 0, high: high.length });
-      if (!crit) {
-        // The gate fails closed: no write runs without the review it requires.
-        emit({ type: "log", level: "error", message: "critique unavailable after a retry; writes were not released" });
-        for (const w of writes) emit({ type: "fragment", fragmentId: fragmentOf.get(w.segId) ?? w.segId, phaseId: w.phaseId, segmentIds: [w.segId], state: "rejected", label: compiled.segments.get(w.segId)?.label ?? w.segId, reason: "critique unavailable; writes not released", effect: "write" });
-        executor.scheduler.cancelAll("critique unavailable: writes not released");
-        executor.scheduler.sealProgram();
-        executor.wake();
-        await execP;
-        deepAbort.abort();
-        await deepP;
-        emit({ type: "stage", stage: "execution", phase: "end" });
-        return;
-      }
-      if (high.length) fallback = `critique found ${high.length} high-severity risk(s): ${high.map((h) => `${h.stepId}: ${h.issue}`).slice(0, 2).join("; ")}`;
-    }
-  }
-
-  if (fallback) {
-    // Writes never ran; reads were side-effect free. Replace the program with a repaired, staged one.
-    emit({ type: "log", level: "warn", message: `streaming fallback: ${fallback}` });
-    for (const w of writes) emit({ type: "fragment", fragmentId: fragmentOf.get(w.segId) ?? w.segId, phaseId: w.phaseId, segmentIds: [w.segId], state: "rejected", label: compiled.segments.get(w.segId)?.label ?? w.segId, reason: `superseded: ${fallback.slice(0, 160)}`, effect: "write" });
+  type Lowered = ReturnType<typeof lowerPlan>;
+  const repairOnce = async (previous: DslPlan, problems: string[], detail: string) => {
+    const fixed = await ctx.stage("planning", detail, () => repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan: previous, issues: problems.map((message) => ({ severity: "error", message })) }, signal: d.signal }));
+    const p = fixed.data;
+    emit({ type: "log", level: "info", message: fixed.mode === "patch" ? `${detail}: ${fixed.edits} edit(s) to the streamed plan in ${Math.round(fixed.ms)} ms` : `${detail}: full re-plan in ${Math.round(fixed.ms)} ms${fixed.patchError ? ` (edits were not usable: ${fixed.patchError})` : ""}` });
+    d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${p.strategy.name} (${detail}, ${fixed.mode === "patch" ? `${fixed.edits} edits` : "full re-plan"})`, p.strategy.summary, { plan: p }, { phases: p.phases.length, steps: p.phases.reduce((n, x) => n + x.steps.length, 0) });
+    const lowered = lowerPlan({ plan: p, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
+    return { plan: p, lowered, errs: [...lowered.issues, ...validateProgram(lowered.program)].filter((i) => i.severity === "error") };
+  };
+  /** A repair plus, as on the staged path, one more round on the repaired plan's validation errors only. */
+  const fix = async (previous: DslPlan, problems: string[], detail: string): Promise<{ plan: DslPlan; compiled: Lowered | null }> => {
+    let fixed = await repairOnce(previous, problems, detail);
+    if (fixed.errs.length) fixed = await repairOnce(fixed.plan, fixed.errs.map((e) => e.message), "repair: validation errors in the repaired plan");
+    if (fixed.errs.length) throw new Error(`repaired plan invalid: ${fixed.errs.map((e) => e.message).slice(0, 3).join("; ")}`);
+    return { plan: fixed.plan, compiled: fixed.lowered };
+  };
+  // Once the plan is replaced, no streamed write may run: reject them all and stop the streamed program.
+  let superseded = false;
+  const supersede = async (why: string) => {
+    if (superseded) return;
+    superseded = true;
+    emit({ type: "log", level: "warn", message: `streaming fallback: ${why}` });
+    for (const w of writes) emit({ type: "fragment", fragmentId: fragmentOf.get(w.segId) ?? w.segId, phaseId: w.phaseId, segmentIds: [w.segId], state: "rejected", label: compiled.segments.get(w.segId)?.label ?? w.segId, reason: `superseded: ${why.slice(0, 160)}`, effect: "write" });
     executor.scheduler.cancelAll("superseded by the repaired plan");
     executor.scheduler.sealProgram();
     executor.wake();
     await execP;
-    const repair = async (previous: DslPlan, problems: { severity: string; message: string }[], detail: string) => {
-      const fixed = await ctx.stage("planning", detail, () => repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan: previous, issues: problems }, signal: d.signal }));
-      const p = fixed.data;
-      emit({ type: "log", level: "info", message: fixed.mode === "patch" ? `${detail}: ${fixed.edits} edit(s) to the streamed plan in ${Math.round(fixed.ms)} ms` : `${detail}: full re-plan in ${Math.round(fixed.ms)} ms${fixed.patchError ? ` (edits were not usable: ${fixed.patchError})` : ""}` });
-      d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${p.strategy.name} (${detail}, ${fixed.mode === "patch" ? `${fixed.edits} edits` : "full re-plan"})`, p.strategy.summary, { plan: p }, { phases: p.phases.length, steps: p.phases.reduce((n, x) => n + x.steps.length, 0) });
-      const lowered = lowerPlan({ plan: p, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
-      return { plan: p, lowered, errs: [...lowered.issues, ...validateProgram(lowered.program)].filter((i) => i.severity === "error") };
-    };
-    let fixed = await repair(plan, [{ severity: "error", message: fallback! }, ...issues.filter((i) => i.severity === "error")], "repair after streaming fallback");
-    // Same bound as the staged path: one more round, on the repaired plan's validation errors only.
-    if (fixed.errs.length) fixed = await repair(fixed.plan, fixed.errs, "repair: validation errors in the repaired plan");
-    if (fixed.errs.length) throw new Error(`repaired plan invalid: ${fixed.errs.map((e) => e.message).slice(0, 3).join("; ")}`);
-    const { plan: fixedPlan, lowered } = fixed;
+  };
+
+  // 6. The review gate. Every write of this run, streamed or repaired, waits for a passed review of
+  //    the exact plan it belongs to (when the policy requires one). Reads keep running meanwhile.
+  //    It fails closed: an unavailable critique, a failed repair, or risks left after the repair
+  //    reject the plan and no write runs.
+  await effectsP;
+  let staged: { plan: DslPlan; compiled: Lowered | null } | null = null;
+  if (structural) {
+    await supersede(structural);
+    staged = await fix(plan, [structural, ...issues.filter((i) => i.severity === "error").map((i) => i.message)], "repair after streaming fallback");
+  }
+  let review: PlanReview = { status: "not-required", reason: d.claude.available ? `small task (${n} records): no critique by policy` : "no critique: the planner model is unavailable" };
+  if (critique) {
+    const subject = staged ? "repaired plan" : "streamed plan";
+    const outcome = await ctx.stage("critique", `adversarial verifier on the ${subject}`, () =>
+      ctx.agent("adversarial-verifier", "adversarial-verifier", "Adversarial Verifier", { model: d.claude.modelFor("critic") }, () =>
+        reviewPlan<Lowered | null>({
+          subject,
+          plan: staged?.plan ?? plan,
+          compiled: staged?.compiled ?? null,
+          assess: async (p, lowered) => {
+            const crit = await critiquePlan(d.claude, { goal: d.config.goal, plan: p, models, issues: lowered ? lowered.issues : issues, signal: d.signal })
+              .then((r) => r.result)
+              .catch(() => undefined);
+            const high = crit?.risks.filter((r) => r.severity === "high") ?? [];
+            d.saveArtifact("adversarial-verifier", "risk-report", `Risks: ${p.strategy.name}`, crit ? `${crit.risks.length} risk(s), ${high.length} high` : "critique unavailable", crit ?? null, { risks: crit?.risks.length ?? 0, high: high.length });
+            return { available: !!crit, problems: crit ? blockingRisks(crit) : [], critique: crit };
+          },
+          repair: async (p, problems) => {
+            await supersede(`critique found ${problems.length} blocking finding(s): ${problems.slice(0, 2).join("; ")}`);
+            return fix(p, problems, "repair after critique");
+          },
+          maxRepairs: 1,
+          emit,
+          now: () => d.now(),
+        }),
+      ),
+    );
+    if (!outcome.ok) {
+      for (const w of writes) emit({ type: "fragment", fragmentId: fragmentOf.get(w.segId) ?? w.segId, phaseId: w.phaseId, segmentIds: [w.segId], state: "rejected", label: compiled.segments.get(w.segId)?.label ?? w.segId, reason: `review rejected: ${outcome.reason.slice(0, 160)}`, effect: "write" });
+      executor.scheduler.cancelAll(`review rejected: ${outcome.reason}`);
+      executor.scheduler.sealProgram();
+      executor.wake();
+      await execP;
+      deepAbort.abort();
+      await deepP;
+      emit({ type: "stage", stage: "execution", phase: "end" });
+      throw new ReviewRejectedError(outcome.reason);
+    }
+    review = { status: "passed", rounds: outcome.rounds };
+    if (staged || outcome.repaired) staged = { plan: outcome.plan, compiled: outcome.compiled };
+  }
+
+  if (staged) {
+    // Reads were side-effect free and no streamed write ran. Run the reviewed, repaired plan staged.
+    const lowered = staged.compiled ?? lowerPlan({ plan: staged.plan, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
     const program = compileProgram(lowered.program, (x) => d.latency.nodeMs(x));
     run.publishProgram(program);
     const second = new Executor({ ...executorOptions(run, d, a, program) });
@@ -258,7 +297,7 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     deepAbort.abort();
     await deepP;
     emit({ type: "stage", stage: "execution", phase: "end" });
-    if (d.cache) d.cache.put(cacheKey(d.config), { plan: fixedPlan, models });
+    if (d.cache) d.cache.put(cacheKey(d.config), { plan: staged.plan, models, review });
     return;
   }
 
@@ -279,7 +318,7 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
   deepAbort.abort();
   await deepP;
   emit({ type: "stage", stage: "execution", phase: "end" });
-  if (d.cache) d.cache.put(cacheKey(d.config), { plan, models });
+  if (d.cache) d.cache.put(cacheKey(d.config), { plan, models, review });
 }
 
 function executorOptions(run: RunController, d: SwarmDeps, a: StreamingArgs, compiled: CompiledProgram): ConstructorParameters<typeof Executor>[0] {

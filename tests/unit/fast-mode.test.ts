@@ -206,6 +206,18 @@ describe("planner fast mode", () => {
     }
   });
 
+  it("sends the critique at the critic's own model and speed", async () => {
+    const m = await import("@overclock/models");
+    const claude = new m.ClaudeProvider({ ...m.claudeConfigFromEnv(), helperModel: "claude-haiku-5-5", criticModel: "claude-opus-5-5", criticSpeed: "fast" }, new m.ModelLedger(undefined));
+    replies = [ok({ speed: "fast" }), ok()];
+    await claude.parse({ ...req, role: "critic" });
+    await claude.parse({ ...req, role: "helper" });
+    expect(seen.map((s) => [s.body.model, s.body.speed ?? "standard"])).toEqual([
+      ["claude-opus-5-5", "fast"],
+      ["claude-haiku-5-5", "standard"],
+    ]);
+  });
+
   it("leaves helper-role calls at standard speed", async () => {
     const { claude } = await provider();
     replies = [ok()];

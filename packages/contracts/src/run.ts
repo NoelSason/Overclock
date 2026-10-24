@@ -173,7 +173,14 @@ export const RunSummary = z.object({
   unconfirmed: z.number(),
   skipped: z.number(),
   needsApproval: z.number(),
+  /** Unique input records whose outcome is VERIFIED or SKIPPED (see countInputRecordsVerified). */
   recordsVerified: z.number(),
+  /**
+   * How recordsVerified was counted. "input-records": unique input records only, so it never
+   * exceeds `records`. Absent in summaries recorded before that rule, which also counted records
+   * that later phases derive (a customer to hold) and can exceed `records`.
+   */
+  recordsAccounting: z.enum(["input-records"]).optional(),
   recoveries: z.number(),
   modelCalls: z.number(),
   inputTokens: z.number(),
@@ -218,3 +225,15 @@ export const RecordOutcome = z.object({
   notes: z.array(z.string()),
 });
 export type RecordOutcome = z.infer<typeof RecordOutcome>;
+
+/**
+ * Unique input records whose outcome is VERIFIED or SKIPPED. Outcomes of records that a later
+ * phase derives (for example customers to hold) are not input records and are not counted, so the
+ * count never exceeds the number of input records. Whether a VERIFIED or SKIPPED claim is right is
+ * for the independent checker to say, not this count.
+ */
+export function countInputRecordsVerified(outcomes: readonly RecordOutcome[]): number {
+  const keys = new Set<string>();
+  for (const o of outcomes) if (o.scope !== "derived" && (o.status === "VERIFIED" || o.status === "SKIPPED")) keys.add(o.recordKey);
+  return keys.size;
+}

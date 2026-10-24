@@ -22,6 +22,8 @@ export interface MiniApp {
   failActivity: "none" | "before-commit-503" | "after-commit-500" | "commit-twice" | "silent-reject" | "silent-reject-always";
   /** Activity entries committed (a double commit counts twice). */
   activityCommits: number;
+  /** Requests to GET /logout, a state-changing GET route (it ends the session in real apps). */
+  logouts: number;
   close(): Promise<void>;
 }
 
@@ -30,7 +32,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export async function startMiniApp(): Promise<MiniApp> {
   const items = new Map<string, { id: string; name: string; status: string; notes: string[] }>();
   for (let i = 1; i <= 23; i++) items.set(`I-${i}`, { id: `I-${i}`, name: `Item ${i}`, status: i % 3 === 0 ? "closed" : "open", notes: [] });
-  const app: MiniApp = { origin: "", items, failNextWrite: "none", writes: 0, activity: new Map(), decoy: null, draft: null, failActivity: "none", activityCommits: 0, close: async () => undefined };
+  const app: MiniApp = { origin: "", items, failNextWrite: "none", writes: 0, activity: new Map(), decoy: null, draft: null, failActivity: "none", activityCommits: 0, logouts: 0, close: async () => undefined };
 
   const page = (title: string, body: string) => `<!doctype html><html><head><title>${esc(title)}</title></head><body><main><h1>${esc(title)}</h1>${body}</main></body></html>`;
 
@@ -40,6 +42,16 @@ export async function startMiniApp(): Promise<MiniApp> {
       res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
     };
+    if (req.method === "GET" && url.pathname === "/") {
+      // A home page, so a crawler starting at "/" reaches every route pattern.
+      send(200, page("Mini", `<nav><a href="/items">Items</a> <a href="/items/I-1/activity">Recent activity</a></nav>`));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/logout") {
+      app.logouts++;
+      send(200, page("Signed out", "<p>You have been signed out.</p>"));
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/items") {
       const p = Number(url.searchParams.get("page") ?? "1");
       const all = [...items.values()];

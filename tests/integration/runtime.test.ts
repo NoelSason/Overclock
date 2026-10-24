@@ -123,4 +123,28 @@ describe("browser runtime (hand-written IR)", () => {
     expect(String(offList)).toMatch(/outside the allowlist/);
     await w.close();
   });
+
+  it("blocks state-changing GETs on read-only execution pages, but not legitimate reads or write pages", async () => {
+    // An execution context (no blockMutations): pages are read-only only while they run a read fragment.
+    const w = await worker();
+    const page = await w.context.newPage();
+    const before = app.logouts;
+    browser.setReadOnly(page, true);
+    expect((await page.goto(`${app.origin}/items`))?.status()).toBe(200);
+    expect((await page.goto(`${app.origin}/items/I-1`))?.status()).toBe(200);
+    const risky = await page.goto(`${app.origin}/logout`).catch((e: Error) => e);
+    expect(risky).toBeInstanceOf(Error);
+    // A script on a legitimately loaded read-only page can't reach it either.
+    const reader = await w.context.newPage();
+    browser.setReadOnly(reader, true);
+    expect((await reader.goto(`${app.origin}/items`))?.status()).toBe(200);
+    await reader.evaluate((u) => fetch(u).then(() => "sent", () => "blocked"), `${app.origin}/logout`);
+    expect(app.logouts).toBe(before);
+    expect(browser.guardStats.get(w.context)!.blockedRiskyGets).toBe(2);
+    // A write segment's page follows the plan's own navigation unchanged.
+    browser.setReadOnly(page, false);
+    expect((await page.goto(`${app.origin}/logout`))?.status()).toBe(200);
+    expect(app.logouts).toBe(before + 1);
+    await w.close();
+  });
 });
