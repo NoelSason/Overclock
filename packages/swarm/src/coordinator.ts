@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { AgentRole, AppBinding, AppModel, ArtifactSummary, CostEstimate, DslPlan, EventPayload, RunConfig, StageName } from "@overclock/contracts";
 import type { BrowserManager, StorageState } from "@overclock/browser-runtime";
 import { compileProgram, hasErrors, lowerPlan, validateProgram, type CompiledProgram, type Issue } from "@overclock/compiler";
-import { buildCatalog, classifyEffects, crawlApp, critiquePlan, dryRunCandidate, generatePlan, renderCatalog, strategyDirectives, type CritiqueResult, type DryRunResult } from "@overclock/discovery";
+import { buildCatalog, classifyEffects, crawlApp, critiquePlan, dryRunCandidate, generatePlan, renderCatalog, repairPlan, strategyDirectives, type CritiqueResult, type DryRunResult } from "@overclock/discovery";
 import type { ClaudeProvider, JevProvider } from "@overclock/models";
 import { estimateCost, recommendWorkers, selectCandidate, type LatencyModel } from "@overclock/optimizer";
 import { decidePolicy, type PolicyDecision } from "./policy";
@@ -158,7 +158,7 @@ export class SwarmContext {
       let repaired = false;
       if (hasErrors(issues)) {
         repaired = true;
-        plan = (await generatePlan(d.claude, { goal: d.config.goal, records, models, directive, catalog, previous: { plan, issues: issues.filter((i) => i.severity === "error") }, signal: d.signal }, "planner.repair")).data;
+        plan = (await repairPlan(d.claude, { goal: d.config.goal, records, models, directive, catalog, previous: { plan, issues: issues.filter((i) => i.severity === "error") }, signal: d.signal })).data;
         ({ compiled, issues } = this.compile(plan, models, candidateId));
       }
       const valid = !hasErrors(issues) && compiled !== null;
@@ -276,6 +276,12 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
                 policy.critique ? critiquePlan(d.claude, { goal: d.config.goal, plan: c.plan, models, issues: c.issues, signal: d.signal }).then((r) => r.result).catch(() => undefined) : Promise.resolve(undefined),
                 policy.dryRun ? dryRunCandidate({ compiled: c.compiled!, browser: d.browser, storageState: d.exploreState, apps: d.config.applications, inputs: { records: d.config.records }, latency: d.latency, signal: d.signal }).catch(() => undefined) : Promise.resolve(undefined),
               ]);
+              if (policy.critique && !crit) {
+                // The review this policy requires didn't happen (even after a retry): the candidate can't run.
+                c.valid = false;
+                c.issues = [...c.issues, { severity: "error", code: "critique-unavailable", message: "critique unavailable after a retry" }];
+                return;
+              }
               c.critique = crit;
               c.dryRun = dry;
               const high = crit?.risks.filter((r) => r.severity === "high") ?? [];
@@ -285,7 +291,7 @@ export async function runStagedSwarm(deps: SwarmDeps): Promise<SwarmResult> {
                 const issues = [...high.map((r) => ({ severity: "error", message: `[verifier] step ${r.stepId}: ${r.issue} — ${r.suggestion}` })), ...(dry?.failures ?? []).map((f) => ({ severity: "error", message: `[dry run] ${f}` }))];
                 try {
                   const directive = chosen.find((x) => c.candidateId.endsWith(x.name)) ?? chosen[0]!;
-                  const plan = (await generatePlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, catalog: catalog || undefined, previous: { plan: c.plan, issues }, signal: d.signal }, "planner.repair")).data;
+                  const plan = (await repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, catalog: catalog || undefined, previous: { plan: c.plan, issues }, signal: d.signal })).data;
                   const r = ctx.compile(plan, models, c.candidateId);
                   if (r.compiled) {
                     c.plan = plan;

@@ -59,6 +59,37 @@ function outPath(src: string): { step: string; field: string | undefined } | nul
  *  - A guard the plan left out is added when an edit fills or selects a control whose value an
  *    extract read, under the same condition, before the form's first change.
  */
+/**
+ * Fills, selects, and clicks between an edit's goto and its submit inherit the submit's "when"
+ * when they have none: without the submit nothing they do is saved, so gating them the same way
+ * changes no effect and spares the planner repeating the condition. Gotos and extracts keep their
+ * own conditions, because decisions may depend on what they read.
+ */
+export function inheritSubmitConditions(plan: DslPlan): DslPlan {
+  let changed = false;
+  const phases = plan.phases.map((ph) => {
+    const steps = [...ph.steps];
+    let chainStart = 0;
+    for (let i = 0; i < steps.length; i++) {
+      const st = steps[i]!;
+      if (st.op === "goto") chainStart = i + 1;
+      else if (st.op === "submit") {
+        if (st.when)
+          for (let j = chainStart; j < i; j++) {
+            const x = steps[j]!;
+            if ((x.op === "fill" || x.op === "select" || x.op === "click") && !x.when) {
+              steps[j] = { ...x, when: st.when };
+              changed = true;
+            }
+          }
+        chainStart = i + 1;
+      }
+    }
+    return { ...ph, steps };
+  });
+  return changed ? { ...plan, phases } : plan;
+}
+
 export function addReadGuards(plan: DslPlan): { plan: DslPlan; added: { stepId: string; control: string }[]; dropped: { stepId: string; control: string; equals: string }[] } {
   const added: { stepId: string; control: string }[] = [];
   const dropped: { stepId: string; control: string; equals: string }[] = [];
@@ -179,7 +210,7 @@ export function stepExprs(s: DslStep): string[] {
  */
 export function lowerPlan(input: LowerInput): LowerResult {
   const issues: Issue[] = [];
-  const { plan, added, dropped } = addReadGuards(input.plan);
+  const { plan, added, dropped } = addReadGuards(inheritSubmitConditions(input.plan));
   for (const a of added) issues.push({ severity: "warning", code: "auto-guard", message: `Submit "${a.stepId}" now guards "${a.control}" with the value the plan read earlier (compare-and-swap)`, stepId: a.stepId });
   for (const d of dropped) issues.push({ severity: "warning", code: "computed-guard", message: `Submit "${d.stepId}" guarded "${d.control}" with a computed value (${d.equals}); a guard must compare with a value read from the app, so it was dropped`, stepId: d.stepId });
   const controls = new Map<string, AppControl>();

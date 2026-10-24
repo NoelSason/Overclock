@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionNode, DslPlan, DslStep } from "@overclock/contracts";
-import { addReadGuards, compileProgram, dependencyAnalysis, evaluate, commonSubexpressionReuse, hasErrors, lowerPlan, redundantObservationElimination, renderTemplate, topoSort, validateProgram, verificationPlacement, type Scope } from "@overclock/compiler";
+import { addReadGuards, compileProgram, inheritSubmitConditions, dependencyAnalysis, evaluate, commonSubexpressionReuse, hasErrors, lowerPlan, redundantObservationElimination, renderTemplate, topoSort, validateProgram, verificationPlacement, type Scope } from "@overclock/compiler";
 import { apps, ordersModel, supportModel } from "../fixtures/appmodel";
 
 const records = [{ orderId: "ORD-1" }, { orderId: "ORD-2" }];
@@ -151,6 +151,20 @@ describe("lowering and validation", () => {
     // An extract after the form changed reads the new value, so it never becomes a guard.
     const late = addReadGuards(plan(edit([], [{ id: "confirm", op: "extract", fields: [{ name: "status", control: "support.edit.status", parse: "string" }] }])));
     expect(late.added).toEqual([]);
+  });
+
+  it("gates an edit's fills with its submit's condition, but never gotos or extracts", () => {
+    const ungated = steps.map((st) => (st.id === "set_status" ? { ...st, when: undefined } : st)) as DslStep[];
+    const out = inheritSubmitConditions(plan(ungated));
+    const byId = new Map(out.phases[0]!.steps.map((x) => [x.id, x]));
+    expect(byId.get("set_status")!.when).toBe("$out.decide.needs");
+    expect(byId.get("read_order")!.when).toBeUndefined();
+    // A fill that already has its own condition keeps it.
+    const own = steps.map((st) => (st.id === "set_status" ? { ...st, when: "true" } : st)) as DslStep[];
+    expect(inheritSubmitConditions(plan(own)).phases[0]!.steps.find((x) => x.id === "set_status")!.when).toBe("true");
+    // Lowering applies it.
+    const { program } = lower(plan(ungated));
+    expect(program.nodes[0]!.body!.find((n) => n.id === "set_status")!.when).toBe("$out.decide.needs");
   });
 
   it("rejects controls that were never observed", () => {

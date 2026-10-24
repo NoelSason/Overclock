@@ -1,7 +1,7 @@
 import { DslStep, normalizeModelOutput, type DslPlan, type EventPayload } from "@overclock/contracts";
 import type { StorageState } from "@overclock/browser-runtime";
 import { compileProgram, hasErrors, IncrementalCompiler, lowerPlan, validateProgram, type CompiledProgram } from "@overclock/compiler";
-import { critiquePlan, generatePlan, PlanStreamWatcher, strategyDirectives } from "@overclock/discovery";
+import { critiquePlan, generatePlan, PlanStreamWatcher, repairPlan, strategyDirectives } from "@overclock/discovery";
 import type { RecoveryEngine } from "@overclock/recovery";
 import { SwarmContext, cacheKey, type SwarmDeps } from "@overclock/swarm";
 import { Executor } from "./executor";
@@ -212,6 +212,19 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
         .catch(() => null);
       const high = crit?.result.risks.filter((r) => r.severity === "high") ?? [];
       d.saveArtifact("adversarial-verifier", "risk-report", `Risks: ${plan.strategy.name}`, crit ? `${crit.result.risks.length} risk(s), ${high.length} high` : "critique unavailable", crit?.result ?? null, { risks: crit?.result.risks.length ?? 0, high: high.length });
+      if (!crit) {
+        // The gate fails closed: no write runs without the review it requires.
+        emit({ type: "log", level: "error", message: "critique unavailable after a retry; writes were not released" });
+        for (const w of writes) emit({ type: "fragment", fragmentId: fragmentOf.get(w.segId) ?? w.segId, phaseId: w.phaseId, segmentIds: [w.segId], state: "rejected", label: compiled.segments.get(w.segId)?.label ?? w.segId, reason: "critique unavailable; writes not released", effect: "write" });
+        executor.scheduler.cancelAll("critique unavailable: writes not released");
+        executor.scheduler.sealProgram();
+        executor.wake();
+        await execP;
+        deepAbort.abort();
+        await deepP;
+        emit({ type: "stage", stage: "execution", phase: "end" });
+        return;
+      }
       if (high.length) fallback = `critique found ${high.length} high-severity risk(s): ${high.map((h) => `${h.stepId}: ${h.issue}`).slice(0, 2).join("; ")}`;
     }
   }
@@ -225,8 +238,10 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     executor.wake();
     await execP;
     const repair = async (previous: DslPlan, problems: { severity: string; message: string }[], detail: string) => {
-      const p = (await ctx.stage("planning", detail, () => generatePlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan: previous, issues: problems }, signal: d.signal }, "planner.repair"))).data;
-      d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${p.strategy.name} (${detail})`, p.strategy.summary, { plan: p }, { phases: p.phases.length, steps: p.phases.reduce((n, x) => n + x.steps.length, 0) });
+      const fixed = await ctx.stage("planning", detail, () => repairPlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan: previous, issues: problems }, signal: d.signal }));
+      const p = fixed.data;
+      emit({ type: "log", level: "info", message: fixed.mode === "patch" ? `${detail}: ${fixed.edits} edit(s) to the streamed plan in ${Math.round(fixed.ms)} ms` : `${detail}: full re-plan in ${Math.round(fixed.ms)} ms${fixed.patchError ? ` (edits were not usable: ${fixed.patchError})` : ""}` });
+      d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${p.strategy.name} (${detail}, ${fixed.mode === "patch" ? `${fixed.edits} edits` : "full re-plan"})`, p.strategy.summary, { plan: p }, { phases: p.phases.length, steps: p.phases.reduce((n, x) => n + x.steps.length, 0) });
       const lowered = lowerPlan({ plan: p, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
       return { plan: p, lowered, errs: [...lowered.issues, ...validateProgram(lowered.program)].filter((i) => i.severity === "error") };
     };

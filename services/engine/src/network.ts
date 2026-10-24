@@ -3,7 +3,7 @@ import type { AppModel, DslPlan, EventPayload, RunConfig } from "@overclock/cont
 import type { BrowserManager, StorageState } from "@overclock/browser-runtime";
 import type { CompatibilityOutcome, INetworkClient, NetworkConfig } from "@overclock/network-contracts";
 import { NetworkClient, networkConfigFromEnv } from "@overclock/network-client";
-import { addReadGuards } from "@overclock/compiler";
+import { addReadGuards, inheritSubmitConditions } from "@overclock/compiler";
 import { analyzeCapability, canonicalOperation, exportCapability, rebindCapability } from "@overclock/network-capability";
 
 /** Outcomes a runtime may execute after rebinding; anything else falls back to cold discovery. */
@@ -145,7 +145,7 @@ export async function publishCapability(o: Emitter & { client: INetworkClient; c
   // The artifact hash covers publisherId, and the client sends its own identity, so export with it.
   const publisherId = o.client.identity ?? undefined;
   // Publish what was executed: lowering added the same compare-and-swap guards to the run's program.
-  const base = { plan: addReadGuards(o.plan).plan, models: o.models, apps: o.config.applications, goal: o.config.goal, recordFields: recordFieldsOf(o.config.records), verifiedReceipts: o.verifiedReceipts, compilerVersion: COMPILER_VERSION, records: o.config.records, publisherId };
+  const base = { plan: addReadGuards(inheritSubmitConditions(o.plan)).plan, models: o.models, apps: o.config.applications, goal: o.config.goal, recordFields: recordFieldsOf(o.config.records), verifiedReceipts: o.verifiedReceipts, compilerVersion: COMPILER_VERSION, records: o.config.records, publisherId };
   let exported: ReturnType<typeof exportCapability>;
   try {
     exported = exportCapability(base);

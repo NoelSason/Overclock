@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DslPlan, normalizeModelPlan, type AppModel } from "@overclock/contracts";
+import { DslPhase, DslPlan, DslStep, normalizeModelOutput, normalizeModelPlan, type AppModel } from "@overclock/contracts";
 import type { ClaudeProvider, ParseResult } from "@overclock/models";
 import type { Issue } from "@overclock/compiler";
 import { renderAppModel } from "./render";
@@ -31,7 +31,7 @@ export const PLANNER_SYSTEM = `You are the Workflow Scout of Overclock, an execu
   - guards: compare-and-swap checks on the edit form before submitting. For each field you change whose earlier value you read, add {control: <that edit-form field>, equals: <the value you read earlier>}. If the record changed in the meantime the runtime re-reads and recomputes instead of overwriting.
   - verify: {url: the record's detail page, fields: [{name, control: a FACT on that page, equals: expected value}]}. The runtime loads it fresh after the write and only reports success if every field matches. Facts usually show human labels ("On hold", "Yes"), so compare against what the detail page displays (use equalsIgnoreCase-compatible values). To verify an appended entry (a note, a comment), verify against the FACT of the section that lists the entries with the exact entry text as the expected value: the runtime passes only when exactly one entry equals it, on the same record's page.
 - Append-only writes (adding a note, comment, or log entry) have nothing to compare-and-swap. Make them idempotent instead: read the existing entries first (extract the FACT of the section that lists them) and gate every step of the write with a "when" that is false if the same text is already there. Verify that the entry appears after saving. They are not irreversible unless they send something outside the application.
-- Every step can have "when": the step runs only if the expression is true. Gate every step of an edit (its goto, fills, selects, and submit) with the same "when" so nothing is written when no change is needed. Keep each submit in its own short chain: goto edit page -> fills/selects -> submit.
+- Every step can have "when": the step runs only if the expression is true. Gate an edit's goto and its submit with the same "when" so nothing is written when no change is needed; fills, selects, and clicks between them inherit the submit's "when", so write it on them only when it differs. Keep each submit in its own short chain: goto edit page -> fills/selects -> submit.
 - Step ids are unique across the whole plan (snake_case). Phase ids are distinct from step ids.
 - Omit optional fields you don't need (for example "when", "after", "note").
 
@@ -42,7 +42,7 @@ export const PLANNER_SYSTEM = `You are the Workflow Scout of Overclock, an execu
 - When a decision counts or matches rows of a search or list table, read every page (paginateNext) unless the page shows that all results fit.
 - Minimise page loads: read each entity once; don't reload a page you're already on; prefer list or search pages that show all needed columns over opening many detail pages when the strategy directive allows. The runtime parallelises across records automatically, so don't try to batch records yourself unless the strategy says so.
 - Batch-level rules (counting across all records) go in a later foreach phase over a list computed from $phase.<per-record phase> with countBy/filterBy/pluck/entries/unique, keyed by the entity id.
-- outcomes: list the business outcomes to verify. assumptions/risks: short and specific.`;
+- outcomes: list the business outcomes to verify. Keep prose short: strategy summary and rationale at most 25 words each; at most 3 assumptions and 3 risks of at most 15 words each.`;
 
 export interface PlannerRequest {
   goal: string;
@@ -62,7 +62,7 @@ export function recordsSummary(records: Record<string, unknown>[]): string {
   return `${records.length} records; fields: ${fields.join(", ")}\nfirst records:\n${sample.join("\n")}`;
 }
 
-export function plannerPrompt(req: PlannerRequest): string {
+export function plannerPrompt(req: PlannerRequest, opts: { patch?: boolean } = {}): string {
   const parts = [
     `<task>\n${req.goal}\n</task>`,
     `<records>\n${recordsSummary(req.records)}\n</records>`,
@@ -72,10 +72,10 @@ export function plannerPrompt(req: PlannerRequest): string {
   parts.push(`<strategy_directive name="${req.directive.name}">\n${req.directive.text}\n</strategy_directive>`);
   if (req.previous) {
     parts.push(
-      `<previous_attempt>\nYour previous plan failed validation or review. Fix every issue below and return the complete corrected plan.\nIssues:\n${req.previous.issues.map((i) => `- [${i.severity}] ${i.message}`).join("\n")}\nPrevious plan:\n${JSON.stringify(req.previous.plan)}\n</previous_attempt>`,
+      `<previous_attempt>\nYour previous plan failed validation or review. Fix every issue below${opts.patch ? " by editing the previous plan" : " and return the complete corrected plan"}.\nIssues:\n${req.previous.issues.map((i) => `- [${i.severity}] ${i.message}`).join("\n")}\nPrevious plan:\n${JSON.stringify(req.previous.plan)}\n</previous_attempt>`,
     );
   }
-  parts.push("Return the complete plan.");
+  parts.push(opts.patch ? "Return only the edits." : "Return the complete plan.");
   return parts.join("\n\n");
 }
 
@@ -90,6 +90,76 @@ ${PLAN_JSON_SCHEMA}`;
 
 export async function generatePlan(claude: ClaudeProvider, req: PlannerRequest & { onText?: (delta: string, snapshot: string) => void }, purpose = "planner.plan"): Promise<ParseResult<DslPlan> & { firstTextMs: number | null; repaired: boolean }> {
   return claude.json({ role: "planner", purpose, system: PLANNER_SYSTEM_WITH_SCHEMA, user: plannerPrompt(req), schema: DslPlan, normalize: (raw) => normalizeModelPlanLoose(raw), maxTokens: 32_000, signal: req.signal, onText: req.onText });
+}
+
+/**
+ * A repair written as edits to the previous plan. Regenerating a whole plan costs 5,000–8,000
+ * output tokens (40–60 s with the planner model); an edit list for the flagged steps is usually a
+ * few hundred.
+ */
+const PlanEdit = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("replaceSteps"), stepId: z.string(), steps: z.array(z.record(z.string(), z.unknown())) }),
+  z.object({ op: z.literal("insertAfter"), stepId: z.string(), steps: z.array(z.record(z.string(), z.unknown())) }),
+  z.object({ op: z.literal("replacePhase"), phaseId: z.string(), phase: z.record(z.string(), z.unknown()) }),
+]);
+export const PlanPatch = z.object({ edits: z.array(PlanEdit).min(1) });
+export type PlanPatch = z.infer<typeof PlanPatch>;
+
+export const PATCH_SYSTEM = `${PLANNER_SYSTEM}
+
+# Repair format
+You are repairing your previous plan. Return only the edits that fix the listed issues, as one JSON object (no prose, no markdown fences):
+{"edits": [
+  {"op": "replaceSteps", "stepId": "<existing step id>", "steps": [<steps that take its place; [] deletes it>]},
+  {"op": "insertAfter", "stepId": "<existing step id>", "steps": [<new steps>]},
+  {"op": "replacePhase", "phaseId": "<existing phase id>", "phase": <complete phase object>}
+]}
+Steps and phases use exactly the shapes of the plan schema below. Keep every step id that later steps reference, or update those references in edits too. Don't repeat steps you aren't changing.
+${PLAN_JSON_SCHEMA}`;
+
+/** Apply edits to a plan. Throws when an edit names an unknown step or phase, or a result is invalid. */
+export function applyPlanPatch(plan: DslPlan, patch: PlanPatch): DslPlan {
+  const out: DslPlan = structuredClone(plan);
+  const findStep = (id: string) => {
+    for (const ph of out.phases) {
+      const i = ph.steps.findIndex((x) => x.id === id);
+      if (i >= 0) return { ph, i };
+    }
+    throw new Error(`edit names unknown step "${id}"`);
+  };
+  for (const e of patch.edits) {
+    if (e.op === "replacePhase") {
+      const i = out.phases.findIndex((x) => x.id === e.phaseId);
+      if (i < 0) throw new Error(`edit names unknown phase "${e.phaseId}"`);
+      out.phases[i] = normalizeModelOutput(DslPhase, e.phase);
+      continue;
+    }
+    const steps = e.steps.map((x) => normalizeModelOutput(DslStep, x));
+    const { ph, i } = findStep(e.stepId);
+    ph.steps.splice(e.op === "replaceSteps" ? i : i + 1, e.op === "replaceSteps" ? 1 : 0, ...steps);
+  }
+  return DslPlan.parse(out);
+}
+
+/**
+ * One repair round: ask for edits first, and regenerate the whole plan only when the edits can't
+ * be applied. The caller validates the result exactly as it would a full plan.
+ */
+export async function repairPlan(
+  claude: ClaudeProvider,
+  req: PlannerRequest & { previous: NonNullable<PlannerRequest["previous"]> },
+  purpose = "planner.repair",
+): Promise<{ data: DslPlan; mode: "patch" | "full"; ms: number; edits: number; patchError?: string | undefined }> {
+  let patchError: string | undefined;
+  try {
+    const r = await claude.json({ role: "planner", purpose: `${purpose}.patch`, system: PATCH_SYSTEM, user: plannerPrompt(req, { patch: true }), schema: PlanPatch, maxTokens: 12_000, signal: req.signal });
+    return { data: applyPlanPatch(req.previous.plan, r.data), mode: "patch", ms: r.ms, edits: r.data.edits.length };
+  } catch (err) {
+    if (req.signal?.aborted) throw err;
+    patchError = err instanceof Error ? err.message.slice(0, 200) : String(err);
+  }
+  const full = await generatePlan(claude, req, purpose);
+  return { data: full.data, mode: "full", ms: full.ms, edits: 0, patchError };
 }
 
 /** Drop nulls/empty sentinels without failing (validation happens on the result). */
