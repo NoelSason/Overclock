@@ -100,6 +100,29 @@ export async function listBenchmarks(dir: string): Promise<BenchmarkListItem[]> 
   return items.filter((x): x is BenchmarkListItem => x !== null).sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name));
 }
 
+/** Network demo reports in `dir`, newest first; files without the report shape are skipped. */
+export async function listTransfers(dir: string): Promise<({ name: string; at: string } & Record<string, unknown>)[]> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const items = await Promise.all(
+    names
+      .filter((n) => n.endsWith(".json"))
+      .map(async (file): Promise<({ name: string; at: string } & Record<string, unknown>) | null> => {
+        try {
+          const data = JSON.parse(await readFile(join(dir, file), "utf8")) as Record<string, unknown>;
+          return typeof data.at === "string" && Array.isArray(data.checks) ? { ...data, name: file.slice(0, -".json".length), at: data.at } : null;
+        } catch {
+          return null;
+        }
+      }),
+  );
+  return items.filter((x) => x !== null).sort((a, b) => b.at.localeCompare(a.at));
+}
+
 /** Resolve a benchmark name to a file inside `dir`, rejecting anything that could escape it. */
 export function benchmarkPath(dir: string, name: string): string {
   const base = name.endsWith(".json") ? name.slice(0, -".json".length) : name;
@@ -271,6 +294,9 @@ export async function createEngineServer(opts: EngineServerOptions): Promise<Eng
     }
     return reply.type("application/json; charset=utf-8").send(text);
   });
+
+  // Recorded network transfer demos (A learns, B imports): one report per `pnpm network:demo` run.
+  app.get("/api/transfers", async () => listTransfers(join(opts.benchmarksDir, "network")));
 
   // ------------------------------------------------------------- lifecycle
 

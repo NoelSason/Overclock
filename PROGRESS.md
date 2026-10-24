@@ -1,6 +1,6 @@
 # Progress
 
-Status of the Overclock Cal Hacks build on 2026-10-24 (about 03:00 PDT). When this file and the
+Status of the Overclock Cal Hacks build on 2026-10-24 (about 13:30 PDT). When this file and the
 code disagree, the code wins.
 
 Labels: **Working (tested)** means automated tests cover it. **Working (measured)** means
@@ -24,9 +24,14 @@ is implemented with a known gap. **Proposed** means design only.
 | Engine store, HTTP API, SSE, restart recovery | Working (tested) | `tests/integration/engine-api.test.ts` |
 | Model-stream stall watchdog | Working (tested) | `tests/unit/model-stall.test.ts`. Added after a repair request hung for 38 minutes during a network outage. |
 | Mode A sequential baseline | Working (tested) | `tests/integration/baseline.test.ts` with a scripted model; not benchmarked in this round |
-| Modes B, C, D, E | Working (measured) | `docs/BENCHMARKS.md`: 34 runs, no failed run, 0 verified-but-wrong records. E 1.4–2× faster than D; E slower than C. |
+| Modes B, C, D, E | Working (measured) | `docs/BENCHMARKS.md`. Morning round: 34 runs, E 1.4–2× faster than D and slower than C. Afternoon paired runs on the current code: E (fast) 18.7–21.6 s for 25 records, about C (fast) at 16.1–20.5 s; 500 records in 42.3 s, 500/500. |
+| Claude fast mode (planner and critic) | Working (tested, measured) | `tests/unit/fast-mode.test.ts`: speed on every request path, fallback to standard on 429/529/overloaded/unsupported, no replay after streamed text reached the consumer, pricing by the speed the response reports. Default since the paired runs. |
+| Review gate before writes (fail-closed) | Working (tested) | `tests/unit/review.test.ts`, `tests/integration/review-gate.test.ts` (modes D and E against a fixture app with a scripted model; the fallback tests fail on the previous pipeline) |
+| Input-record accounting (`recordsVerified`) | Working (tested) | `tests/unit/record-accounting.test.ts`, the multi-phase test in `tests/integration/entry-verification.test.ts`, `tests/unit/benchmark.test.ts` |
 | Holdout evaluation | Done once, after a freeze | Freeze `freeze-2026-10-24-e14db0e-tree-b59e0e950646`. t3 (unseen task): 25/25 in all 6 runs. t4 (unfamiliar app): all 6 runs failed at generic sign-in, before any write. Not re-run after any fix, so the result stays a clean holdout. |
 | Live recovery on the arena | One run | Support save buttons renamed mid-run: 10/10, 0 duplicates; resolved by a lower-ranked locator, no model call |
+| Read-only pages block risky GETs | Working (tested) | `tests/integration/runtime.test.ts` (browser level; fails without the fix) |
+| Saturation-aware adaptive concurrency | Working (tested) | `tests/unit/scheduler.test.ts` (demand-limited windows) |
 | Online access-path substitution | Partial | Wired into mode E; no test |
 | Other online re-optimization | Proposed | Not implemented |
 | Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts`, `tests/unit/arena-oracle.test.ts` |
@@ -36,7 +41,9 @@ is implemented with a known gap. **Proposed** means design only.
 | Network capability layer and validation worker | Working (tested) | `pnpm test:network-capability` |
 | SpacetimeDB module and network client | Working (tested) | `pnpm test:network` against a real local SpacetimeDB |
 | Engine integration with the network | Working (measured) | `pnpm network:demo`: one run with every acceptance check passing ([`docs/NETWORK.md`](docs/NETWORK.md#results)) |
-| Network-warm vs strict-cold comparison | Working (measured, one trial) | Runtime B versus fresh runtime C in `pnpm network:demo` |
+| Network-warm vs strict-cold comparison | Working (measured, 5 seeds) | `benchmarks/results/network/`: with every save button renamed between A and B, B 3.3 s median vs strict-cold C 18.8 s, all runs 10/10; plus a local warm-replay arm |
+| Changed-UI transfer (structural rebinding behind a write canary) | Working (tested, measured) | `tests/network-capability/rebind.test.ts` (renamed button: canary-gated; irreversible or tab-hidden: refused); 5 of 5 seeds in `pnpm network:demo --variation rename-save`; refusal recorded with `--variation fields-in-tab --expect-refusal` |
+| Dashboard Transfer page | Working (manually checked) | `/transfer` renders the recorded demo reports; checked in a browser. No e2e test. |
 | Engine-started network repair | Proposed | Client-level repair leases are tested; the engine doesn't start repair jobs |
 | One-command dev start (`pnpm dev`) | Working | `scripts/dev.ts` |
 
@@ -58,6 +65,12 @@ is implemented with a known gap. **Proposed** means design only.
 | A benchmark run hung for 30 minutes | A model stream stalled during a network outage | Stall watchdog; `tests/unit/model-stall.test.ts` |
 | Warm benchmark repeats never hit the cache | Cold runs didn't store their plan | Every run stores its final plan; only `local-only` and network policies read it |
 | (Found by test, not seen in a recorded run) Form fills could be released as a fragment before their submit when another step streamed in between, forcing a fallback | The release rule treated any segment the stream had moved past as complete | A segment with fills waits for its submit or the phase seal; `tests/unit/incremental.test.ts`. Added after the benchmark and the final demo, neither of which fell back for this reason. |
+| Repaired plans wrote without a critique (mode E after a streaming fallback or a critique; mode D after a failed repair kept the high-risk candidate) | The review ran once, before any repair | `reviewPlan` gates every write path and re-critiques repaired plans; fail-closed; `tests/integration/review-gate.test.ts` |
+| A read fragment could follow a state-changing GET (`/logout`) | The risky-GET screen applied only to exploration contexts | Applied to every read-only page; `tests/integration/runtime.test.ts` |
+| "Engine-verified 108%" in a benchmark report | Outcomes of derived records (a customer to hold) counted as input records | Outcomes carry a scope; `recordsVerified` counts unique input records; older result files show n/a instead of a clamped value |
+| Every fast-mode run needed a repair round, and some failed closed | Plans matched CRM emails against a lowercased order email; the language couldn't normalize the list side | `filterBy(list, 'field', '~=', value)`; `tests/unit/expr.test.ts`. The critique then passed the same recorded plan 3/3 (0/3 before). |
+| The critique truncated and retried (about 14 s lost) | A 3,000-token budget for thinking plus the coverage list | 8,000 first, 16,000 on retry |
+| Seed 2222's first demo attempt: A's capability failed the validator's static analysis | Not recorded | The engine now runs the same analysis before publishing and records the reason; the rerun passed |
 
 ## Test runs for this round
 

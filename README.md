@@ -6,11 +6,14 @@ Overclock makes AI browser agents faster by compiling unfamiliar tasks into opti
 verified execution programs instead of reasoning about every action.
 
 > **Status (2026-10-24, Cal Hacks build).** Every component is implemented, and most have
-> automated tests. Modes B–E have recorded benchmark runs, all graded by the arena's
-> ground-truth checker: streaming mode E is 1.4–2× faster than stage-gated mode D, and slower
-> than the simple compiled mode C (see [Benchmark results](#benchmark-results-2026-10-24)).
-> The Overclock Network transfers a validated capability between independent runtimes
-> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). See [Feature status](#feature-status) and
+> automated tests. Every number below was graded by the arena's independent ground-truth
+> checker. With Claude Opus 5.5 fast mode for planning and critique, a cold mode E run takes
+> about 19 s for 25 records and 42 s for 500 (500/500 correct). After the website's save
+> buttons were renamed, a second, independent runtime imported the first runtime's capability
+> through SpacetimeDB, rebound it, and finished 10 records in a median 3.3 s with no planning
+> call, against 18.8 s for a fresh cold runtime: 5 of 5 seeds, all records correct
+> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). See [Benchmark
+> results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
 ## The problem
@@ -62,10 +65,14 @@ stage-gated system, including all cold-start overhead?
 The Overclock Network shares validated, portable capabilities that one runtime discovered
 through SpacetimeDB, so independent runtimes can reuse them safely. A capability carries the
 plan plus semantic, data-free control descriptors, so a fresh runtime rebinds every control
-against its own live observation before anything executes. In one recorded run (10 records,
-local arena), a fresh runtime imported another runtime's capability, made no planner call,
-and finished in 3.0 s, against 169 s for a fresh strict-cold runtime on the same scenario.
-Both passed the arena's ground-truth check. See [`docs/NETWORK.md`](docs/NETWORK.md#results).
+against its own live observation before anything executes. In five recorded runs (10 records,
+local arena, five seeds), every edit form's save button was renamed after runtime A learned the
+workflow. Runtime B, with its own identity and an empty cache, imported A's capability, rebound
+the renamed buttons by structure, wrote behind a write canary, and finished in a median 3.3 s
+with no planning call, against 18.8 s for a fresh strict-cold runtime on the same records and
+interface (5.9×). Every run of every arm passed the arena's ground-truth check. When the edit
+fields were moved into a tab instead, B refused the capability, guessed nothing, and planned
+cold. See [`docs/NETWORK.md`](docs/NETWORK.md#results) and the dashboard's Transfer page.
 
 **Research question:** Can a fresh runtime execute a compatible workflow with less discovery
 and fewer model calls because another runtime already learned it?
@@ -175,7 +182,9 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#acceptance-tests) for what is 
 
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) is generated from the result files in
 `benchmarks/results/` by `pnpm benchmark:report`. Every number in it comes from an executed
-run. The current result file has 34 runs of modes B, C, D, and E on `t1-order-reconcile` seed
+run. The morning round below was measured at standard speed, before the review-gate, critique,
+and expression-language changes; the next section has the paired runs on the current code. The
+morning result file has 34 runs of modes B, C, D, and E on `t1-order-reconcile` seed
 4242: 3 trials per mode at 25 records under two conditions (local, and realistic injected
 latency), a warm repeat after every cold E run, and one 100-record run per mode. No run failed.
 Median accuracy was 100% in every group. Across all runs, 0 records were reported VERIFIED but
@@ -208,6 +217,42 @@ What this shows:
   in one trial. D (realistic latency, one trial) and B (local, one trial) each missed one
   cross-record customer hold and reported the affected orders as `SKIPPED`: 4 records that were
   wrong decisions, not failed writes.
+
+### Planner speed, the review gate, and scale (2026-10-24, afternoon)
+
+Paired cold runs of mode E and C on the same scenario (t1, seed 4242, 25 records, local), with
+the arena checker grading every run. "Fast" is Claude Opus 5.5 with `speed: "fast"` for the
+planner and for the critique; "standard" is the earlier default (Opus standard planner, Haiku
+critique). Result files: `benchmarks/results/*@e2-*.json` and `*@c-*.json`.
+
+| Configuration | Runs | Wall time | First verified write | Correct | Cost per run |
+| --- | --- | --- | --- | --- | --- |
+| E, fast planner and critique | 3 | 18.7, 18.8, 21.6 s | 17.4–20.5 s | 3 of 3 runs 25/25 | $0.42–0.46 |
+| E, standard planner, Haiku critique | 3 | 52.0, 53.5 s; one run failed closed | 50.7–52.2 s | 2 of 3 runs 25/25; the third wrote nothing | $0.15–0.26 |
+| C, fast planner (no critique) | 2 | 16.1, 20.5 s | 15.4–19.5 s | 2 of 2 runs 25/25 | $0.30–0.35 |
+| C, standard planner (no critique) | 2 | 37.4, 52.6 s | 36.8–51.8 s | 2 of 2 runs 25/25 | $0.15–0.18 |
+
+- **Where the time went.** Fast mode streams planner output at about 410 tokens/s against about
+  150 at standard speed (time to first token is about 1 s for both), so planning dropped from
+  33–35 s to 13 s. The Opus fast critique takes 3.5–5 s. Output throughput alone isn't the
+  speedup: the earlier fast runs spent 8–9 s more per run on a repair round, which the fixes
+  below removed.
+- **What removed the repairs.** Every repair in the first paired round came from one finding:
+  the plan matched CRM emails against a lowercased order email, and the expression language had
+  no way to normalize the list side. A `~=` operator for `filterBy` (case- and
+  whitespace-insensitive on both sides) fixed the plans; the critique then passed the same
+  recorded plan 3 of 3 times, against 0 of 3 before, and still caught both rules deliberately
+  removed from it. The critique's first token budget also went from 3,000 to 8,000 tokens,
+  which ended a truncate-and-retry that cost about 14 s.
+- **E now matches C** on wall time while keeping the review gate and the write canary.
+- **The standard configuration failed closed once.** Its Haiku critique reported a missing rule
+  that the repaired plan did implement, so the review rejected the plan and no write ran (0
+  duplicate, 0 collateral writes). Opus fast reported consistent findings in the offline
+  evaluation, which is why it is the default critic now.
+- **500 records**, one cold run (`*@scale-fast.json`): 42.3 s wall, 500/500 correct, 0
+  duplicate and 0 collateral writes, $0.45. Planning and critique take the first 22.5 s while
+  reads run underneath; the write canaries take about 3 s; then 16 workers verify about 25–36
+  writes per second. The earlier 500/500 run took about 120 s.
 
 ## Quick start
 
@@ -301,7 +346,12 @@ Setting `OVERCLOCK_LIVE=1` enables tests that call Claude and Jev, so they spend
   request, risky GETs such as `/logout` or `?action=`, and WebSockets, with service workers
   blocked. Exploration signs in with a read-only viewer account when the app has one.
 - **Read-only fragments.** While a worker runs a read segment, its page is read-only at the
-  network layer, so an unexpected write is blocked and fails the task.
+  network layer: non-GET requests and risky GETs (such as `/logout`) are blocked, and an
+  unexpected write fails the task.
+- **No unreviewed writes.** When the policy requires a critique (modes D and E, more than five
+  records), every write waits for a passed critique of that exact plan; a repaired plan is
+  critiqued again, and an unavailable critique rejects the plan (fail-closed). Only reviewed
+  plans are cached for warm starts or published to the network.
 - **Plans can't invent targets.** The planner may only reference observed control ids and the
   closed expression language. Page content is passed to models as untrusted data.
 - **Every write is verified.** Writes must declare resources, carry a read-back check, and use
@@ -318,10 +368,12 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 - Mode E plans one strategy and runs no dry-run probes, while mode D can compete candidates and
   probe them. E versus D measures those differences together with the overlap.
-- One high-severity critique finding triggers a full repair round (about 40–55 s with Claude
-  Opus 5.5 in recorded runs), including findings that turn out to be false positives. The gate
-  is kept strict on purpose, and the time it costs is reported. Repaired plans pass every
-  static check but aren't critiqued a second time, in mode D or mode E.
+- The review gate is only as precise as its critic. A false-positive finding costs a repair
+  round, and one that survives the repair rejects the run (recorded once with the Haiku
+  critic). The default Opus fast critic costs about $0.13–0.15 per critique.
+- Fast mode is a Claude API research preview at twice the standard price; a cold 25-record
+  mode E run costs about $0.43 instead of $0.15. A refused fast request falls back to standard
+  speed automatically.
 - A plan's decision to skip an append (for example "the note is already there") reads the
   section's text with `contains()`, so a longer unrelated entry can cause a skip. Verification
   never accepts that case: an appended entry is `VERIFIED` only when exactly one entry equals
@@ -330,8 +382,9 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
   re-optimization exists, so the `onlineReoptimization` switch only turns access paths off.
 - The engine reports reuse of imported capabilities but doesn't start network repair jobs
   after a capability breaks; it discovers cold instead.
-- The staged swarm, crawler, dry run, critique, and effect classification have no automated
-  tests. They run in every live run and benchmark.
+- The crawler, dry run, and effect classification have no automated tests of their own, and
+  the critique's judgement is measured only by the offline evaluation and live runs. The
+  pipelines' review gate is tested with a scripted model.
 - Bulk-import operations are detected but never planned, because read-back verification
   covers one entity per write.
 - Sign-in is generic: it looks for a password field plus an email, text, or user-named input.

@@ -392,7 +392,8 @@ export class Executor {
       const writeSkipped = writeIdx >= 0 && r.skipped.includes(seg.nodes[writeIdx]!.id);
       const state: "VERIFIED" | "COMPLETED" | "SKIPPED" = seg.kind === "write" ? (writeSkipped ? "SKIPPED" : r.receipts.length ? "VERIFIED" : "COMPLETED") : "COMPLETED";
       this.o.latency.observeSegment(seg.id, ms);
-      this.aimdRecord(app, { ms, ok: true });
+      // Still counted active here, so `>=` means the app ran at its limit when this task finished.
+      this.aimdRecord(app, { ms, ok: true, saturated: this.scheduler.activeCount(app) >= this.capFor(app) });
       this.scheduler.complete(t.taskId, state, Object.keys(r.outputs).concat(r.skipped), ms);
       // A write canary opens only on a verified write; a read canary on completion.
       if (this.scheduler.gateOf(seg.id) === "canary" && (seg.kind === "write" ? state === "VERIFIED" : state === "COMPLETED")) {
@@ -412,7 +413,7 @@ export class Executor {
     }
   }
 
-  private aimdRecord(app: string, outcome: { ms: number; ok: boolean; throttled?: boolean; timeout?: boolean }): void {
+  private aimdRecord(app: string, outcome: { ms: number; ok: boolean; throttled?: boolean; timeout?: boolean; saturated?: boolean }): void {
     if (!this.o.workers.adaptive) return;
     const d = this.aimdFor(app).record(outcome);
     if (d?.changed) {

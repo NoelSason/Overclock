@@ -1,0 +1,213 @@
+{
+  "at": "2026-10-24T19:38:47.664Z",
+  "passed": true,
+  "expectRefusal": true,
+  "checks": [
+    {
+      "check": "A passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "B refused the capability for this interface, with reasons (nothing guessed)",
+      "ok": true,
+      "detail": "REQUIRES_REPAIR: hidden-in-tab:Orders:/orders/:id/edit:checkbox:flag_for_review; hidden-in-tab:Orders:/orders/:id/edit:input:review_reason; hidden-in-tab:Support:/tickets/:id/edit:select:category"
+    },
+    {
+      "check": "B planned cold instead and passes the independent ground-truth check",
+      "ok": true,
+      "detail": "B planner calls 1; {\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "A and B are distinct runtimes: different network identities; B started with an empty local cache",
+      "ok": true,
+      "detail": "A c200ebba117166c4, B c200b6a31b30ba46, capability publisher c200ebba117166c4, B cache entries before its run 0"
+    }
+  ],
+  "database": "overclock-demo",
+  "endpoint": "ws://127.0.0.1:3100",
+  "records": 10,
+  "seed": 5151,
+  "variation": "fields-in-tab",
+  "mode": "overclock",
+  "versionId": "cap_4d4a431303f0e4fc54ffd623@1",
+  "validation": {
+    "versionId": "cap_4d4a431303f0e4fc54ffd623@1",
+    "outcome": "pass",
+    "category": "ok",
+    "ms": 1656
+  },
+  "overhead": {
+    "aLookupMs": 3,
+    "aPublishMs": 58,
+    "validationMs": 1656,
+    "promoteMs": 6,
+    "bLookupMs": 5,
+    "bFetchMs": 9,
+    "bRebindMs": 1185
+  },
+  "plannerCalls": {
+    "a": 1,
+    "b": 1
+  },
+  "comparison": {
+    "note": "cold arm skipped"
+  },
+  "transfer": {
+    "identities": {
+      "a": "c200ebba117166c4",
+      "b": "c200b6a31b30ba46",
+      "publisher": "c200ebba117166c4"
+    },
+    "bCacheBefore": 0,
+    "variations": {
+      "theme": "default",
+      "renameButtons": {},
+      "shuffleFields": {},
+      "confirmModal": {},
+      "announcementModal": {},
+      "pageSize": {},
+      "editInTab": {
+        "CRM": true,
+        "Orders": true,
+        "Support": true
+      },
+      "latency": {},
+      "failures": {},
+      "concurrencyLimit": {}
+    },
+    "relabeled": [],
+    "writeCanary": false,
+    "canaryPassed": 0,
+    "refused": [
+      "hidden-in-tab:Orders:/orders/:id/edit:checkbox:flag_for_review",
+      "hidden-in-tab:Orders:/orders/:id/edit:input:review_reason",
+      "hidden-in-tab:Support:/tickets/:id/edit:select:category",
+      "writes not provably safe"
+    ],
+    "importOutcome": "REQUIRES_REPAIR",
+    "actionsB": {
+      "navigate": 51,
+      "extract": 39,
+      "fill": 5,
+      "click": 19,
+      "select": 12,
+      "verify": 12,
+      "compute": 1
+    },
+    "verifiedB": 12
+  },
+  "a": {
+    "runtime": "runtime-a",
+    "status": "completed",
+    "knowledge": "network-read-and-contribute",
+    "network": {
+      "lookups": 1,
+      "hits": 0,
+      "outcome": "NO_CAPABILITY",
+      "lookupMs": 3,
+      "fetchMs": 0,
+      "rebindMs": 0,
+      "published": true,
+      "repairs": 0
+    },
+    "wallMs": 18553,
+    "firstActionMs": 3895,
+    "firstVerifiedMs": 17751.1,
+    "stageMs": {
+      "discovery": 1759,
+      "planning": 12690,
+      "execution": 14649,
+      "critique": 3209
+    },
+    "modelCalls": 5,
+    "modelCostUsd": 0.42011,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {
+      "dependency-scout.effects": {
+        "calls": 3,
+        "ms": 634,
+        "costUsd": 0.000102
+      },
+      "planner.plan": {
+        "calls": 1,
+        "ms": 12687,
+        "costUsd": 0.29548
+      },
+      "verifier.critique": {
+        "calls": 1,
+        "ms": 3208,
+        "costUsd": 0.124528
+      }
+    },
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "parallel-scout: streaming: plan with the \"per-record\" strategy immediately and execute validated fragments as they arrive; deeper discovery, side-effect classification, and critique continue in parallel; access paths"
+  },
+  "b": {
+    "runtime": "runtime-b",
+    "status": "completed",
+    "knowledge": "network-read",
+    "network": {
+      "lookups": 1,
+      "hits": 1,
+      "outcome": "REQUIRES_REPAIR",
+      "capabilityId": "cap_4d4a431303f0e4fc54ffd623",
+      "version": 1,
+      "lookupMs": 5,
+      "fetchMs": 9,
+      "rebindMs": 1185,
+      "published": false,
+      "repairs": 0
+    },
+    "wallMs": 23883,
+    "firstActionMs": 9199.3,
+    "firstVerifiedMs": 23199.8,
+    "stageMs": {
+      "discovery": 2922,
+      "planning": 17196,
+      "execution": 14731,
+      "critique": 2959
+    },
+    "modelCalls": 5,
+    "modelCostUsd": 0.478966,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {
+      "dependency-scout.effects": {
+        "calls": 3,
+        "ms": 549,
+        "costUsd": 0.000102
+      },
+      "planner.plan": {
+        "calls": 1,
+        "ms": 17194,
+        "costUsd": 0.351624
+      },
+      "verifier.critique": {
+        "calls": 1,
+        "ms": 2958,
+        "costUsd": 0.12724
+      }
+    },
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "parallel-scout: streaming: plan with the \"per-record\" strategy immediately and execute validated fragments as they arrive; deeper discovery, side-effect classification, and critique continue in parallel; access paths"
+  },
+  "c": null
+}

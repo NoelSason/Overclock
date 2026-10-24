@@ -1,0 +1,422 @@
+{
+  "version": 1,
+  "suite": "modes@e2-standard",
+  "createdAt": 1792870364557,
+  "machine": {
+    "platform": "darwin",
+    "cpus": 16,
+    "memoryGb": 128,
+    "node": "v24.13.0"
+  },
+  "budgetUsd": 2,
+  "spentUsd": 0.258047,
+  "runs": [
+    {
+      "suite": "modes@e2-standard",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-order-reconcile-s4242-n25",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 25,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": "run_20261024193244_db3704",
+      "startedAt": 1792870364563,
+      "summary": {
+        "runId": "run_20261024193244_db3704",
+        "mode": "overclock",
+        "status": "failed",
+        "wallMs": 55738,
+        "discoveryMs": 1688,
+        "compileMs": 65576,
+        "executionMs": 50442,
+        "records": 25,
+        "tasks": 275,
+        "verified": 0,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 0,
+        "needsApproval": 0,
+        "recordsVerified": 0,
+        "recordsAccounting": "input-records",
+        "recoveries": 0,
+        "modelCalls": 7,
+        "inputTokens": 59057,
+        "outputTokens": 8515,
+        "modelCostUsd": 0.258047,
+        "workerUtilization": 0.012,
+        "maxConcurrency": 8,
+        "strategy": "streaming",
+        "firstActionMs": 5344,
+        "firstVerifiedMs": null,
+        "overlapMs": 50438,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 1688,
+          "planning": 45372,
+          "execution": 50442,
+          "critique": 20204
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t1-order-reconcile-s4242-n25",
+        "totalRecords": 25,
+        "correctRecords": 11,
+        "accuracy": 0.44,
+        "mismatches": [
+          {
+            "recordKey": "ORD-50064",
+            "entity": "ticket:TCK-71978",
+            "field": "category",
+            "expected": "refund",
+            "actual": "shipping"
+          },
+          {
+            "recordKey": "ORD-50064",
+            "entity": "ticket:TCK-71978",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "open"
+          },
+          {
+            "recordKey": "ORD-50064",
+            "entity": "ticket:TCK-71978",
+            "field": "note",
+            "expected": "Reconciled: refund confirmed for ORD-50064 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "ORD-50071",
+            "entity": "order:ORD-50071",
+            "field": "customer_id",
+            "expected": "C-1229",
+            "actual": "C-1231"
+          },
+          {
+            "recordKey": "ORD-50073",
+            "entity": "ticket:TCK-71985",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "pending"
+          },
+          {
+            "recordKey": "ORD-50073",
+            "entity": "ticket:TCK-71985",
+            "field": "note",
+            "expected": "Reconciled: delivered ORD-50073 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "ORD-50077",
+            "entity": "order:ORD-50077",
+            "field": "review_flag",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "ORD-50077",
+            "entity": "order:ORD-50077",
+            "field": "review_reason",
+            "expected": "Unknown customer",
+            "actual": ""
+          },
+          {
+            "recordKey": "ORD-50088",
+            "entity": "order:ORD-50088",
+            "field": "customer_id",
+            "expected": "C-1225",
+            "actual": "C-1230"
+          },
+          {
+            "recordKey": "ORD-50088",
+            "entity": "ticket:TCK-71991",
+            "field": "status",
+            "expected": "escalated",
+            "actual": "open"
+          },
+          {
+            "recordKey": "ORD-50088",
+            "entity": "ticket:TCK-71991",
+            "field": "owner",
+            "expected": "Tier 2",
+            "actual": "Tier 1"
+          },
+          {
+            "recordKey": "ORD-50092",
+            "entity": "customer:C-1219",
+            "field": "status",
+            "expected": "on_hold",
+            "actual": "active"
+          },
+          {
+            "recordKey": "ORD-50099",
+            "entity": "ticket:TCK-71992",
+            "field": "category",
+            "expected": "refund",
+            "actual": "general"
+          },
+          {
+            "recordKey": "ORD-50099",
+            "entity": "ticket:TCK-71992",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "open"
+          },
+          {
+            "recordKey": "ORD-50099",
+            "entity": "ticket:TCK-71992",
+            "field": "note",
+            "expected": "Reconciled: refund confirmed for ORD-50099 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "ORD-50113",
+            "entity": "ticket:TCK-71999",
+            "field": "status",
+            "expected": "escalated",
+            "actual": "pending"
+          },
+          {
+            "recordKey": "ORD-50113",
+            "entity": "ticket:TCK-71999",
+            "field": "owner",
+            "expected": "Tier 2",
+            "actual": "Tier 1"
+          },
+          {
+            "recordKey": "ORD-50124",
+            "entity": "ticket:TCK-72003",
+            "field": "status",
+            "expected": "escalated",
+            "actual": "open"
+          },
+          {
+            "recordKey": "ORD-50124",
+            "entity": "ticket:TCK-72003",
+            "field": "owner",
+            "expected": "Tier 2",
+            "actual": "Unassigned"
+          },
+          {
+            "recordKey": "ORD-50135",
+            "entity": "ticket:TCK-72012",
+            "field": "status",
+            "expected": "escalated",
+            "actual": "pending"
+          },
+          {
+            "recordKey": "ORD-50135",
+            "entity": "ticket:TCK-72012",
+            "field": "owner",
+            "expected": "Tier 2",
+            "actual": "Unassigned"
+          },
+          {
+            "recordKey": "ORD-50138",
+            "entity": "order:ORD-50138",
+            "field": "review_flag",
+            "expected": 1,
+            "actual": 0
+          },
+          {
+            "recordKey": "ORD-50138",
+            "entity": "order:ORD-50138",
+            "field": "review_reason",
+            "expected": "Duplicate customer",
+            "actual": ""
+          },
+          {
+            "recordKey": "ORD-50138",
+            "entity": "ticket:TCK-72016",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "open"
+          },
+          {
+            "recordKey": "ORD-50138",
+            "entity": "ticket:TCK-72016",
+            "field": "note",
+            "expected": "Reconciled: delivered ORD-50138 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "ORD-50144",
+            "entity": "ticket:TCK-72021",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "pending"
+          },
+          {
+            "recordKey": "ORD-50144",
+            "entity": "ticket:TCK-72021",
+            "field": "note",
+            "expected": "Reconciled: delivered ORD-50144 (exactly once)",
+            "actual": "0 copies"
+          },
+          {
+            "recordKey": "ORD-50146",
+            "entity": "customer:C-1219",
+            "field": "status",
+            "expected": "on_hold",
+            "actual": "active"
+          },
+          {
+            "recordKey": "ORD-50160",
+            "entity": "order:ORD-50160",
+            "field": "customer_id",
+            "expected": "C-1230",
+            "actual": "C-1232"
+          },
+          {
+            "recordKey": "ORD-50160",
+            "entity": "ticket:TCK-72026",
+            "field": "status",
+            "expected": "resolved",
+            "actual": "pending"
+          },
+          {
+            "recordKey": "ORD-50160",
+            "entity": "ticket:TCK-72026",
+            "field": "note",
+            "expected": "Reconciled: delivered ORD-50160 (exactly once)",
+            "actual": "0 copies"
+          }
+        ],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 2,
+        "checkedAt": 1792870420308
+      },
+      "wallMs": 55738,
+      "discoveryMs": 1688,
+      "compileMs": 65576,
+      "executionMs": 50442,
+      "correctPerMin": 11.841113782338798,
+      "modelCalls": 7,
+      "inputTokens": 59057,
+      "outputTokens": 8515,
+      "costUsd": 0.258047,
+      "workerUtilization": 0.012,
+      "maxConcurrency": 8,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 5344,
+      "firstVerifiedMs": null,
+      "overlapMs": 50438,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Reconcile these 25 customer orders across CRM, Orders, and Support. Update mismatched records and verify every correction.\n\nRules, for each order in the list:\n1. Customer identity. Find the CRM customers whose email equals the order's customer email (the Orders app is the source of truth for the email).\n   - Exactly one match whose ID differs from the order's Customer ID: change the order's Customer ID to that customer's ID.\n   - More than one match: leave the Customer ID unchanged and flag the order for review with the reason \"Duplicate customer\".\n   - No match: leave the Customer ID unchanged and flag the order for review with the reason \"Unknown customer\".\n2. Support ticket (only if a ticket exists for the order; at most one does):\n   - Order status refunded: the ticket must have category refund and status resolved. If either differs, set both and add the internal note \"Reconciled: refund confirmed for <order ID>\".\n   - Otherwise, order delivered and ticket category shipping with status open or pending: set the status to resolved and add the internal note \"Reconciled: delivered <order ID>\".\n   - Otherwise, ticket category damage with a status other than escalated: set the status to escalated and the owner to Tier 2. No note.\n   - Any other ticket: leave it unchanged.\n3. Account holds. For every CRM customer matched in rule 1 (exactly one match) who has 2 or more refunded orders in this list, set the CRM status to on_hold, unless the customer is vip.\nDo not change anything that these rules do not require. Never issue refunds.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "records": [
+          {
+            "orderId": "ORD-50064"
+          },
+          {
+            "orderId": "ORD-50066"
+          },
+          {
+            "orderId": "ORD-50071"
+          },
+          {
+            "orderId": "ORD-50073"
+          },
+          {
+            "orderId": "ORD-50077"
+          },
+          {
+            "orderId": "ORD-50084"
+          },
+          {
+            "orderId": "ORD-50088"
+          },
+          {
+            "orderId": "ORD-50092"
+          },
+          {
+            "orderId": "ORD-50099"
+          },
+          {
+            "orderId": "ORD-50103"
+          },
+          {
+            "orderId": "ORD-50106"
+          },
+          {
+            "orderId": "ORD-50108"
+          },
+          {
+            "orderId": "ORD-50113"
+          },
+          {
+            "orderId": "ORD-50118"
+          },
+          {
+            "orderId": "ORD-50124"
+          },
+          {
+            "orderId": "ORD-50130"
+          },
+          {
+            "orderId": "ORD-50135"
+          },
+          {
+            "orderId": "ORD-50138"
+          },
+          {
+            "orderId": "ORD-50144"
+          },
+          {
+            "orderId": "ORD-50146"
+          },
+          {
+            "orderId": "ORD-50148"
+          },
+          {
+            "orderId": "ORD-50149"
+          },
+          {
+            "orderId": "ORD-50154"
+          },
+          {
+            "orderId": "ORD-50160"
+          },
+          {
+            "orderId": "ORD-50161"
+          }
+        ],
+        "label": "e2-standard/overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      },
+      "error": "run ended with status \"failed\""
+    }
+  ],
+  "notes": [
+    "Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e2-standard --budget 2",
+    "Code version: 8f795a8 (uncommitted changes, tree digest a1a5be209854).",
+    "Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available."
+  ]
+}

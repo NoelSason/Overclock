@@ -146,10 +146,21 @@ iteration bound, `$rec` appears outside a `foreach`, a phase reads `$phase.<id>`
 depending on it, or the dependency graph has a cycle. The full list is in
 [`ACTION_IR.md`](ACTION_IR.md#validation-rules).
 
-**Run time (Working, tested for guards; Partial for read-only fragments).** Every browser
-context enforces the origin allowlist. Exploration contexts block every mutation. Execution
-pages are read-only while they run a read segment. Locator resolution refuses ambiguous
-targets. Irreversible nodes stop at `NEEDS_APPROVAL`. See [`SECURITY.md`](SECURITY.md).
+**Run time (Working, tested).** Every browser context enforces the origin allowlist.
+Exploration contexts block every mutation. Execution pages are read-only while they run a read
+segment: non-GET requests and risky GETs are aborted (`tests/integration/runtime.test.ts`).
+Locator resolution refuses ambiguous targets. Irreversible nodes stop at `NEEDS_APPROVAL`. See
+[`SECURITY.md`](SECURITY.md).
+
+**Review gate (Working, tested).** When the policy requires a critique (modes D and E with more
+than five records), `reviewPlan` (`packages/swarm/src/review.ts`) decides whether a plan's
+writes may run: a critique of that exact plan must report no high-severity finding; findings
+get one repair round, and the repaired plan is critiqued again. An unavailable critique, a
+failed repair, or findings left after the repair reject the plan and fail the run with the
+reason; every round is a `review` event. `tests/integration/review-gate.test.ts` runs both
+pipelines against a fixture app with a scripted model, including the three paths that used to
+skip the gate (a repaired plan after a streaming fallback or a critique in mode E, and a
+candidate whose repair failed in mode D).
 
 **Release gates (Partial).** In mode E, each segment template has a gate in the scheduler:
 
@@ -283,7 +294,11 @@ Backoff is `min(8 s, base × 2^(attempt − 1))` with ±25% jitter.
 Each app gets its own additive-increase, multiplicative-decrease controller. Every 2.5 s
 window it compares throughput and median latency with the previous window:
 
-- After a healthy window (error rate at most 25%), it adds one slot.
+- It starts in slow start: it doubles the limit after each healthy window until the first
+  congestion signal, then adds one slot per healthy window (error rate at most 25%).
+- Only windows in which most completions found the app at its limit count. A window in which
+  the app had idle slots (no more work was ready) neither signals congestion nor grows the
+  limit, and isn't used as the baseline for the next comparison.
 - When median latency rose more than 25% without at least 3% more throughput, it holds,
   because the extra load is queueing at the server rather than doing work.
 - After two throttles (429s or timeouts) in a window, or an error rate above 25%, it halves the
@@ -497,7 +512,15 @@ as follows:
     again, so after a fallback its writes wait for validation and compilation, not a second
     critique.
 
-**Where cold-start time goes.** The critique gate is the most common fallback trigger. In the
+**Where cold-start time goes (current code).** With Opus 5.5 fast mode for the planner and the
+critique, a cold 25-record run spends about 13 s planning (about 5,000 output tokens at about
+410 tokens/s; first token after about 1 s), 3.5–5 s on the critique, and a few seconds
+writing; reads run while the plan streams. At 500 records, planning and critique take the first
+22.5 s, the write canaries about 3 s, and the write fan-out about 17 s on 16 workers. See the
+README's paired results.
+
+**Where cold-start time went (morning of 2026-10-24).** The critique gate was the most common
+fallback trigger. In the
 strict A→B demo on 2026-10-24 (10 records, local arena), runtime A spent 36.8 s on the
 streamed plan, with reads executing from 7.6 s, plus 8.2 s on the critique, plus 49.8 s on one
 repair round. The repair was triggered by six high-severity findings. Two were real defects:
@@ -515,8 +538,8 @@ so the overlap is visible, and the **Fragments** panel shows each fragment's gat
 
 ## Network layer
 
-**Status: Working (tested, one recorded live A→B run).** [`NETWORK.md`](NETWORK.md) has the
-design, status, setup, and results.
+**Status: Working (tested; recorded live A→B transfers on five seeds with a changed interface,
+plus one refusal).** [`NETWORK.md`](NETWORK.md) has the design, status, setup, and results.
 
 The Overclock Network shares **portable capabilities**: a Procedure DSL plan whose control
 references are semantic, data-free control descriptors instead of observation-local ids. A
@@ -531,8 +554,9 @@ never from browser workers:
 - **Before discovery** (`network-read`, `network-read-and-contribute`): look up an ACTIVE
   capability by canonical operation and origins, fetch and hash-verify it, and rebind it with a
   mutation-blocked mini-crawl. If the rebound plan compiles and every write bound safely, the
-  staged swarm executes it with policy `network-import` and no planner call. Otherwise the run
-  discovers cold. An unreachable or disabled network also means a cold run
+  staged swarm executes it with policy `network-import` and no planner call. A submit button
+  whose label changed may bind by structure (the only write button of a form whose fields all
+  bound by label); its writes then run behind a write canary. Otherwise the run discovers cold. An unreachable or disabled network also means a cold run
   (`tests/unit/network-service.test.ts`).
 - **After execution:** an imported capability gets a reuse report. With
   `network-read-and-contribute`, a run where every record verified exports the executed plan
@@ -543,19 +567,19 @@ never from browser workers:
 - **E versus D is not a pure test of stage gating.** Mode E plans one strategy and runs no
   dry-run probes; mode D can plan competing candidates and probes them. Both gate writes on
   the same critique.
-- **Critique false positives cost a repair round.** One high-severity finding is enough to
-  trigger the repair, including findings about valid syntax. The gate is intentionally not
-  relaxed; the time it costs is reported.
-- **Repaired plans aren't critiqued again** in either mode D or mode E. They pass every static
-  check (validation, compilation, guards, verification placement) before any write.
+- **The gate is only as precise as its critic.** A false-positive finding costs a repair round,
+  and one that survives the repair fails the run closed. With the Haiku critic this happened in
+  one of three paired runs; the default Opus fast critic was consistent in the offline
+  evaluation and in every recorded run since.
 - **Idempotency decisions read region text.** A plan that skips an append when the notes
   already contain its text uses `contains()` on the region's text, so a longer unrelated entry
   that contains the text can cause a skip. Verification never accepts that case.
 - **Access paths have no test.** Access-path substitution is wired into mode E only. Online
   re-optimization beyond access paths doesn't exist, so the `overclock-no-online-reopt`
   ablation rung measures the same thing as `overclock-no-access-paths`.
-- **Some components run only in live runs.** The staged swarm, crawler, effect
-  classification, critique, and dry run have no automated tests.
+- **Some components run only in live runs.** The crawler, effect classification, and dry run
+  have no automated tests of their own; the critique's judgement is measured only offline and
+  in live runs (the review gate around it is tested with a scripted model).
 - **Competition is narrow.** Only two strategy directives exist. Bulk-import operations are
   detected but not offered, because read-back verification covers one entity per write.
 - **No nested loops.** A `foreach` inside a `foreach` is rejected.

@@ -5,13 +5,79 @@ and a fast reset procedure. Every number you show must come from a real run or f
 [`BENCHMARKS.md`](BENCHMARKS.md). If a number doesn't exist yet, say "results pending" and move
 on.
 
-> **Readiness (2026-10-24).** Mode E and the Overclock Network transfer both have recorded
-> runs that passed the arena's ground-truth check ([`BENCHMARKS.md`](BENCHMARKS.md),
-> [`NETWORK.md`](NETWORK.md#results)). Model latency varies from run to run, and a critique
-> finding can add a repair round of 40–55 s, so rehearse the full script at least once before
-> judging and quote numbers from recorded runs, not from the live one.
+> **Readiness (2026-10-24, afternoon).** The changed-UI network transfer passed every acceptance
+> check on five seeds, and mode E (fast) has paired runs on the current code
+> ([`NETWORK.md`](NETWORK.md#results), [`BENCHMARKS.md`](BENCHMARKS.md)). Model latency varies
+> from run to run, so rehearse once and quote numbers from recorded runs, not from the live one.
 
-## Setup before judges arrive
+## Main demo (3 minutes): the website changed, agent B still knew what to do
+
+This is the demonstration to lead with. One screen, the dashboard's **Transfer** page
+(`http://localhost:3000/transfer`), tells the whole story from a recorded or live run:
+A learned → SpacetimeDB accepted → website changed → B rebound → zero planning calls → verified.
+Every figure on it comes from the report `pnpm network:demo` writes (run summaries and the
+arena's independent checker).
+
+### Setup (before judges arrive)
+
+```bash
+pnpm arena          # judge console http://127.0.0.1:4100, apps :4101–4104
+pnpm network:dev    # local SpacetimeDB on :3100
+pnpm engine         # engine :4000; serves the recorded transfer reports to the dashboard
+pnpm dashboard      # http://localhost:3000
+```
+
+Record one transfer ahead of time (about 60–90 s and about $0.86 of model spend, with the cold
+comparison arm):
+
+```bash
+pnpm network:demo --records 10 --seed 4242 --variation rename-save --warm-arm
+```
+
+It exits 1 unless every acceptance check passes. Its report lands in
+`benchmarks/results/network/`, and the Transfer page shows the newest passing changed-UI
+recording by default, labelled with its time and seed. Five such recordings (seeds 4242,
+1111, 2222, 3333, 7777) and one refusal recording are already in the repository.
+
+### Script
+
+**0–30 s: the problem.** "Every browser agent relearns every website from scratch. We built
+an execution compiler, and a network where one agent's validated workflow becomes another
+agent's starting point. The question a judge should ask: what happens when the website
+changes?"
+
+**30–60 s: run it live, or open the recording.** Start the demo command above in a terminal
+(it runs A, the validator, B, and C in about a minute), or open the Transfer page on a
+recording. Point at step 1 (A learned, cold, 10/10) and step 2 (the capability, validated by a
+separate identity in read-only browsers, then promoted to ACTIVE).
+
+**60–120 s: the change and the rebinding.** Step 3 lists what changed: every edit form's save
+button was renamed. Step 4: runtime B is a different identity with an empty cache; it rebound
+the three renamed buttons by structure (the label changed, the form didn't), and because the
+evidence isn't a label match, its writes ran behind a write canary. Step 5: zero planning
+calls, $0 of model spend.
+
+**120–150 s: proof.** Step 6 and the acceptance checks: 10/10 correct by the arena's own
+checker, which the agents never see; 0 duplicate and 0 collateral writes; every write made with
+browser clicks and confirmed by a fresh read. The comparison panel: a third fresh runtime C,
+planning from scratch on the same records and interface, took about 19 s and $0.43; B took
+about 3.3 s and $0 (5.9× median across five seeds).
+
+**150–180 s: what it refuses.** Switch the recording selector to the `fields-in-tab` refusal:
+when the edit fields moved into a tab, B refused the capability with the exact reasons, guessed
+nothing, and planned cold, still 10/10. Close with the limits: the validator never executes
+writes, and one of five first attempts failed at validation and needed a rerun.
+
+### Fallback
+
+If SpacetimeDB, the arena, or the model API fails during judging, don't run anything live.
+The Transfer page needs only the engine and the dashboard: it reads the recorded reports from
+`benchmarks/results/network/`, and each one is labelled "Recorded run" with its time and seed.
+No narrated video was recorded; the script above is the narration.
+
+## Alternative: a live mode E run
+
+### Setup before judges arrive
 
 1. Open four terminals in the repository root.
 

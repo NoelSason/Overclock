@@ -2,6 +2,8 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // A separate build directory (NEXT_DIST_DIR) lets the e2e dev server run beside a developer's own.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   transpilePackages: ["@overclock/contracts"],
   // The workspace root holds the shared contracts package; Turbopack must be able to resolve it.
   turbopack: { root: path.resolve(import.meta.dirname, "../..") },

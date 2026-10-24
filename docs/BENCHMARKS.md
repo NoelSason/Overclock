@@ -1,6 +1,6 @@
 # Overclock benchmarks
 
-Generated from 11 result files with 55 executed runs (7 failed). Latest result file: 2026-10-24T19:29:57.547Z.
+Generated from 21 result files with 65 executed runs (8 failed). Latest result file: 2026-10-24T19:51:11.149Z.
 
 Every number on this page comes from an executed run recorded in `benchmarks/results/`. Nothing is estimated, extrapolated, or filled in.
 
@@ -115,7 +115,47 @@ Single-mode runs started with `--mode`. Runs from separate invocations pool here
 
 | Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `overclock` | t1 seed 4242 | 25 | 1 | 0 | 21.6 s | n/a (n=1) | 20.5 s | 100.0% (100.0%) | 100.0% | 69.6 | $0.4590 | $0.0184 | 5 | 34775 | 3.3% |
+| `overclock` | t1 seed 4242 | 25 | 3 | 0 | 18.8 s | n/a (n=3) | 17.7 s | 100.0% (100.0%) | 100.0% | 79.8 | $0.4346 | $0.0175 | 5 | 34133 | 3.9% |
+
+### Suite `modes@e2-standard`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `overclock` | t1 seed 4242 | 25 | 2 | 1 | 52.8 s | n/a (n=2) | 51.5 s | 100.0% (100.0%) | 100.0% | 28.4 | $0.1522 | $0.0061 | 5 | 36212 | 1.3% |
+
+### Suite `modes@c-standard`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `compiled-parallel` | t1 seed 4242 | 25 | 2 | 0 | 45.0 s | n/a (n=2) | 44.3 s | 100.0% (100.0%) | 100.0% | 34.3 | $0.1641 | $0.0066 | 4 | 21509 | 88.5% |
+
+### Suite `modes@c-fast`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `compiled-parallel` | t1 seed 4242 | 25 | 2 | 0 | 18.3 s | n/a (n=2) | 17.5 s | 100.0% (100.0%) | 100.0% | 83.1 | $0.3232 | $0.0129 | 4 | 21389 | 89.5% |
+
+### Suite `modes@scale-fast`
+
+Single-mode runs started with `--mode`. Runs from separate invocations pool here.
+
+**Cold start, local**
+
+| Label | Scenario | Records | n | Failed | Wall median | Wall p95 | First verified | Accuracy median (min) | Engine-verified | Correct/min | Cost/run | Cost/correct | Model calls | Tokens | Utilization |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `overclock` | t1 seed 4242 | 500 | 1 | 0 | 42.3 s | n/a (n=1) | 25.8 s | 100.0% (100.0%) | 100.0% | 708.9 | $0.4516 | $0.0009 | 5 | 34235 | 83.7% |
 
 ## Holdout
 
@@ -228,7 +268,11 @@ Median time per pipeline stage from the engine summary (`stageMs`), with each as
 | `modes@speed-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 46.3 s | 1.8 s (3.8%) | 12.9 s (28.0%) | 30.4 s (65.7%) | 42.3 s (91.4%) | 0 ms (0.0%) | 41.0 s (88.6%) |
 | `modes@e-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 61.7 s | 1.7 s (2.7%) | 47.0 s (76.1%) | 13.3 s (21.5%) | 42.7 s (69.3%) | 0 ms (0.0%) | 41.2 s (66.7%) |
 | `modes@e-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 2 | 35.2 s | 1.7 s (4.9%) | 21.4 s (60.8%) | 19.4 s (55.0%) | 33.8 s (96.0%) | 0 ms (0.0%) | 29.9 s (84.8%) |
-| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 21.6 s | 1.8 s (8.1%) | 13.5 s (62.6%) | 5.2 s (24.2%) | 17.7 s (82.1%) | 0 ms (0.0%) | 16.5 s (76.3%) |
+| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 18.8 s | 1.7 s (9.0%) | 13.3 s (70.8%) | 3.7 s (19.4%) | 16.0 s (85.2%) | 0 ms (0.0%) | 14.8 s (78.5%) |
+| `modes@e2-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 2 | 52.8 s | 1.7 s (3.3%) | 34.0 s (64.4%) | 16.1 s (30.6%) | 46.5 s (88.1%) | 0 ms (0.0%) | 45.0 s (85.3%) |
+| `modes@c-standard` | `compiled-parallel` | t1 seed 4242 | 25 | local | cold | 2 | 45.0 s | 906 ms (2.0%) | 41.8 s (92.9%) | — | 2.0 s (4.4%) | 0 ms (0.0%) | 0 ms (0.0%) |
+| `modes@c-fast` | `compiled-parallel` | t1 seed 4242 | 25 | local | cold | 2 | 18.3 s | 912 ms (5.0%) | 15.3 s (83.6%) | — | 1.8 s (9.9%) | 0 ms (0.0%) | 0 ms (0.0%) |
+| `modes@scale-fast` | `overclock` | t1 seed 4242 | 500 | local | cold | 1 | 42.3 s | 1.9 s (4.5%) | 13.3 s (31.5%) | 7.5 s (17.8%) | 37.7 s (89.0%) | 0 ms (0.0%) | 17.9 s (42.3%) |
 
 ## Duplicate and incorrect writes
 
@@ -266,7 +310,11 @@ Totals from the arena checker over every run with a checker result, including fa
 | `modes@speed-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
 | `modes@e-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 0 | 0 | 0 | 0 | 0 |
 | `modes@e-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 14 | 0 | 0 | 0 | 0 |
-| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
+| `modes@e2-fast` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 0 | 0 | 0 | 0 | 0 |
+| `modes@e2-standard` | `overclock` | t1 seed 4242 | 25 | local | cold | 3 | 14 | 0 | 0 | 0 | 0 |
+| `modes@c-standard` | `compiled-parallel` | t1 seed 4242 | 25 | local | cold | 2 | 0 | 0 | 0 | 0 | 0 |
+| `modes@c-fast` | `compiled-parallel` | t1 seed 4242 | 25 | local | cold | 2 | 0 | 0 | 0 | 0 | 0 |
+| `modes@scale-fast` | `overclock` | t1 seed 4242 | 500 | local | cold | 1 | 0 | 0 | 0 | 0 | 0 |
 
 ## Limitations
 
@@ -300,8 +348,9 @@ Totals from the arena checker over every run with a checker result, including fa
 - `overclock-staged`: 1 of 1 runs failed and are excluded from its medians (t4 seed 9101 (holdout), 25 records, realistic-latency, cold, suite `holdout`).
 - `compiled-parallel`: 1 of 1 runs failed and are excluded from its medians (t4 seed 9101 (holdout), 25 records, realistic-latency, cold, suite `holdout`).
 - `overclock`: 1 of 3 runs failed and are excluded from its medians (t1 seed 4242, 25 records, local, cold, suite `modes@e-fast`).
+- `overclock`: 1 of 3 runs failed and are excluded from its medians (t1 seed 4242, 25 records, local, cold, suite `modes@e2-standard`).
 - `2026-10-24T15-36-33.748Z-all.json`: skippedButWrong was added to every run after the suite finished, computed from each run's stored outcomes in the engine (GET /api/runs/<runId>/result) and the checker mismatches already in this file. Nothing else was changed.
-- 14 groups have fewer than 3 completed runs; those medians are single observations or pairs, not stable estimates.
+- 17 groups have fewer than 3 completed runs; those medians are single observations or pairs, not stable estimates.
 - Groups with fewer than 5 completed runs have no p95.
 - All results come from the local synthetic arena on the machine listed for each file. The realistic-latency condition injects latency into the arena apps; it does not reproduce real sites' authentication, rate limits, or UI variety.
 - Model latency and cost depend on the provider at run time, so reruns vary.
@@ -322,6 +371,16 @@ Totals from the arena checker over every run with a checker result, including fa
 | `2026-10-24T19-24-56.317Z-modes@e-standard.json` | `modes@e-standard` | 2026-10-24T19:24:56.338Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.3840 / $2.00 |
 | `2026-10-24T19-26-36.030Z-modes@e-fast.json` | `modes@e-fast` | 2026-10-24T19:26:36.056Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.8291 / $2.00 |
 | `2026-10-24T19-29-57.525Z-modes@e2-fast.json` | `modes@e2-fast` | 2026-10-24T19:29:57.547Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.4590 / $2.00 |
+| `2026-10-24T19-30-19.558Z-modes@e2-standard.json` | `modes@e2-standard` | 2026-10-24T19:30:19.579Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1494 / $2.00 |
+| `2026-10-24T19-31-13.565Z-modes@e2-fast.json` | `modes@e2-fast` | 2026-10-24T19:31:13.588Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.4194 / $2.00 |
+| `2026-10-24T19-31-32.780Z-modes@e2-standard.json` | `modes@e2-standard` | 2026-10-24T19:31:32.801Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1551 / $2.00 |
+| `2026-10-24T19-32-25.276Z-modes@e2-fast.json` | `modes@e2-fast` | 2026-10-24T19:32:25.298Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.4346 / $2.00 |
+| `2026-10-24T19-32-44.535Z-modes@e2-standard.json` | `modes@e2-standard` | 2026-10-24T19:32:44.557Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 1 | $0.2580 / $2.00 |
+| `2026-10-24T19-33-40.741Z-modes@c-standard.json` | `modes@c-standard` | 2026-10-24T19:33:40.761Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1488 / $2.00 |
+| `2026-10-24T19-34-18.610Z-modes@c-fast.json` | `modes@c-fast` | 2026-10-24T19:34:18.632Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.3488 / $2.00 |
+| `2026-10-24T19-34-39.532Z-modes@c-standard.json` | `modes@c-standard` | 2026-10-24T19:34:39.554Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.1793 / $2.00 |
+| `2026-10-24T19-35-32.582Z-modes@c-fast.json` | `modes@c-fast` | 2026-10-24T19:35:32.604Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.2975 / $2.00 |
+| `2026-10-24T19-51-11.130Z-modes@scale-fast.json` | `modes@scale-fast` | 2026-10-24T19:51:11.149Z | darwin, 16 CPUs, 128 GB, Node v24.13.0 | 1 | 0 | $0.4516 / $1.50 |
 
 Notes recorded by the harness:
 
@@ -361,6 +420,36 @@ Notes recorded by the harness:
 - `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e2-fast --budget 2
 - `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Code version: 88f4d66 (uncommitted changes, tree digest 73b6a85b4630).
 - `2026-10-24T19-29-57.525Z-modes@e2-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-30-19.558Z-modes@e2-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e2-standard --budget 2
+- `2026-10-24T19-30-19.558Z-modes@e2-standard.json`: Code version: 88f4d66 (uncommitted changes, tree digest 07856e0fffaa).
+- `2026-10-24T19-30-19.558Z-modes@e2-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-31-13.565Z-modes@e2-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e2-fast --budget 2
+- `2026-10-24T19-31-13.565Z-modes@e2-fast.json`: Code version: 8f795a8 (uncommitted changes, tree digest 231a724afc2e).
+- `2026-10-24T19-31-13.565Z-modes@e2-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-31-32.780Z-modes@e2-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e2-standard --budget 2
+- `2026-10-24T19-31-32.780Z-modes@e2-standard.json`: Code version: 8f795a8 (uncommitted changes, tree digest 1045e32385e3).
+- `2026-10-24T19-31-32.780Z-modes@e2-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-32-25.276Z-modes@e2-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4042 --label e2-fast --budget 2
+- `2026-10-24T19-32-25.276Z-modes@e2-fast.json`: Code version: 8f795a8 (uncommitted changes, tree digest 246b4c8f3f9a).
+- `2026-10-24T19-32-25.276Z-modes@e2-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-32-44.535Z-modes@e2-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 25 --trials 1 --engine http://127.0.0.1:4041 --label e2-standard --budget 2
+- `2026-10-24T19-32-44.535Z-modes@e2-standard.json`: Code version: 8f795a8 (uncommitted changes, tree digest a1a5be209854).
+- `2026-10-24T19-32-44.535Z-modes@e2-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-33-40.741Z-modes@c-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode parallel --records 25 --trials 1 --engine http://127.0.0.1:4041 --label c-standard --budget 2
+- `2026-10-24T19-33-40.741Z-modes@c-standard.json`: Code version: 8f795a8 (uncommitted changes, tree digest 6f4f020ae90e).
+- `2026-10-24T19-33-40.741Z-modes@c-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-34-18.610Z-modes@c-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode parallel --records 25 --trials 1 --engine http://127.0.0.1:4042 --label c-fast --budget 2
+- `2026-10-24T19-34-18.610Z-modes@c-fast.json`: Code version: 8f795a8 (uncommitted changes, tree digest 80c27bfa1fa9).
+- `2026-10-24T19-34-18.610Z-modes@c-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-34-39.532Z-modes@c-standard.json`: Command: tsx packages/benchmarks/src/cli.ts --mode parallel --records 25 --trials 1 --engine http://127.0.0.1:4041 --label c-standard --budget 2
+- `2026-10-24T19-34-39.532Z-modes@c-standard.json`: Code version: 8f795a8 (uncommitted changes, tree digest 6c62ea86c5cb).
+- `2026-10-24T19-34-39.532Z-modes@c-standard.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-35-32.582Z-modes@c-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode parallel --records 25 --trials 1 --engine http://127.0.0.1:4042 --label c-fast --budget 2
+- `2026-10-24T19-35-32.582Z-modes@c-fast.json`: Code version: 8f795a8 (uncommitted changes, tree digest 3f23225cb631).
+- `2026-10-24T19-35-32.582Z-modes@c-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
+- `2026-10-24T19-51-11.130Z-modes@scale-fast.json`: Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 500 --trials 1 --engine http://127.0.0.1:4000 --label scale-fast --budget 1.5 --timeout 15
+- `2026-10-24T19-51-11.130Z-modes@scale-fast.json`: Code version: 8f795a8 (uncommitted changes, tree digest 3a97c41263cf).
+- `2026-10-24T19-51-11.130Z-modes@scale-fast.json`: Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available.
 
 ## Methodology
 

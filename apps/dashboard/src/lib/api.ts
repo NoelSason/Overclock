@@ -63,6 +63,52 @@ export type RunControl = "cancel" | "pause" | "resume";
 
 const run = (id: string) => `/api/runs/${encodeURIComponent(id)}`;
 
+/** One run's outcome in a network transfer report (scripts/network-demo.ts). */
+export interface TransferRun {
+  runtime: string;
+  status: string;
+  wallMs: number;
+  firstVerifiedMs: number | null;
+  modelCalls: number;
+  modelCostUsd: number;
+  records: number;
+  checker: { accuracy: number; correct: number; total: number; duplicateWrites: number; collateralWrites: number };
+}
+
+/** `GET /api/transfers` row: a recorded `pnpm network:demo` report. Not part of @overclock/contracts. */
+export interface TransferReport {
+  name: string;
+  at: string;
+  passed: boolean;
+  expectRefusal?: boolean;
+  records: number;
+  seed: number;
+  variation: string | null;
+  versionId: string;
+  checks: { check: string; ok: boolean; detail: string }[];
+  validation: { outcome: string; category: string; ms: number } | null;
+  overhead: { aPublishMs: number | null; validationMs: number | null; promoteMs: number | null; bLookupMs: number | null; bFetchMs: number | null; bRebindMs: number | null };
+  plannerCalls: { a: number; b: number };
+  comparison: { wallSpeedup?: number; timeToFirstVerifiedSpeedup?: number | null; costUsd?: { strictCold: number; networkWarm: number }; note?: string };
+  transfer?: {
+    identities: { a: string | null; b: string | null; publisher: string | null };
+    bCacheBefore: number;
+    variations: { renameButtons?: Record<string, Record<string, string>>; editInTab?: Record<string, boolean> } | null;
+    relabeled: { key: string; from: string; to: string; evidence: string }[];
+    writeCanary: boolean;
+    canaryPassed: number;
+    refused: string[];
+    importOutcome: string | null;
+    actionsB: Record<string, number>;
+    verifiedB: number;
+  };
+  a: TransferRun;
+  b: TransferRun;
+  c: TransferRun | null;
+  /** C again on the same records from its own local cache (--warm-arm); absent in older reports. */
+  warm?: TransferRun | null;
+}
+
 export const engine = {
   health: (signal?: AbortSignal) => get<EngineHealth>(ENGINE_URL, "/api/health", signal),
   listRuns: (signal?: AbortSignal) => get<RunListItem[]>(ENGINE_URL, "/api/runs", signal),
@@ -77,6 +123,7 @@ export const engine = {
   artifact: (id: string, artifactId: string, signal?: AbortSignal) => get<unknown>(ENGINE_URL, `${run(id)}/artifacts/${encodeURIComponent(artifactId)}`, signal),
   benchmarks: (signal?: AbortSignal) => get<BenchmarkListItem[]>(ENGINE_URL, "/api/benchmarks", signal),
   benchmark: (name: string, signal?: AbortSignal) => get<BenchmarkResultFile>(ENGINE_URL, `/api/benchmarks/${encodeURIComponent(name)}`, signal),
+  transfers: (signal?: AbortSignal) => get<TransferReport[]>(ENGINE_URL, "/api/transfers", signal),
 };
 
 /** Judge surprises the arena admin API accepts. Not part of @overclock/contracts yet. */

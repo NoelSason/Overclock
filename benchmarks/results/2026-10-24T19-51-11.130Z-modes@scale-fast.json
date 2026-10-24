@@ -1,0 +1,1628 @@
+{
+  "version": 1,
+  "suite": "modes@scale-fast",
+  "createdAt": 1792871471149,
+  "machine": {
+    "platform": "darwin",
+    "cpus": 16,
+    "memoryGb": 128,
+    "node": "v24.13.0"
+  },
+  "budgetUsd": 1.5,
+  "spentUsd": 0.451566,
+  "runs": [
+    {
+      "suite": "modes@scale-fast",
+      "label": "overclock",
+      "mode": "overclock",
+      "scenarioId": "t1-order-reconcile-s4242-n500",
+      "template": "t1-order-reconcile",
+      "seed": 4242,
+      "records": 500,
+      "trial": 1,
+      "cache": "cold",
+      "holdout": false,
+      "runId": "run_20261024195111_832088",
+      "startedAt": 1792871471168,
+      "summary": {
+        "runId": "run_20261024195111_832088",
+        "mode": "overclock",
+        "status": "completed",
+        "wallMs": 42321,
+        "discoveryMs": 1895,
+        "compileMs": 20883,
+        "executionMs": 37674,
+        "records": 500,
+        "tasks": 4543,
+        "verified": 433,
+        "failed": 0,
+        "unconfirmed": 0,
+        "skipped": 274,
+        "needsApproval": 0,
+        "recordsVerified": 500,
+        "recordsAccounting": "input-records",
+        "recoveries": 0,
+        "modelCalls": 5,
+        "inputTokens": 27591,
+        "outputTokens": 6644,
+        "modelCostUsd": 0.451566,
+        "workerUtilization": 0.837,
+        "maxConcurrency": 16,
+        "strategy": "per-record",
+        "firstActionMs": 4697.8,
+        "firstVerifiedMs": 25765.8,
+        "overlapMs": 17883,
+        "recoveryMs": 0,
+        "stageMs": {
+          "discovery": 1895,
+          "planning": 13337,
+          "execution": 37671,
+          "critique": 7546
+        },
+        "knowledge": "strict-cold"
+      },
+      "check": {
+        "scenarioId": "t1-order-reconcile-s4242-n500",
+        "totalRecords": 500,
+        "correctRecords": 500,
+        "accuracy": 1,
+        "mismatches": [],
+        "duplicateWrites": 0,
+        "collateralWrites": 0,
+        "escalationExpected": 26,
+        "checkedAt": 1792871513530
+      },
+      "wallMs": 42321,
+      "discoveryMs": 1895,
+      "compileMs": 20883,
+      "executionMs": 37674,
+      "correctPerMin": 708.8679379031686,
+      "modelCalls": 5,
+      "inputTokens": 27591,
+      "outputTokens": 6644,
+      "costUsd": 0.451566,
+      "workerUtilization": 0.837,
+      "maxConcurrency": 16,
+      "verifiedButWrong": 0,
+      "skippedButWrong": 0,
+      "firstActionMs": 4697.8,
+      "firstVerifiedMs": 25765.8,
+      "overlapMs": 17883,
+      "recoveryMs": 0,
+      "duplicateWrites": 0,
+      "collateralWrites": 0,
+      "condition": "local",
+      "config": {
+        "goal": "Reconcile these 500 customer orders across CRM, Orders, and Support. Update mismatched records and verify every correction.\n\nRules, for each order in the list:\n1. Customer identity. Find the CRM customers whose email equals the order's customer email (the Orders app is the source of truth for the email).\n   - Exactly one match whose ID differs from the order's Customer ID: change the order's Customer ID to that customer's ID.\n   - More than one match: leave the Customer ID unchanged and flag the order for review with the reason \"Duplicate customer\".\n   - No match: leave the Customer ID unchanged and flag the order for review with the reason \"Unknown customer\".\n2. Support ticket (only if a ticket exists for the order; at most one does):\n   - Order status refunded: the ticket must have category refund and status resolved. If either differs, set both and add the internal note \"Reconciled: refund confirmed for <order ID>\".\n   - Otherwise, order delivered and ticket category shipping with status open or pending: set the status to resolved and add the internal note \"Reconciled: delivered <order ID>\".\n   - Otherwise, ticket category damage with a status other than escalated: set the status to escalated and the owner to Tier 2. No note.\n   - Any other ticket: leave it unchanged.\n3. Account holds. For every CRM customer matched in rule 1 (exactly one match) who has 2 or more refunded orders in this list, set the CRM status to on_hold, unless the customer is vip.\nDo not change anything that these rules do not require. Never issue refunds.",
+        "applications": [
+          {
+            "name": "CRM",
+            "origin": "http://127.0.0.1:4101"
+          },
+          {
+            "name": "Orders",
+            "origin": "http://127.0.0.1:4102"
+          },
+          {
+            "name": "Support",
+            "origin": "http://127.0.0.1:4103"
+          }
+        ],
+        "records": [
+          {
+            "orderId": "ORD-50064"
+          },
+          {
+            "orderId": "ORD-50067"
+          },
+          {
+            "orderId": "ORD-50073"
+          },
+          {
+            "orderId": "ORD-50074"
+          },
+          {
+            "orderId": "ORD-50080"
+          },
+          {
+            "orderId": "ORD-50086"
+          },
+          {
+            "orderId": "ORD-50088"
+          },
+          {
+            "orderId": "ORD-50090"
+          },
+          {
+            "orderId": "ORD-50095"
+          },
+          {
+            "orderId": "ORD-50100"
+          },
+          {
+            "orderId": "ORD-50106"
+          },
+          {
+            "orderId": "ORD-50109"
+          },
+          {
+            "orderId": "ORD-50115"
+          },
+          {
+            "orderId": "ORD-50116"
+          },
+          {
+            "orderId": "ORD-50121"
+          },
+          {
+            "orderId": "ORD-50126"
+          },
+          {
+            "orderId": "ORD-50128"
+          },
+          {
+            "orderId": "ORD-50129"
+          },
+          {
+            "orderId": "ORD-50133"
+          },
+          {
+            "orderId": "ORD-50135"
+          },
+          {
+            "orderId": "ORD-50141"
+          },
+          {
+            "orderId": "ORD-50146"
+          },
+          {
+            "orderId": "ORD-50148"
+          },
+          {
+            "orderId": "ORD-50155"
+          },
+          {
+            "orderId": "ORD-50159"
+          },
+          {
+            "orderId": "ORD-50160"
+          },
+          {
+            "orderId": "ORD-50162"
+          },
+          {
+            "orderId": "ORD-50164"
+          },
+          {
+            "orderId": "ORD-50170"
+          },
+          {
+            "orderId": "ORD-50172"
+          },
+          {
+            "orderId": "ORD-50176"
+          },
+          {
+            "orderId": "ORD-50178"
+          },
+          {
+            "orderId": "ORD-50179"
+          },
+          {
+            "orderId": "ORD-50181"
+          },
+          {
+            "orderId": "ORD-50182"
+          },
+          {
+            "orderId": "ORD-50183"
+          },
+          {
+            "orderId": "ORD-50187"
+          },
+          {
+            "orderId": "ORD-50191"
+          },
+          {
+            "orderId": "ORD-50197"
+          },
+          {
+            "orderId": "ORD-50200"
+          },
+          {
+            "orderId": "ORD-50207"
+          },
+          {
+            "orderId": "ORD-50208"
+          },
+          {
+            "orderId": "ORD-50215"
+          },
+          {
+            "orderId": "ORD-50222"
+          },
+          {
+            "orderId": "ORD-50225"
+          },
+          {
+            "orderId": "ORD-50231"
+          },
+          {
+            "orderId": "ORD-50238"
+          },
+          {
+            "orderId": "ORD-50244"
+          },
+          {
+            "orderId": "ORD-50249"
+          },
+          {
+            "orderId": "ORD-50254"
+          },
+          {
+            "orderId": "ORD-50257"
+          },
+          {
+            "orderId": "ORD-50261"
+          },
+          {
+            "orderId": "ORD-50268"
+          },
+          {
+            "orderId": "ORD-50270"
+          },
+          {
+            "orderId": "ORD-50273"
+          },
+          {
+            "orderId": "ORD-50276"
+          },
+          {
+            "orderId": "ORD-50280"
+          },
+          {
+            "orderId": "ORD-50285"
+          },
+          {
+            "orderId": "ORD-50289"
+          },
+          {
+            "orderId": "ORD-50291"
+          },
+          {
+            "orderId": "ORD-50297"
+          },
+          {
+            "orderId": "ORD-50302"
+          },
+          {
+            "orderId": "ORD-50305"
+          },
+          {
+            "orderId": "ORD-50310"
+          },
+          {
+            "orderId": "ORD-50315"
+          },
+          {
+            "orderId": "ORD-50320"
+          },
+          {
+            "orderId": "ORD-50324"
+          },
+          {
+            "orderId": "ORD-50325"
+          },
+          {
+            "orderId": "ORD-50331"
+          },
+          {
+            "orderId": "ORD-50336"
+          },
+          {
+            "orderId": "ORD-50338"
+          },
+          {
+            "orderId": "ORD-50344"
+          },
+          {
+            "orderId": "ORD-50351"
+          },
+          {
+            "orderId": "ORD-50352"
+          },
+          {
+            "orderId": "ORD-50356"
+          },
+          {
+            "orderId": "ORD-50359"
+          },
+          {
+            "orderId": "ORD-50361"
+          },
+          {
+            "orderId": "ORD-50366"
+          },
+          {
+            "orderId": "ORD-50371"
+          },
+          {
+            "orderId": "ORD-50377"
+          },
+          {
+            "orderId": "ORD-50383"
+          },
+          {
+            "orderId": "ORD-50389"
+          },
+          {
+            "orderId": "ORD-50391"
+          },
+          {
+            "orderId": "ORD-50394"
+          },
+          {
+            "orderId": "ORD-50400"
+          },
+          {
+            "orderId": "ORD-50402"
+          },
+          {
+            "orderId": "ORD-50403"
+          },
+          {
+            "orderId": "ORD-50405"
+          },
+          {
+            "orderId": "ORD-50412"
+          },
+          {
+            "orderId": "ORD-50414"
+          },
+          {
+            "orderId": "ORD-50420"
+          },
+          {
+            "orderId": "ORD-50426"
+          },
+          {
+            "orderId": "ORD-50433"
+          },
+          {
+            "orderId": "ORD-50440"
+          },
+          {
+            "orderId": "ORD-50444"
+          },
+          {
+            "orderId": "ORD-50449"
+          },
+          {
+            "orderId": "ORD-50453"
+          },
+          {
+            "orderId": "ORD-50454"
+          },
+          {
+            "orderId": "ORD-50460"
+          },
+          {
+            "orderId": "ORD-50461"
+          },
+          {
+            "orderId": "ORD-50462"
+          },
+          {
+            "orderId": "ORD-50464"
+          },
+          {
+            "orderId": "ORD-50469"
+          },
+          {
+            "orderId": "ORD-50473"
+          },
+          {
+            "orderId": "ORD-50475"
+          },
+          {
+            "orderId": "ORD-50478"
+          },
+          {
+            "orderId": "ORD-50485"
+          },
+          {
+            "orderId": "ORD-50488"
+          },
+          {
+            "orderId": "ORD-50490"
+          },
+          {
+            "orderId": "ORD-50493"
+          },
+          {
+            "orderId": "ORD-50497"
+          },
+          {
+            "orderId": "ORD-50501"
+          },
+          {
+            "orderId": "ORD-50505"
+          },
+          {
+            "orderId": "ORD-50510"
+          },
+          {
+            "orderId": "ORD-50511"
+          },
+          {
+            "orderId": "ORD-50517"
+          },
+          {
+            "orderId": "ORD-50522"
+          },
+          {
+            "orderId": "ORD-50525"
+          },
+          {
+            "orderId": "ORD-50529"
+          },
+          {
+            "orderId": "ORD-50531"
+          },
+          {
+            "orderId": "ORD-50538"
+          },
+          {
+            "orderId": "ORD-50542"
+          },
+          {
+            "orderId": "ORD-50544"
+          },
+          {
+            "orderId": "ORD-50546"
+          },
+          {
+            "orderId": "ORD-50550"
+          },
+          {
+            "orderId": "ORD-50552"
+          },
+          {
+            "orderId": "ORD-50554"
+          },
+          {
+            "orderId": "ORD-50555"
+          },
+          {
+            "orderId": "ORD-50558"
+          },
+          {
+            "orderId": "ORD-50560"
+          },
+          {
+            "orderId": "ORD-50565"
+          },
+          {
+            "orderId": "ORD-50568"
+          },
+          {
+            "orderId": "ORD-50572"
+          },
+          {
+            "orderId": "ORD-50578"
+          },
+          {
+            "orderId": "ORD-50582"
+          },
+          {
+            "orderId": "ORD-50586"
+          },
+          {
+            "orderId": "ORD-50587"
+          },
+          {
+            "orderId": "ORD-50593"
+          },
+          {
+            "orderId": "ORD-50594"
+          },
+          {
+            "orderId": "ORD-50601"
+          },
+          {
+            "orderId": "ORD-50602"
+          },
+          {
+            "orderId": "ORD-50608"
+          },
+          {
+            "orderId": "ORD-50614"
+          },
+          {
+            "orderId": "ORD-50617"
+          },
+          {
+            "orderId": "ORD-50618"
+          },
+          {
+            "orderId": "ORD-50622"
+          },
+          {
+            "orderId": "ORD-50624"
+          },
+          {
+            "orderId": "ORD-50631"
+          },
+          {
+            "orderId": "ORD-50634"
+          },
+          {
+            "orderId": "ORD-50641"
+          },
+          {
+            "orderId": "ORD-50647"
+          },
+          {
+            "orderId": "ORD-50654"
+          },
+          {
+            "orderId": "ORD-50658"
+          },
+          {
+            "orderId": "ORD-50665"
+          },
+          {
+            "orderId": "ORD-50668"
+          },
+          {
+            "orderId": "ORD-50675"
+          },
+          {
+            "orderId": "ORD-50682"
+          },
+          {
+            "orderId": "ORD-50688"
+          },
+          {
+            "orderId": "ORD-50690"
+          },
+          {
+            "orderId": "ORD-50694"
+          },
+          {
+            "orderId": "ORD-50701"
+          },
+          {
+            "orderId": "ORD-50708"
+          },
+          {
+            "orderId": "ORD-50715"
+          },
+          {
+            "orderId": "ORD-50716"
+          },
+          {
+            "orderId": "ORD-50718"
+          },
+          {
+            "orderId": "ORD-50723"
+          },
+          {
+            "orderId": "ORD-50730"
+          },
+          {
+            "orderId": "ORD-50736"
+          },
+          {
+            "orderId": "ORD-50742"
+          },
+          {
+            "orderId": "ORD-50746"
+          },
+          {
+            "orderId": "ORD-50749"
+          },
+          {
+            "orderId": "ORD-50752"
+          },
+          {
+            "orderId": "ORD-50758"
+          },
+          {
+            "orderId": "ORD-50759"
+          },
+          {
+            "orderId": "ORD-50761"
+          },
+          {
+            "orderId": "ORD-50762"
+          },
+          {
+            "orderId": "ORD-50763"
+          },
+          {
+            "orderId": "ORD-50766"
+          },
+          {
+            "orderId": "ORD-50772"
+          },
+          {
+            "orderId": "ORD-50778"
+          },
+          {
+            "orderId": "ORD-50785"
+          },
+          {
+            "orderId": "ORD-50790"
+          },
+          {
+            "orderId": "ORD-50792"
+          },
+          {
+            "orderId": "ORD-50797"
+          },
+          {
+            "orderId": "ORD-50798"
+          },
+          {
+            "orderId": "ORD-50804"
+          },
+          {
+            "orderId": "ORD-50811"
+          },
+          {
+            "orderId": "ORD-50815"
+          },
+          {
+            "orderId": "ORD-50818"
+          },
+          {
+            "orderId": "ORD-50823"
+          },
+          {
+            "orderId": "ORD-50827"
+          },
+          {
+            "orderId": "ORD-50832"
+          },
+          {
+            "orderId": "ORD-50834"
+          },
+          {
+            "orderId": "ORD-50840"
+          },
+          {
+            "orderId": "ORD-50845"
+          },
+          {
+            "orderId": "ORD-50852"
+          },
+          {
+            "orderId": "ORD-50859"
+          },
+          {
+            "orderId": "ORD-50864"
+          },
+          {
+            "orderId": "ORD-50871"
+          },
+          {
+            "orderId": "ORD-50877"
+          },
+          {
+            "orderId": "ORD-50880"
+          },
+          {
+            "orderId": "ORD-50887"
+          },
+          {
+            "orderId": "ORD-50890"
+          },
+          {
+            "orderId": "ORD-50897"
+          },
+          {
+            "orderId": "ORD-50902"
+          },
+          {
+            "orderId": "ORD-50906"
+          },
+          {
+            "orderId": "ORD-50910"
+          },
+          {
+            "orderId": "ORD-50912"
+          },
+          {
+            "orderId": "ORD-50918"
+          },
+          {
+            "orderId": "ORD-50925"
+          },
+          {
+            "orderId": "ORD-50928"
+          },
+          {
+            "orderId": "ORD-50930"
+          },
+          {
+            "orderId": "ORD-50935"
+          },
+          {
+            "orderId": "ORD-50938"
+          },
+          {
+            "orderId": "ORD-50944"
+          },
+          {
+            "orderId": "ORD-50947"
+          },
+          {
+            "orderId": "ORD-50954"
+          },
+          {
+            "orderId": "ORD-50958"
+          },
+          {
+            "orderId": "ORD-50962"
+          },
+          {
+            "orderId": "ORD-50968"
+          },
+          {
+            "orderId": "ORD-50970"
+          },
+          {
+            "orderId": "ORD-50973"
+          },
+          {
+            "orderId": "ORD-50974"
+          },
+          {
+            "orderId": "ORD-50980"
+          },
+          {
+            "orderId": "ORD-50987"
+          },
+          {
+            "orderId": "ORD-50989"
+          },
+          {
+            "orderId": "ORD-50995"
+          },
+          {
+            "orderId": "ORD-50996"
+          },
+          {
+            "orderId": "ORD-50998"
+          },
+          {
+            "orderId": "ORD-51002"
+          },
+          {
+            "orderId": "ORD-51007"
+          },
+          {
+            "orderId": "ORD-51014"
+          },
+          {
+            "orderId": "ORD-51019"
+          },
+          {
+            "orderId": "ORD-51022"
+          },
+          {
+            "orderId": "ORD-51027"
+          },
+          {
+            "orderId": "ORD-51029"
+          },
+          {
+            "orderId": "ORD-51032"
+          },
+          {
+            "orderId": "ORD-51034"
+          },
+          {
+            "orderId": "ORD-51037"
+          },
+          {
+            "orderId": "ORD-51042"
+          },
+          {
+            "orderId": "ORD-51047"
+          },
+          {
+            "orderId": "ORD-51049"
+          },
+          {
+            "orderId": "ORD-51051"
+          },
+          {
+            "orderId": "ORD-51058"
+          },
+          {
+            "orderId": "ORD-51059"
+          },
+          {
+            "orderId": "ORD-51064"
+          },
+          {
+            "orderId": "ORD-51067"
+          },
+          {
+            "orderId": "ORD-51071"
+          },
+          {
+            "orderId": "ORD-51073"
+          },
+          {
+            "orderId": "ORD-51075"
+          },
+          {
+            "orderId": "ORD-51081"
+          },
+          {
+            "orderId": "ORD-51084"
+          },
+          {
+            "orderId": "ORD-51089"
+          },
+          {
+            "orderId": "ORD-51090"
+          },
+          {
+            "orderId": "ORD-51097"
+          },
+          {
+            "orderId": "ORD-51098"
+          },
+          {
+            "orderId": "ORD-51103"
+          },
+          {
+            "orderId": "ORD-51108"
+          },
+          {
+            "orderId": "ORD-51113"
+          },
+          {
+            "orderId": "ORD-51115"
+          },
+          {
+            "orderId": "ORD-51117"
+          },
+          {
+            "orderId": "ORD-51119"
+          },
+          {
+            "orderId": "ORD-51125"
+          },
+          {
+            "orderId": "ORD-51128"
+          },
+          {
+            "orderId": "ORD-51131"
+          },
+          {
+            "orderId": "ORD-51133"
+          },
+          {
+            "orderId": "ORD-51135"
+          },
+          {
+            "orderId": "ORD-51137"
+          },
+          {
+            "orderId": "ORD-51142"
+          },
+          {
+            "orderId": "ORD-51144"
+          },
+          {
+            "orderId": "ORD-51148"
+          },
+          {
+            "orderId": "ORD-51154"
+          },
+          {
+            "orderId": "ORD-51155"
+          },
+          {
+            "orderId": "ORD-51157"
+          },
+          {
+            "orderId": "ORD-51159"
+          },
+          {
+            "orderId": "ORD-51165"
+          },
+          {
+            "orderId": "ORD-51166"
+          },
+          {
+            "orderId": "ORD-51168"
+          },
+          {
+            "orderId": "ORD-51169"
+          },
+          {
+            "orderId": "ORD-51170"
+          },
+          {
+            "orderId": "ORD-51172"
+          },
+          {
+            "orderId": "ORD-51178"
+          },
+          {
+            "orderId": "ORD-51180"
+          },
+          {
+            "orderId": "ORD-51184"
+          },
+          {
+            "orderId": "ORD-51189"
+          },
+          {
+            "orderId": "ORD-51193"
+          },
+          {
+            "orderId": "ORD-51196"
+          },
+          {
+            "orderId": "ORD-51197"
+          },
+          {
+            "orderId": "ORD-51199"
+          },
+          {
+            "orderId": "ORD-51201"
+          },
+          {
+            "orderId": "ORD-51205"
+          },
+          {
+            "orderId": "ORD-51210"
+          },
+          {
+            "orderId": "ORD-51214"
+          },
+          {
+            "orderId": "ORD-51217"
+          },
+          {
+            "orderId": "ORD-51218"
+          },
+          {
+            "orderId": "ORD-51223"
+          },
+          {
+            "orderId": "ORD-51226"
+          },
+          {
+            "orderId": "ORD-51233"
+          },
+          {
+            "orderId": "ORD-51238"
+          },
+          {
+            "orderId": "ORD-51239"
+          },
+          {
+            "orderId": "ORD-51244"
+          },
+          {
+            "orderId": "ORD-51249"
+          },
+          {
+            "orderId": "ORD-51251"
+          },
+          {
+            "orderId": "ORD-51256"
+          },
+          {
+            "orderId": "ORD-51260"
+          },
+          {
+            "orderId": "ORD-51264"
+          },
+          {
+            "orderId": "ORD-51266"
+          },
+          {
+            "orderId": "ORD-51267"
+          },
+          {
+            "orderId": "ORD-51268"
+          },
+          {
+            "orderId": "ORD-51272"
+          },
+          {
+            "orderId": "ORD-51276"
+          },
+          {
+            "orderId": "ORD-51283"
+          },
+          {
+            "orderId": "ORD-51290"
+          },
+          {
+            "orderId": "ORD-51297"
+          },
+          {
+            "orderId": "ORD-51298"
+          },
+          {
+            "orderId": "ORD-51299"
+          },
+          {
+            "orderId": "ORD-51303"
+          },
+          {
+            "orderId": "ORD-51307"
+          },
+          {
+            "orderId": "ORD-51314"
+          },
+          {
+            "orderId": "ORD-51315"
+          },
+          {
+            "orderId": "ORD-51322"
+          },
+          {
+            "orderId": "ORD-51329"
+          },
+          {
+            "orderId": "ORD-51334"
+          },
+          {
+            "orderId": "ORD-51337"
+          },
+          {
+            "orderId": "ORD-51338"
+          },
+          {
+            "orderId": "ORD-51344"
+          },
+          {
+            "orderId": "ORD-51345"
+          },
+          {
+            "orderId": "ORD-51348"
+          },
+          {
+            "orderId": "ORD-51349"
+          },
+          {
+            "orderId": "ORD-51355"
+          },
+          {
+            "orderId": "ORD-51361"
+          },
+          {
+            "orderId": "ORD-51368"
+          },
+          {
+            "orderId": "ORD-51372"
+          },
+          {
+            "orderId": "ORD-51375"
+          },
+          {
+            "orderId": "ORD-51378"
+          },
+          {
+            "orderId": "ORD-51385"
+          },
+          {
+            "orderId": "ORD-51390"
+          },
+          {
+            "orderId": "ORD-51394"
+          },
+          {
+            "orderId": "ORD-51401"
+          },
+          {
+            "orderId": "ORD-51407"
+          },
+          {
+            "orderId": "ORD-51408"
+          },
+          {
+            "orderId": "ORD-51410"
+          },
+          {
+            "orderId": "ORD-51411"
+          },
+          {
+            "orderId": "ORD-51418"
+          },
+          {
+            "orderId": "ORD-51419"
+          },
+          {
+            "orderId": "ORD-51420"
+          },
+          {
+            "orderId": "ORD-51423"
+          },
+          {
+            "orderId": "ORD-51424"
+          },
+          {
+            "orderId": "ORD-51431"
+          },
+          {
+            "orderId": "ORD-51434"
+          },
+          {
+            "orderId": "ORD-51436"
+          },
+          {
+            "orderId": "ORD-51441"
+          },
+          {
+            "orderId": "ORD-51442"
+          },
+          {
+            "orderId": "ORD-51444"
+          },
+          {
+            "orderId": "ORD-51450"
+          },
+          {
+            "orderId": "ORD-51457"
+          },
+          {
+            "orderId": "ORD-51461"
+          },
+          {
+            "orderId": "ORD-51466"
+          },
+          {
+            "orderId": "ORD-51467"
+          },
+          {
+            "orderId": "ORD-51470"
+          },
+          {
+            "orderId": "ORD-51474"
+          },
+          {
+            "orderId": "ORD-51475"
+          },
+          {
+            "orderId": "ORD-51482"
+          },
+          {
+            "orderId": "ORD-51489"
+          },
+          {
+            "orderId": "ORD-51492"
+          },
+          {
+            "orderId": "ORD-51499"
+          },
+          {
+            "orderId": "ORD-51503"
+          },
+          {
+            "orderId": "ORD-51505"
+          },
+          {
+            "orderId": "ORD-51512"
+          },
+          {
+            "orderId": "ORD-51519"
+          },
+          {
+            "orderId": "ORD-51526"
+          },
+          {
+            "orderId": "ORD-51528"
+          },
+          {
+            "orderId": "ORD-51533"
+          },
+          {
+            "orderId": "ORD-51534"
+          },
+          {
+            "orderId": "ORD-51541"
+          },
+          {
+            "orderId": "ORD-51542"
+          },
+          {
+            "orderId": "ORD-51545"
+          },
+          {
+            "orderId": "ORD-51551"
+          },
+          {
+            "orderId": "ORD-51555"
+          },
+          {
+            "orderId": "ORD-51557"
+          },
+          {
+            "orderId": "ORD-51560"
+          },
+          {
+            "orderId": "ORD-51564"
+          },
+          {
+            "orderId": "ORD-51567"
+          },
+          {
+            "orderId": "ORD-51569"
+          },
+          {
+            "orderId": "ORD-51575"
+          },
+          {
+            "orderId": "ORD-51580"
+          },
+          {
+            "orderId": "ORD-51585"
+          },
+          {
+            "orderId": "ORD-51589"
+          },
+          {
+            "orderId": "ORD-51595"
+          },
+          {
+            "orderId": "ORD-51600"
+          },
+          {
+            "orderId": "ORD-51602"
+          },
+          {
+            "orderId": "ORD-51609"
+          },
+          {
+            "orderId": "ORD-51610"
+          },
+          {
+            "orderId": "ORD-51611"
+          },
+          {
+            "orderId": "ORD-51612"
+          },
+          {
+            "orderId": "ORD-51615"
+          },
+          {
+            "orderId": "ORD-51621"
+          },
+          {
+            "orderId": "ORD-51628"
+          },
+          {
+            "orderId": "ORD-51635"
+          },
+          {
+            "orderId": "ORD-51642"
+          },
+          {
+            "orderId": "ORD-51644"
+          },
+          {
+            "orderId": "ORD-51648"
+          },
+          {
+            "orderId": "ORD-51651"
+          },
+          {
+            "orderId": "ORD-51652"
+          },
+          {
+            "orderId": "ORD-51659"
+          },
+          {
+            "orderId": "ORD-51663"
+          },
+          {
+            "orderId": "ORD-51670"
+          },
+          {
+            "orderId": "ORD-51672"
+          },
+          {
+            "orderId": "ORD-51676"
+          },
+          {
+            "orderId": "ORD-51682"
+          },
+          {
+            "orderId": "ORD-51685"
+          },
+          {
+            "orderId": "ORD-51686"
+          },
+          {
+            "orderId": "ORD-51693"
+          },
+          {
+            "orderId": "ORD-51700"
+          },
+          {
+            "orderId": "ORD-51705"
+          },
+          {
+            "orderId": "ORD-51706"
+          },
+          {
+            "orderId": "ORD-51713"
+          },
+          {
+            "orderId": "ORD-51716"
+          },
+          {
+            "orderId": "ORD-51717"
+          },
+          {
+            "orderId": "ORD-51722"
+          },
+          {
+            "orderId": "ORD-51724"
+          },
+          {
+            "orderId": "ORD-51728"
+          },
+          {
+            "orderId": "ORD-51735"
+          },
+          {
+            "orderId": "ORD-51739"
+          },
+          {
+            "orderId": "ORD-51741"
+          },
+          {
+            "orderId": "ORD-51742"
+          },
+          {
+            "orderId": "ORD-51747"
+          },
+          {
+            "orderId": "ORD-51753"
+          },
+          {
+            "orderId": "ORD-51754"
+          },
+          {
+            "orderId": "ORD-51759"
+          },
+          {
+            "orderId": "ORD-51765"
+          },
+          {
+            "orderId": "ORD-51769"
+          },
+          {
+            "orderId": "ORD-51776"
+          },
+          {
+            "orderId": "ORD-51779"
+          },
+          {
+            "orderId": "ORD-51785"
+          },
+          {
+            "orderId": "ORD-51790"
+          },
+          {
+            "orderId": "ORD-51792"
+          },
+          {
+            "orderId": "ORD-51799"
+          },
+          {
+            "orderId": "ORD-51805"
+          },
+          {
+            "orderId": "ORD-51809"
+          },
+          {
+            "orderId": "ORD-51814"
+          },
+          {
+            "orderId": "ORD-51820"
+          },
+          {
+            "orderId": "ORD-51826"
+          },
+          {
+            "orderId": "ORD-51829"
+          },
+          {
+            "orderId": "ORD-51834"
+          },
+          {
+            "orderId": "ORD-51839"
+          },
+          {
+            "orderId": "ORD-51846"
+          },
+          {
+            "orderId": "ORD-51851"
+          },
+          {
+            "orderId": "ORD-51853"
+          },
+          {
+            "orderId": "ORD-51856"
+          },
+          {
+            "orderId": "ORD-51857"
+          },
+          {
+            "orderId": "ORD-51863"
+          },
+          {
+            "orderId": "ORD-51864"
+          },
+          {
+            "orderId": "ORD-51869"
+          },
+          {
+            "orderId": "ORD-51876"
+          },
+          {
+            "orderId": "ORD-51878"
+          },
+          {
+            "orderId": "ORD-51882"
+          },
+          {
+            "orderId": "ORD-51884"
+          },
+          {
+            "orderId": "ORD-51886"
+          },
+          {
+            "orderId": "ORD-51888"
+          },
+          {
+            "orderId": "ORD-51891"
+          },
+          {
+            "orderId": "ORD-51893"
+          },
+          {
+            "orderId": "ORD-51894"
+          },
+          {
+            "orderId": "ORD-51895"
+          },
+          {
+            "orderId": "ORD-51898"
+          },
+          {
+            "orderId": "ORD-51905"
+          },
+          {
+            "orderId": "ORD-51912"
+          },
+          {
+            "orderId": "ORD-51919"
+          },
+          {
+            "orderId": "ORD-51926"
+          },
+          {
+            "orderId": "ORD-51928"
+          },
+          {
+            "orderId": "ORD-51934"
+          },
+          {
+            "orderId": "ORD-51938"
+          },
+          {
+            "orderId": "ORD-51939"
+          },
+          {
+            "orderId": "ORD-51946"
+          },
+          {
+            "orderId": "ORD-51950"
+          },
+          {
+            "orderId": "ORD-51954"
+          },
+          {
+            "orderId": "ORD-51959"
+          },
+          {
+            "orderId": "ORD-51963"
+          },
+          {
+            "orderId": "ORD-51970"
+          },
+          {
+            "orderId": "ORD-51973"
+          },
+          {
+            "orderId": "ORD-51979"
+          },
+          {
+            "orderId": "ORD-51983"
+          },
+          {
+            "orderId": "ORD-51985"
+          },
+          {
+            "orderId": "ORD-51991"
+          },
+          {
+            "orderId": "ORD-51996"
+          },
+          {
+            "orderId": "ORD-51997"
+          },
+          {
+            "orderId": "ORD-52002"
+          },
+          {
+            "orderId": "ORD-52009"
+          },
+          {
+            "orderId": "ORD-52014"
+          },
+          {
+            "orderId": "ORD-52018"
+          },
+          {
+            "orderId": "ORD-52019"
+          },
+          {
+            "orderId": "ORD-52020"
+          },
+          {
+            "orderId": "ORD-52026"
+          },
+          {
+            "orderId": "ORD-52033"
+          },
+          {
+            "orderId": "ORD-52036"
+          },
+          {
+            "orderId": "ORD-52038"
+          },
+          {
+            "orderId": "ORD-52040"
+          },
+          {
+            "orderId": "ORD-52041"
+          },
+          {
+            "orderId": "ORD-52042"
+          },
+          {
+            "orderId": "ORD-52045"
+          }
+        ],
+        "label": "scale-fast/overclock",
+        "mode": "overclock",
+        "intelligence": "adaptive",
+        "concurrency": "adaptive",
+        "maxWorkers": 16,
+        "thumbnails": false,
+        "cache": "cold"
+      }
+    }
+  ],
+  "notes": [
+    "Command: tsx packages/benchmarks/src/cli.ts --mode overclock --records 500 --trials 1 --engine http://127.0.0.1:4000 --label scale-fast --budget 1.5 --timeout 15",
+    "Code version: 8f795a8 (uncommitted changes, tree digest 3a97c41263cf).",
+    "Engine 0.1.0. Planner claude-opus-5-5, helper claude-haiku-5-5 (Anthropic available). JEV jev-latest / jev-preview (available). Browser available."
+  ]
+}

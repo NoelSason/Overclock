@@ -317,4 +317,23 @@ describe("AIMD concurrency controller", () => {
     window(100, 80);
     expect(c.limit).toBe(33);
   });
+
+  it("ignores demand-limited windows: no congestion signal and no growth when the app wasn't at its limit", () => {
+    let t = 0;
+    const c = new AimdController("Orders", { min: 1, max: 64, initial: 4, windowMs: 1000, errorThreshold: 0.2 }, () => t);
+    const window = (ms: number, n: number, saturated: boolean) => {
+      for (let i = 0; i < n; i++) {
+        t += 1000 / n;
+        c.record({ ms, ok: true, saturated });
+      }
+    };
+    window(100, 10, true);
+    expect(c.limit).toBe(8);
+    // Few tasks were ready: throughput fell and latency rose, but the app never used its 8 slots.
+    window(400, 4, false);
+    expect(c.limit).toBe(8);
+    // Still in slow start once demand returns: it doubles instead of adding one.
+    window(100, 20, true);
+    expect(c.limit).toBe(16);
+  });
 });

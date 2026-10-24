@@ -339,6 +339,58 @@ time or model calls; compare against a strict-cold run instead.
 
 ## Results
 
+### The website changed between A and B (5 seeds, 2026-10-24)
+
+`pnpm network:demo --records 10 --seed <s> --variation rename-save --warm-arm` on seeds 4242,
+1111, 2222, 3333, and 7777: local SpacetimeDB, local arena with no injected latency, mode E with
+the default Opus 5.5 fast planner and critic. Each run starts a fresh registry and three engine
+processes with separate data dirs and network identities. Between A and B, every edit form's
+save button is renamed (CRM "Save changes" → "Update record", Orders "Update order" → "Apply
+changes", Support "Save ticket" → "Commit ticket"). B and C run the same new records (seed + 1)
+on the changed interface. Each report is in `benchmarks/results/network/`, and the dashboard's
+Transfer page renders them.
+
+| | A: cold, publishes | B: imports, rebinds | C: fresh runtime, strict-cold | C again: local warm replay |
+| --- | --- | --- | --- | --- |
+| Arena checker, every run | 10/10, 0 duplicate, 0 collateral | 10/10, 0, 0 | 10/10, 0, 0 | 10/10, 0, 0 (4 runs) |
+| Wall time, median (range) | 19.4 s (18.6–29.6) | **3.3 s (3.0–3.4)** | 18.8 s (18.7–21.2) | 1.1 s (0.8–1.2) |
+| First verified write, median | 18.4 s | **2.7 s** | 18.4 s | — |
+| Planner calls | 1 (2 in one run) | **0** | 1 | 0 |
+| Model cost, median | $0.43 | **$0** | $0.43 | $0 |
+
+- **B against C** (same records, same changed interface, both correct in every run): median 5.9×
+  less wall time (5.7–6.4×) and 6.8× sooner to the first verified write (6.5–7.6×), with no
+  model call.
+- **What B rebound:** all three renamed buttons, by structure (each is the only write button of
+  a form whose fields all bound by label), so B's writes ran behind a write canary: one record
+  wrote and verified by fresh read-back before the rest. The canary passed for every write
+  segment in every run. B bound 24–25 controls with 0 unbound, wrote through browser clicks, and
+  every write was confirmed by a fresh read.
+- **Distinct runtimes:** in every run A and B had different network identities, the
+  capability's publisher was A's identity, and B's local plan cache was empty before its run.
+- **Overhead:** publication about 60 ms; validation by a separate identity 1.6–1.8 s (static
+  analysis, rebinding, and a read-only dry run; it executes no writes); B's lookup and fetch
+  under 20 ms; rebinding 1.2–1.3 s.
+- **Local warm replay** (C rerunning its own cached plan) is faster than B, because B pays for
+  rebinding and the write canary. It is plain cache reuse, not a transfer between runtimes.
+- **Not a fair comparison with older numbers:** the 32.7× and 56× ratios below were measured when
+  a cold run took 95–169 s. Cold runs now take about 19 s, so the remaining gap is smaller.
+- **Failures:** the first attempt at seed 2222 failed before B: the validator rejected A's
+  capability in static analysis (11 ms), and the reason wasn't recorded. The rerun passed. Since
+  then the engine runs the same static analysis before publishing and records any rejection.
+  The adaptive-concurrency change landed while this series ran: seeds 4242 and 1111 ran before
+  it, seeds 2222 (rerun), 3333, and 7777 after.
+
+### A change rebinding can't prove safe (seed 5151)
+
+`--variation fields-in-tab --expect-refusal --no-cold-arm` moves every edit form's fields into a
+tab. B fetched the capability and refused it (`REQUIRES_REPAIR`: `hidden-in-tab` on the Orders
+review fields and the Support category, "writes not provably safe"), guessed nothing, planned
+cold instead (1 planner call), and passed the checker with 10/10, 0 duplicate, 0 collateral
+writes.
+
+### Earlier runs, unchanged interface
+
 One recorded run of `pnpm network:demo --records 10` on 2026-10-24: local SpacetimeDB, local
 arena with no injected latency, mode E, template `t1-order-reconcile`. Runtime A used seed 4242.
 Runtimes B and C used seed 4243 (different records, same apps). This is one trial; treat the
@@ -364,8 +416,8 @@ numbers as a demonstration, not a benchmark.
   verified write, 0 versus 7 model calls, $0 versus $0.62. C's cold run needed two repair
   rounds (a critique fallback, then a validation round), so it is slower than a typical cold
   run. Against A's cold run, B used about 32× less wall time.
-- **Not shown:** a UI change before B runs (`--variation`), repair after a breaking change, and
-  more than three runtimes.
+- **Not shown in these runs:** a UI change before B runs (shown above since), repair after a
+  breaking change, and more than three runtimes.
 
 A second run on the final code (after the guard and import changes) also passed every check:
 A 95.6 s and $0.40, B 2.9 s and $0 (`EXACT_COMPATIBLE`, 25 controls bound), C 94.8 s and $0.39,

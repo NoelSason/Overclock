@@ -37,7 +37,7 @@ export default defineConfig({
       command: `pnpm --filter @overclock/dashboard exec next dev -p ${DASHBOARD_PORT}`,
       url: DASHBOARD_URL,
       cwd: root,
-      env: { NEXT_PUBLIC_OVERCLOCK_URL: ENGINE_URL, NEXT_PUBLIC_ARENA_ADMIN_URL: ARENA_URL },
+      env: { NEXT_PUBLIC_OVERCLOCK_URL: ENGINE_URL, NEXT_PUBLIC_ARENA_ADMIN_URL: ARENA_URL, NEXT_DIST_DIR: ".next-e2e" },
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },

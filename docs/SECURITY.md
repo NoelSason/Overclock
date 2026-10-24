@@ -77,15 +77,46 @@ account, is the primary control.
 
 ## Read-only pages during read fragments
 
-**Status: Partial.** Implemented in `BrowserManager.setReadOnly` and `Executor.runTask`; no
-automated test.
+**Status: Working (tested).** `BrowserManager.setReadOnly` and `Executor.runTask`;
+`tests/integration/runtime.test.ts` ("blocks state-changing GETs on read-only execution
+pages…").
 
 Execution contexts can write, so the executor narrows them per page. Before a worker runs a
 segment, it marks the page read-only unless the segment is a write segment, and it clears the
 mark when the segment ends. While the mark is set, the route guard aborts every mutating request
-from that page. If a click in a read fragment unexpectedly triggers a write, the write is never
-sent: the runtime raises `WriteRejectedError` with status 0, and the executor fails the task
-with "a read-only fragment attempted a write".
+from that page, and every `GET` that matches the exploration contexts' risky-GET screen (log
+out, delete, approve, `action=`, and the rest of the list above). Until 2026-10-24 that screen
+applied only to exploration contexts, so a read fragment could still follow a state-changing
+`GET` such as the arena's `/logout`; the browser test above failed on that code and passes now.
+Legitimate reads on the same page are unaffected, and a write segment's page follows the plan's
+own navigation unchanged. If a click in a read fragment unexpectedly triggers a write, the write
+is never sent: the runtime raises `WriteRejectedError` with status 0, and the executor fails the
+task with "a read-only fragment attempted a write".
+
+## The review gate before writes
+
+**Status: Working (tested).** `packages/swarm/src/review.ts`; `tests/unit/review.test.ts` and
+`tests/integration/review-gate.test.ts` (the real mode D and mode E pipelines against a fixture
+app, with a scripted model).
+
+When the execution policy requires an adversarial critique (modes D and E with more than five
+records), no write of a plan runs until a critique of that exact plan reports no high-severity
+finding. A rule the plan doesn't implement counts as high severity. Findings get one repair
+round, and the repaired plan is critiqued again from scratch. The gate fails closed: a critique
+that is unavailable after its retry (API error, truncated or unparsable output), a repair that
+fails or doesn't compile, or findings left after the repair reject the plan. The run then fails
+with the reason ("review rejected the plan; no write ran: …"), each round is a `review` event,
+and every deferred write fragment is marked rejected.
+
+Before 2026-10-24 three paths skipped this: in mode E, a plan repaired after a streaming
+fallback ran without any critique, and a plan repaired after a critique ran without a second
+one; in mode D, a candidate whose repair failed kept running with its high-severity findings.
+The integration tests for those paths fail on the earlier code.
+
+Plans carry the review they passed into the local plan cache and onto the network: a warm start
+reuses a cached plan only if it passed a review (when the task's policy requires one), and a
+runtime publishes a capability only if its plan passed one. Modes B and C (and tasks of five
+records or fewer) run without a critique by definition; their plans are never published.
 
 This matters most in mode E, where read fragments start before the plan is complete.
 
@@ -267,18 +298,31 @@ ids, and compiles it locally. It executes the plan only when the outcome is
 `EXACT_COMPATIBLE`, `STRUCTURALLY_COMPATIBLE`, or `REQUIRES_REBINDING`, every write bound
 uniquely, and the plan compiled without errors; otherwise it discovers cold.
 
+Write-critical controls (each submit button, and the fields and guards of its form) must bind
+by label, with one exception: a submit button whose label changed binds structurally when it is
+the only write button of a form whose field schema is identical, every field and guard of its
+writes bound by label, and the write is not irreversible. Writes through such a button run
+behind a write canary: one record writes and verifies by fresh read-back before any other record
+may write, and a canary that fails twice blocks the template. Anything else that rebinding
+can't prove (a field moved into a tab, an ambiguous match, a changed effect) makes the runtime
+refuse the capability, with the reasons in its `network.import` event, and discover cold.
+
 From then on every compile-time and run-time check applies: validation, compare-and-swap
 guards, locks, read-back verification, reconciliation, and the origin allowlist. Two cold-run
 gates are replaced rather than repeated: the importing runtime runs no critique and no dry run,
-because the validator already ran static analysis and a read-only dry run on that version. It
-also runs the plan staged, without a write canary.
+because its publisher's plan passed a critique (publication requires it) and the validator ran
+static analysis and a read-only dry run on that version. A publisher that skipped its critique
+would still pass the validator's structural checks: the validator does not re-run the critique.
 
 ## Known gaps
 
-- Per-page read-only mode, risky-GET blocking, WebSocket blocking, and the operator-session
-  fallback for exploration have no automated tests.
+- WebSocket blocking and the operator-session fallback for exploration have no automated
+  tests. WebSockets are blocked only in exploration contexts, not on read-only execution pages.
 - The engine and arena APIs are unauthenticated and rely on binding to localhost.
 - Redaction and sanitization are pattern based.
 - Validation never executes writes: write validation relies on static analysis plus the
   publisher's verified-receipt evidence.
-- An imported plan runs without a write canary.
+- An imported plan runs without a write canary unless a submit button was rebound
+  structurally.
+- The validator doesn't re-run the critique, so the network relies on each publisher's own
+  review gate for semantic correctness.

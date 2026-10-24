@@ -357,7 +357,7 @@ export function applyEvent(view: RunView, ev: RunEvent): RunView {
       if (view.scoutPages.length > 500) view.scoutPages.shift();
       break;
     case "network.lookup":
-      view.network.lookups.push({ t: ev.t, outcome: ev.outcome, source: ev.source, candidates: ev.candidates, ms: ev.ms, capabilityId: ev.capabilityId, version: ev.version , identity: ev.identity });
+      view.network.lookups.push({ t: ev.t, outcome: ev.outcome, source: ev.source, candidates: ev.candidates, ms: ev.ms, capabilityId: ev.capabilityId, version: ev.version, identity: ev.identity });
       break;
     case "network.import":
       view.network.imports.push({ t: ev.t, capabilityId: ev.capabilityId, version: ev.version, outcome: ev.outcome, bound: ev.bound, unbound: ev.unbound, rebindMs: ev.rebindMs, fetchMs: ev.fetchMs, source: ev.source, avoided: ev.avoided, publisher: ev.publisher, writeCanary: ev.writeCanary, relabeled: ev.relabeled, refused: ev.refused });

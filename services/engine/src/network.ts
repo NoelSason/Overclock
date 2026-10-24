@@ -164,6 +164,10 @@ export async function publishCapability(o: Emitter & { client: INetworkClient; c
     return rejected("-", 0, `export refused: ${message(err)}`);
   }
   const cap = exported.capability;
+  // The validator runs this same static analysis first; refusing here keeps a capability that
+  // would fail it off the network, and records why in this run.
+  const analysis = analyzeCapability(cap);
+  if (!analysis.ok) return rejected(cap.capabilityId, cap.version, `static analysis: ${analysis.issues.filter((i) => i.severity === "error").slice(0, 3).map((i) => i.message).join("; ")}`, exported.report.redactions);
   try {
     for (const a of cap.applications) await o.client.registerApplication(a.origin, a.routeFamilies);
     const res = await o.client.proposeCapability(cap);

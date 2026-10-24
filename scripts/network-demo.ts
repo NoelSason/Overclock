@@ -1,7 +1,7 @@
 /**
  * Overclock Network: runtime A discovers and publishes, runtime B imports, rebinds, and executes.
  *
- *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--mode overclock] [--no-cold-arm] [--keep]
+ *   pnpm network:demo [--records 10] [--seed 4242] [--variation rename-save] [--expect-refusal] [--warm-arm] [--mode overclock] [--no-cold-arm] [--keep]
  *
  * Needs the arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev` starts one). The
  * script publishes the module to a separate `overclock-demo` database and wipes it first, so
@@ -26,14 +26,20 @@
  * The script exits 1 unless every acceptance check passes: both runs complete and the arena's
  * independent checker finds every record correct with no duplicate or collateral writes; B
  * imported an executable capability and selected it instead of planning; and B made no planner
- * calls while A made at least one.
+ * calls while A made at least one. B must also bind every control, be a different network
+ * identity than A with an empty local cache, and write through browser controls with fresh
+ * read-back. With --variation, B must report what changed (old and new labels) and pass a write
+ * canary before fanning out.
+ *
+ * With --expect-refusal (for a variation rebinding can't prove safe, e.g. fields-in-tab), the
+ * checks invert: B must refuse the capability with reasons, plan cold instead, and still pass.
  *
  * Every number printed comes from the engines' run summaries and the arena's checker. Tokens
  * stay in each runtime's data dir and are never printed.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserManager, SessionManager } from "@overclock/browser-runtime";
 import type { PublisherRole } from "@overclock/network-contracts";
@@ -154,6 +160,8 @@ async function main(): Promise<void> {
   const variation = argValue(argv, "--variation");
   const mode = (argValue(argv, "--mode") ?? "overclock") as RunConfigInput["mode"];
   const coldArm = !argv.includes("--no-cold-arm");
+  const expectRefusal = argv.includes("--expect-refusal");
+  const warmArm = argv.includes("--warm-arm");
   const keep = argv.includes("--keep");
   const arena = new Arena();
   await arena.health();
@@ -191,14 +199,14 @@ async function main(): Promise<void> {
     // The admin promotes from its own view of the registry, scoped to these origins.
     await admin.watchOrigins(apps.map((a) => a.origin));
     const sessions = new SessionManager(browser, () => ({ username: process.env.ARENA_USERNAME || "operator", password: process.env.ARENA_PASSWORD || "overclock-arena" }));
-    let validation: { versionId: string; outcome: string; category: string; ms: number } | null = null;
+    let validation: { versionId: string; outcome: string; category: string; ms: number; detail: string } | null = null;
     const worker = await startValidationWorker({
       client: validator,
       browser,
       apps,
       environment: "demo-validator",
       storageStateFor: (x) => sessions.storageStateFor(x),
-      onResult: (r) => (validation = { versionId: r.result.versionId, outcome: r.result.outcome, category: r.result.category, ms: Math.round(r.ms) }),
+      onResult: (r) => (validation = { versionId: r.result.versionId, outcome: r.result.outcome, category: r.result.category, ms: Math.round(r.ms), detail: r.result.detail }),
       onSkip: (v, reason) => console.log(`validator skipped ${v}: ${reason}`),
     });
 
@@ -232,6 +240,13 @@ async function main(): Promise<void> {
     // 3. Runtime B: new records (and optionally a UI change), import + rebind + execute.
     const scenarioB = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
     if (variation) await arena.surprise(variation);
+    // The changes that apply to this task's applications (the arena hosts other apps too).
+    const taskApps = new Set(scenarioB.applications.map((x) => x.name));
+    const allVariations = await arena.variations();
+    const variationsB = Object.fromEntries(Object.entries(allVariations).map(([k, v]) => [k, v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([app]) => taskApps.has(app))) : v]));
+    // B starts with nothing local: its own data dir, an empty program cache, its own identity.
+    const bCacheDir = join(DEMO_DIR, "runtime-b", "program-cache");
+    const bCacheBefore = existsSync(bCacheDir) ? readdirSync(bCacheDir).length : 0;
     console.log(`\nB: ${scenarioB.title} (${scenarioB.records.length} records)${variation ? `, UI variation ${variation}` : ""}, network-read`);
     const resB = await engineB.execute(configFromScenario(scenarioB, { mode, knowledge: "network-read", thumbnails: false }));
     const outB = brief("runtime-b", resB, await arena.check());
@@ -242,8 +257,18 @@ async function main(): Promise<void> {
     const selectedB = eventsB.find((e) => e.type === "candidate.selected");
     const plannerA = plannerCalls(eventsA.events);
     const plannerB = plannerCalls(eventsB);
+    const lookupA = eventsA.events.find((e) => e.type === "network.lookup");
+    const lookupB = eventsB.find((e) => e.type === "network.lookup");
+    const idA = lookupA?.type === "network.lookup" ? lookupA.identity : undefined;
+    const idB = lookupB?.type === "network.lookup" ? lookupB.identity : undefined;
+    const imp = importB?.type === "network.import" ? importB : null;
+    const actionsB: Record<string, number> = {};
+    for (const e of eventsB) if (e.type === "action" && e.ok) actionsB[e.actionType] = (actionsB[e.actionType] ?? 0) + 1;
+    const verifiedB = eventsB.filter((e) => e.type === "receipt" && e.status === "VERIFIED").length;
+    const canaryB = eventsB.filter((e) => e.type === "log" && e.message.startsWith("write canary passed")).length;
 
     let outC: ReturnType<typeof brief> | null = null;
+    let outW: ReturnType<typeof brief> | null = null;
     let diagC: ReturnType<typeof diagnose> | null = null;
     if (coldArm) {
       const scenarioC = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
@@ -253,14 +278,37 @@ async function main(): Promise<void> {
       outC = brief("runtime-c", resC, await arena.check());
       diagC = diagnose((await engineC.events(resC.runId, 0, 10_000)).events);
       console.log(JSON.stringify(outC, null, 2));
+      if (warmArm) {
+        // Local warm-cache replay, a separate comparator: C again on the same records, reusing the
+        // plan its own cold run cached (no network).
+        const scenarioW = await arena.loadScenario({ seed: seed + 1, template: "t1-order-reconcile", records });
+        if (JSON.stringify(scenarioW.records) !== JSON.stringify(scenarioB.records)) throw new Error("the warm replay's scenario differs from B's");
+        console.log(`\nC warm: same scenario${variation ? " and variation" : ""}, runtime C again, local-only knowledge with its own warm cache`);
+        const resW = await engineC.execute(configFromScenario(scenarioW, { mode, knowledge: "local-only", cache: "warm", thumbnails: false }));
+        outW = brief("runtime-c-warm", resW, await arena.check());
+        console.log(JSON.stringify(outW, null, 2));
+      }
     }
     if (variation) await arena.resetVariations();
     const diagA = diagnose(eventsA.events);
     const diagB = diagnose(eventsB);
 
-    const checks = [
+    const distinct = { check: "A and B are distinct runtimes: different network identities; B started with an empty local cache", ok: !!idA && !!idB && idA !== idB && bCacheBefore === 0 && (!imp?.publisher || (imp.publisher.startsWith(idA!) && !imp.publisher.startsWith(idB!))), detail: `A ${idA ?? "?"}, B ${idB ?? "?"}, capability publisher ${imp?.publisher?.slice(0, 16) ?? "?"}, B cache entries before its run ${bCacheBefore}` };
+    const refusalChecks = [
+      { check: "A passes the independent ground-truth check", ok: groundTruthOk(outA), detail: JSON.stringify(outA.checker) },
+      { check: "B refused the capability for this interface, with reasons (nothing guessed)", ok: !!imp && !["EXACT_COMPATIBLE", "STRUCTURALLY_COMPATIBLE", "REQUIRES_REBINDING"].includes(imp.outcome) && (imp.refused?.length ?? 0) > 0 && !(policyB?.type === "policy.decision" && policyB.intelligence === "network-import"), detail: imp ? `${imp.outcome}: ${(imp.refused ?? []).slice(0, 3).join("; ")}` : "no network.import event" },
+      { check: "B planned cold instead and passes the independent ground-truth check", ok: plannerB > 0 && groundTruthOk(outB), detail: `B planner calls ${plannerB}; ${JSON.stringify(outB.checker)}` },
+      distinct,
+    ];
+    const checks = expectRefusal ? refusalChecks : [
       { check: "A passes the independent ground-truth check", ok: groundTruthOk(outA), detail: JSON.stringify(outA.checker) },
       { check: "B passes the independent ground-truth check", ok: groundTruthOk(outB), detail: JSON.stringify(outB.checker) },
+      distinct,
+      { check: "B bound every control the capability needs (0 unbound)", ok: !!imp && imp.unbound === 0 && !imp.refused, detail: imp ? `${imp.bound} bound, ${imp.unbound} unbound` : "no network.import event" },
+      { check: "B wrote through browser controls and verified each write by a fresh read", ok: (actionsB.click ?? 0) > 0 && verifiedB > 0, detail: `actions ${JSON.stringify(actionsB)}; ${verifiedB} VERIFIED receipts` },
+      ...(variation
+        ? [{ check: "B saw the UI change and rebound it: changed labels reported, writes behind a passed write canary", ok: !!imp && (imp.relabeled?.length ?? 0) > 0 && imp.writeCanary === true && canaryB > 0, detail: `${(imp?.relabeled ?? []).map((r) => `"${r.from}" -> "${r.to}" (${r.evidence})`).join(", ") || "nothing relabeled"}; write canary ${imp?.writeCanary ? `on, passed ${canaryB}x` : "off"}` }]
+        : []),
       {
         check: "B imported the shared capability (executable after rebinding)",
         ok: importB?.type === "network.import" && `${importB.capabilityId}@${importB.version}` === versionId && ["EXACT_COMPATIBLE", "STRUCTURALLY_COMPATIBLE", "REQUIRES_REBINDING"].includes(importB.outcome),
@@ -273,6 +321,7 @@ async function main(): Promise<void> {
       },
       { check: "B made fewer planner calls than A (zero expected)", ok: plannerB === 0 && plannerA > 0, detail: `A ${plannerA}, B ${plannerB}` },
       ...(outC ? [{ check: "C (strict-cold comparison arm) passes the independent ground-truth check", ok: groundTruthOk(outC), detail: JSON.stringify(outC.checker) }] : []),
+      ...(outW ? [{ check: "C's local warm replay passes the independent ground-truth check", ok: groundTruthOk(outW), detail: JSON.stringify(outW.checker) }] : []),
     ];
     console.log("\nacceptance checks");
     for (const c of checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${c.check}: ${c.detail}`);
@@ -295,9 +344,16 @@ async function main(): Promise<void> {
     console.log(`\noverhead: ${JSON.stringify(overhead)}`);
     console.log(`B vs C: ${JSON.stringify(comparison)}`);
     for (const [k, d] of [["A", diagA], ["B", diagB], ["C", diagC]] as const) if (d) console.log(`${k} model calls: ${JSON.stringify(d.modelCallsByPurpose)}; fallbacks ${d.fallbacks.length}; recoveries ${d.recoveries}`);
-    const report = { at: new Date().toISOString(), passed, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null };
+    const transfer = { identities: { a: idA ?? null, b: idB ?? null, publisher: imp?.publisher?.slice(0, 16) ?? null }, bCacheBefore, variations: variation ? variationsB : null, relabeled: imp?.relabeled ?? [], writeCanary: imp?.writeCanary ?? false, canaryPassed: canaryB, refused: imp?.refused ?? [], importOutcome: imp?.outcome ?? null, actionsB, verifiedB };
+    console.log(`transfer: ${JSON.stringify(transfer)}`);
+    const report = { at: new Date().toISOString(), passed, expectRefusal, checks, database: DATABASE, endpoint: ENDPOINT, records, seed, variation: variation ?? null, mode, versionId, validation, overhead, plannerCalls: { a: plannerA, b: plannerB }, comparison, transfer, a: { ...outA, ...diagA }, b: { ...outB, ...diagB }, c: outC ? { ...outC, ...diagC } : null, warm: outW };
     writeFileSync(join(DEMO_DIR, "report.json"), JSON.stringify(report, null, 2));
-    console.log(`\nreport: ${join(DEMO_DIR, "report.json")}`);
+    // A copy beside the benchmark results, for the dashboard's Transfer page and for review.
+    const recordDir = join(REPO_ROOT, "benchmarks", "results", "network");
+    mkdirSync(recordDir, { recursive: true });
+    const recorded = join(recordDir, `${report.at.replace(/:/g, "-")}-s${seed}-${variation ?? "unchanged"}${expectRefusal ? "-refusal" : ""}.json`);
+    writeFileSync(recorded, JSON.stringify(report, null, 2));
+    console.log(`\nreport: ${join(DEMO_DIR, "report.json")} (recorded as ${recorded})`);
     if (!passed) process.exitCode = 1;
     if (keep) {
       console.log(`\nengines still running: A http://127.0.0.1:4010, B http://127.0.0.1:4020${c ? ", C http://127.0.0.1:4030" : ""} (Ctrl+C stops them)`);

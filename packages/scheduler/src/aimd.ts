@@ -6,6 +6,11 @@
  * useful parallelism in seconds instead of minutes. After the first sign of congestion (a
  * decrease, or latency rising without throughput gain) it adds one slot per healthy window. It
  * halves the limit on throttling (429), timeouts, or an error-rate spike.
+ *
+ * Throughput only says something about capacity when the application ran at its limit. A window
+ * in which most completions found the app below its limit (no more work was ready) is
+ * demand-limited: it neither counts as congestion nor grows the limit, and it isn't used as the
+ * baseline for the next comparison.
  */
 export interface AimdOptions {
   min: number;
@@ -25,6 +30,8 @@ export interface AimdDecision {
 interface Window {
   start: number;
   completions: number;
+  /** Completions that found the application at its concurrency limit. */
+  saturated: number;
   latencies: number[];
   errors: number;
   throttles: number;
@@ -49,12 +56,14 @@ export class AimdController {
   }
 
   private fresh(): Window {
-    return { start: this.now(), completions: 0, latencies: [], errors: 0, throttles: 0 };
+    return { start: this.now(), completions: 0, saturated: 0, latencies: [], errors: 0, throttles: 0 };
   }
 
-  record(outcome: { ms: number; ok: boolean; throttled?: boolean; timeout?: boolean }): AimdDecision | null {
+  /** `saturated`: the app ran at its limit when this task finished (callers that can't tell omit it). */
+  record(outcome: { ms: number; ok: boolean; throttled?: boolean; timeout?: boolean; saturated?: boolean }): AimdDecision | null {
     if (outcome.ok) {
       this.win.completions++;
+      if (outcome.saturated !== false) this.win.saturated++;
       this.win.latencies.push(outcome.ms);
     } else {
       this.win.errors++;
@@ -88,9 +97,14 @@ export class AimdController {
     const throughput = w.completions / (elapsed / 1000);
     const sorted = [...w.latencies].sort((a, b) => a - b);
     const p50 = sorted.length ? sorted[Math.floor(sorted.length / 2)]! : Infinity;
+    if (errRate > this.opts.errorThreshold && this.now() >= this.cooldownUntil) return this.decrease(`error rate ${(errRate * 100).toFixed(0)}% in last window`);
+    if (w.completions > 0 && w.saturated / w.completions < 0.5) {
+      // Demand-limited: flat throughput here means there was no more work, not congestion.
+      this.prev = null;
+      return null;
+    }
     const prev = this.prev;
     this.prev = { throughput, p50 };
-    if (errRate > this.opts.errorThreshold && this.now() >= this.cooldownUntil) return this.decrease(`error rate ${(errRate * 100).toFixed(0)}% in last window`);
     if (this.now() < this.cooldownUntil) return null;
     if (this.limit >= this.opts.max) return null;
     if (prev && throughput < prev.throughput * 1.03 && p50 > prev.p50 * 1.25) {

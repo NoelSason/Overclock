@@ -68,18 +68,21 @@ export interface ClaudeConfig {
 }
 
 export function claudeConfigFromEnv(): ClaudeConfig {
-  const helperModel = process.env.OVERCLOCK_HELPER_MODEL || "claude-haiku-5-5";
   const helperEffort = (process.env.OVERCLOCK_HELPER_EFFORT as Effort) || "low";
-  const speed = (v: string | undefined): Speed => (v === "fast" ? "fast" : "standard");
+  // Planner and critic default to Opus 5.5 at fast speed: in paired 25-record trials it was the
+  // fastest configuration that kept every record correct (docs/BENCHMARKS.md, "Planner speed").
+  // A refused fast request falls back to standard speed on its own; OVERCLOCK_*_SPEED=standard
+  // and OVERCLOCK_CRITIC_MODEL=claude-haiku-5-5 restore the earlier configuration.
+  const speed = (v: string | undefined): Speed => (v === "standard" ? "standard" : "fast");
   return {
     plannerModel: process.env.OVERCLOCK_PLANNER_MODEL || "claude-opus-5-5",
-    helperModel,
+    helperModel: process.env.OVERCLOCK_HELPER_MODEL || "claude-haiku-5-5",
     plannerEffort: (process.env.OVERCLOCK_PLANNER_EFFORT as Effort) || "low",
     helperEffort,
     plannerSpeed: speed(process.env.OVERCLOCK_PLANNER_SPEED),
-    helperSpeed: speed(process.env.OVERCLOCK_HELPER_SPEED),
-    criticModel: process.env.OVERCLOCK_CRITIC_MODEL || helperModel,
-    criticEffort: (process.env.OVERCLOCK_CRITIC_EFFORT as Effort) || helperEffort,
+    helperSpeed: process.env.OVERCLOCK_HELPER_SPEED === "fast" ? "fast" : "standard",
+    criticModel: process.env.OVERCLOCK_CRITIC_MODEL || "claude-opus-5-5",
+    criticEffort: (process.env.OVERCLOCK_CRITIC_EFFORT as Effort) || "low",
     criticSpeed: speed(process.env.OVERCLOCK_CRITIC_SPEED),
   };
 }
