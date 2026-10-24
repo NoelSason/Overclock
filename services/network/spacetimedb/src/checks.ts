@@ -67,6 +67,7 @@ const ORIGIN_RE = /^(https?):\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?
 
 /** Normalize to scheme://host[:port] (lowercase, default ports dropped). Returns null if invalid. */
 export function normalizeOrigin(raw: string): string | null {
+  if (raw.length > 300) return null;
   const s = raw.trim().toLowerCase().replace(/\/+$/, "");
   const m = ORIGIN_RE.exec(s);
   if (!m) return null;

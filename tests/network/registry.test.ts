@@ -156,6 +156,16 @@ describe("payload checks in the reducer", () => {
     raw.disconnect();
   });
 
+  it("processes near-limit payloads in bounded time (no super-linear scans)", async () => {
+    // Long runs of word characters, dots, and "cookie:" prefixes used to drive unbounded
+    // patterns quadratic; the reducer must stay fast right up to the size limit.
+    const description = `${"a.".repeat(60_000)}${" cookie:x".repeat(8_000)}`;
+    const cap = sampleCapability({ capabilityId: `near-limit-${uid()}`, version: 1, origin, description });
+    const t0 = performance.now();
+    await publisher.proposeCapability(cap);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  });
+
   it("rejects hash and size mismatches", async () => {
     const raw = await rawConnection(publisher.config.dataDir);
     const payload = JSON.stringify({ ...sampleCapability({ capabilityId: `h-${uid()}`, version: 1, origin }), publisherId: publisher.identity });

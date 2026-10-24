@@ -2,7 +2,7 @@
  * Latency probe for an Overclock Network endpoint (local or Maincloud).
  *
  *   tsx scripts/network-probe.ts [--endpoint <url>] [--database <name>] [--iterations 30]
- *                                [--temp] [--payload-kib 240]
+ *                                [--temp | --read-only] [--payload-kib 240]
  *
  * Measures, with two independent client identities A and B:
  *   - connect time (raw SDK connection, and the NetworkClient path incl. its base subscription)
@@ -10,10 +10,12 @@
  *   - reducer round trip (A awaits a reducer)
  *   - propagation A -> B (B receives A's committed row update; same local clock, so no skew)
  *
- * Without --temp it only re-registers A as a pending publisher (no registry writes), so it is
- * safe against a live database. With --temp it publishes a throwaway database on the endpoint's
- * server, also measures a large capability (propose round trip, propagation, fetch), and deletes
- * the database afterwards. --temp needs the CLI to be logged in for Maincloud.
+ * By default the reducer and propagation measurements re-register A as a pending publisher
+ * (one reused `probe-*` row per endpoint, no registry writes). --read-only skips them and only
+ * connects and subscribes, for a live database you do not want touched. --temp publishes a
+ * throwaway database on the endpoint's server, also measures a large capability (propose round
+ * trip, propagation, fetch), and deletes the database afterwards; for Maincloud it needs the CLI
+ * to be logged in.
  */
 
 import { randomBytes } from "node:crypto";
@@ -105,6 +107,7 @@ async function main(): Promise<void> {
   const endpoint = argValue(argv, "--endpoint") ?? (process.env["OVERCLOCK_NETWORK_ENDPOINT"]?.trim() || LOCAL_ENDPOINT);
   const iterations = Number(argValue(argv, "--iterations") ?? 30);
   const temp = argv.includes("--temp");
+  const readOnly = argv.includes("--read-only") && !temp;
   const payloadKiB = Number(argValue(argv, "--payload-kib") ?? 240);
   const server = cliServerFor(endpoint);
   const host = new URL(endpoint).host;
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
     runtimeLabel: label,
   });
 
-  const result: Record<string, unknown> = { endpoint, database, temp, iterations, at: new Date().toISOString() };
+  const result: Record<string, unknown> = { endpoint, database, temp, readOnly, iterations: readOnly ? 0 : iterations, at: new Date().toISOString() };
   const opened: Array<{ close(): unknown }> = [];
   try {
     // Connect: raw SDK connections for A and B, then the full NetworkClient path for C.
@@ -146,7 +149,7 @@ async function main(): Promise<void> {
     result["connectMs"] = { rawA: Math.round(a.ms * 100) / 100, rawB: Math.round(b.ms * 100) / 100, networkClientWithBaseSubscription: Math.round((now() - tc) * 100) / 100 };
 
     const aIdentity = a.conn.identity!;
-    await a.conn.reducers.registerPublisher({ displayName: `probe-${run}-0`, role: "publisher" });
+    if (!readOnly) await a.conn.reducers.registerPublisher({ displayName: `probe-${run}-0`, role: "publisher" });
 
     // Subscription applied: B subscribes to A's publisher row; C runs the origin-scoped watch set.
     const ts = now();
@@ -167,7 +170,7 @@ async function main(): Promise<void> {
     const rtt: number[] = [];
     const propagation: number[] = [];
     const serverToClient: number[] = [];
-    for (let i = 1; i <= iterations; i++) {
+    for (let i = 1; i <= (readOnly ? 0 : iterations); i++) {
       const name = `probe-${run}-${i}`;
       const seen = new Promise<number>((resolve) => {
         const cb = (_ctx: EventContext, _old: Publishers, row: Publishers) => {
@@ -184,9 +187,11 @@ async function main(): Promise<void> {
       rtt.push(now() - sent);
       propagation.push((await seen) - sent);
     }
-    result["reducerRoundTripMs"] = stats(rtt);
-    result["propagationAtoBMs"] = stats(propagation);
-    result["serverCommitToClientMs"] = { ...stats(serverToClient), note: "uses the server clock; includes clock skew for remote hosts" };
+    if (!readOnly) {
+      result["reducerRoundTripMs"] = stats(rtt);
+      result["propagationAtoBMs"] = stats(propagation);
+      result["serverCommitToClientMs"] = { ...stats(serverToClient), note: "uses the server clock; includes clock skew for remote hosts" };
+    }
 
     if (temp) {
       // Large capability: authorize A as the owner, then propose, propagate, and fetch.
@@ -234,7 +239,7 @@ async function main(): Promise<void> {
   }
 
   mkdirSync(NETWORK_STATE_DIR, { recursive: true });
-  const out = join(NETWORK_STATE_DIR, `probe-${host.replace(/[^a-z0-9.-]/gi, "_")}${temp ? "-temp" : ""}.json`);
+  const out = join(NETWORK_STATE_DIR, `probe-${host.replace(/[^a-z0-9.-]/gi, "_")}${temp ? "-temp" : readOnly ? "-readonly" : ""}.json`);
   writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify(result, null, 2));
   console.log(`\nsaved ${out}`);
