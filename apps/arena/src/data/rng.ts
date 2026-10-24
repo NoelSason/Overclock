@@ -19,8 +19,8 @@ export class Rng {
   chance(p: number): boolean {
     return this.next() < p;
   }
-  weighted<T extends string>(w: Record<T, number>): T {
-    const entries = Object.entries(w) as [T, number][];
+  weighted<T extends string>(w: Partial<Record<T, number>>): T {
+    const entries = Object.entries(w).filter(([, v]) => typeof v === "number") as [T, number][];
     const total = entries.reduce((s, [, v]) => s + v, 0);
     let r = this.next() * total;
     for (const [k, v] of entries) {
