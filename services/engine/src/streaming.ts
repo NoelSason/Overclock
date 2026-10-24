@@ -224,11 +224,17 @@ export async function runStreamingPipeline(a: StreamingArgs): Promise<void> {
     executor.scheduler.sealProgram();
     executor.wake();
     await execP;
-    const fixedPlan = (await ctx.stage("planning", "repair after streaming fallback", () => generatePlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan, issues: [{ severity: "error", message: fallback! }, ...issues.filter((i) => i.severity === "error")] }, signal: d.signal }, "planner.repair"))).data;
-    d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${fixedPlan.strategy.name} (repaired after streaming fallback)`, fixedPlan.strategy.summary, { plan: fixedPlan }, { phases: fixedPlan.phases.length, steps: fixedPlan.phases.reduce((n, p) => n + p.steps.length, 0) });
-    const lowered = lowerPlan({ plan: fixedPlan, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
-    const errs = [...lowered.issues, ...validateProgram(lowered.program)].filter((i) => i.severity === "error");
-    if (errs.length) throw new Error(`repaired plan invalid: ${errs.map((e) => e.message).slice(0, 3).join("; ")}`);
+    const repair = async (previous: DslPlan, problems: { severity: string; message: string }[], detail: string) => {
+      const p = (await ctx.stage("planning", detail, () => generatePlan(d.claude, { goal: d.config.goal, records: d.config.records, models, directive, previous: { plan: previous, issues: problems }, signal: d.signal }, "planner.repair"))).data;
+      d.saveArtifact(`workflow-scout:${directive.name}`, "plan", `Plan: ${p.strategy.name} (${detail})`, p.strategy.summary, { plan: p }, { phases: p.phases.length, steps: p.phases.reduce((n, x) => n + x.steps.length, 0) });
+      const lowered = lowerPlan({ plan: p, models, apps: d.config.applications, goal: d.config.goal, inputs: { records: d.config.records }, programId: `${run.runId}:repaired`, strategyId: "repaired" });
+      return { plan: p, lowered, errs: [...lowered.issues, ...validateProgram(lowered.program)].filter((i) => i.severity === "error") };
+    };
+    let fixed = await repair(plan, [{ severity: "error", message: fallback! }, ...issues.filter((i) => i.severity === "error")], "repair after streaming fallback");
+    // Same bound as the staged path: one more round, on the repaired plan's validation errors only.
+    if (fixed.errs.length) fixed = await repair(fixed.plan, fixed.errs, "repair: validation errors in the repaired plan");
+    if (fixed.errs.length) throw new Error(`repaired plan invalid: ${fixed.errs.map((e) => e.message).slice(0, 3).join("; ")}`);
+    const { plan: fixedPlan, lowered } = fixed;
     const program = compileProgram(lowered.program, (x) => d.latency.nodeMs(x));
     run.publishProgram(program);
     const second = new Executor({ ...executorOptions(run, d, a, program) });

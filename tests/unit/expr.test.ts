@@ -26,6 +26,19 @@ describe("expression language", () => {
     expect(evaluate("if($rec.qty > 5, 'big', 'small')", scope)).toBe("small");
   });
 
+  it("does arithmetic with the usual precedence, and concatenates text with +", () => {
+    const sc = { rec: { n: "4", s: "ORD" }, out: { r: { rows: [1, 2, 3] } }, input: {}, phase: {} };
+    expect(evaluate("len($out.r.rows) - 1", sc)).toBe(2);
+    expect(evaluate("1 + 2 * 3", sc)).toBe(7);
+    expect(evaluate("(1 + 2) * 3", sc)).toBe(9);
+    expect(evaluate("$rec.n / 2", sc)).toBe(2);
+    expect(evaluate("1 / 0", sc)).toBeNull();
+    expect(evaluate("$rec.s + '-' + 7", sc)).toBe("ORD-7");
+    expect(evaluate("'a' - 1", sc)).toBeNull();
+    expect(evaluateBool("len($out.r.rows) - 1 >= 2 && 2 * 2 == 4", sc)).toBe(true);
+    expect(evaluate("-2 + 5", sc)).toBe(3);
+  });
+
   it("renders templates", () => {
     expect(renderTemplate("/orders/{$rec.orderId}?q={lower('A B')}", scope)).toBe("/orders/ORD-1001?q=a b");
     expect(templateExprs("/t/{$out.find.ticketId}/edit")).toEqual(["$out.find.ticketId"]);
