@@ -4,7 +4,7 @@ import type { BrowserManager, StorageState } from "@overclock/browser-runtime";
 import type { CompatibilityOutcome, INetworkClient, NetworkConfig } from "@overclock/network-contracts";
 import { NetworkClient, networkConfigFromEnv } from "@overclock/network-client";
 import { addReadGuards } from "@overclock/compiler";
-import { canonicalOperation, exportCapability, rebindCapability } from "@overclock/network-capability";
+import { analyzeCapability, canonicalOperation, exportCapability, rebindCapability } from "@overclock/network-capability";
 
 /** Outcomes a runtime may execute after rebinding; anything else falls back to cold discovery. */
 const EXECUTABLE: readonly CompatibilityOutcome[] = ["EXACT_COMPATIBLE", "STRUCTURALLY_COMPATIBLE", "REQUIRES_REBINDING"];
@@ -104,6 +104,14 @@ export async function importCapability(o: Emitter & { client: INetworkClient; co
     fetched = await o.client.fetchArtifact(best.versionId);
   } catch (err) {
     o.emit({ type: "log", level: "warn", message: `network: could not fetch ${best.versionId} (${message(err)}); discovering cold` });
+    return null;
+  }
+  // Defense in depth: the registry and the validator are not trusted blindly either.
+  const analysis = analyzeCapability(fetched.capability);
+  if (!analysis.ok) {
+    const errs = analysis.issues.filter((i) => i.severity === "error").slice(0, 3).map((i) => i.message);
+    o.emit({ type: "network.import", capabilityId: best.capabilityId, version: best.version, outcome: "INCOMPATIBLE", bound: 0, unbound: 0, rebindMs: 0, fetchMs: Math.round(fetched.ms), source: fetched.source });
+    o.emit({ type: "log", level: "warn", message: `network: ${best.versionId} failed static analysis here (${errs.join("; ")}); discovering cold` });
     return null;
   }
   const r = await rebindCapability({ capability: fetched.capability, apps: o.config.applications, browser: o.browser, storageState: o.storageState, signal: o.signal, records: o.config.records });

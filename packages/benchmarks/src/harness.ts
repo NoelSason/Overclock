@@ -146,10 +146,10 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
 }
 
 /** Distinct records the engine reported VERIFIED that the checker lists as mismatched. */
-export function countVerifiedButWrong(outcomes: readonly RecordOutcome[], check: CheckResult): number {
+export function countVerifiedButWrong(outcomes: readonly RecordOutcome[], check: CheckResult, status: "VERIFIED" | "SKIPPED" = "VERIFIED"): number {
   const wrong = new Set(check.mismatches.map((m) => m.recordKey));
   const hits = new Set<string>();
-  for (const o of outcomes) if (o.status === "VERIFIED" && wrong.has(o.recordKey)) hits.add(o.recordKey);
+  for (const o of outcomes) if (o.status === status && wrong.has(o.recordKey)) hits.add(o.recordKey);
   return hits.size;
 }
 
@@ -251,6 +251,7 @@ export function buildRecord(run: PlannedRun, c: Collected): BenchmarkRunRecord {
     workerUtilization: summary?.workerUtilization ?? 0,
     maxConcurrency: summary?.maxConcurrency ?? 0,
     verifiedButWrong: check && c.result ? countVerifiedButWrong(c.result.outcomes, check) : 0,
+    skippedButWrong: check && c.result ? countVerifiedButWrong(c.result.outcomes, check, "SKIPPED") : 0,
     firstActionMs: summary ? (summary.firstActionMs ?? null) : (ext?.firstActionMs ?? null),
     firstVerifiedMs: summary?.firstVerifiedMs ?? null,
     overlapMs: summary?.overlapMs ?? 0,

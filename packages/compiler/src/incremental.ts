@@ -166,7 +166,8 @@ export class IncrementalCompiler {
       // A page chain is complete once a later step exists that is not part of it (the stream
       // moved on), or at a write, or when the phase is sealed. Releasing earlier would force a
       // re-navigation for the steps that continue the page.
-      const closed = ps.sealed || write || maxIdx < lastStepIndex;
+      // Fills without their submit are never released early: the submit must join the same chain.
+      const closed = ps.sealed || write || (pure && maxIdx < lastStepIndex);
       if (!closed) continue;
       const stableId = `${ps.header.id}.f${++ps.counter}`;
       tmpToStable.set(s.id, stableId);

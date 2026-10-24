@@ -73,7 +73,7 @@ optional `note`.
 | --- | --- |
 | `control` | The form's submit button. |
 | `writes` | Resource keys the write changes, specific to the entity, for example `app:support:ticket:{$out.find_ticket.ticketId}`. Two writes with the same key never run at the same time. |
-| `guards` | Compare-and-swap checks: `{ control, equals }`. For each field the step changes whose earlier value it read, the edit form's current value must still equal what was read. If it doesn't, the runtime re-reads and recomputes instead of overwriting. The compiler adds a guard the plan left out when an earlier `extract` read the same control under the same condition, and drops a guard whose expected value is the value the same form is about to write (it could only pass after the write). |
+| `guards` | Compare-and-swap checks: `{ control, equals }`. For each field the step changes whose earlier value it read, the edit form's current value must still equal what was read. If it doesn't, the runtime re-reads and recomputes instead of overwriting. The compiler adds a guard the plan left out when an `extract` read the same control under the same condition before the form changed. It drops a guard whose expected value is computed instead of read (for example the target value of the edit), because such a guard fails whenever a change is needed. A direct read, a read wrapped in `trim`, `lower`, `upper`, or `toString`, a compute field that only copies a read, a literal, and a record field are kept. |
 | `verify` | `{ url, fields: { name, control, equals }[] }`. After the write, the runtime loads `url` fresh and reports success only if every field matches. When `control` is a section's region fact (a list of notes or comments), the field passes only if exactly one entry equals the expected text. |
 | `irreversible` | `true` for payments, deletions, publishing, sending messages, and refunds. Such a step requires human approval. |
 
@@ -362,6 +362,7 @@ severity, a code, a message, and the step or phase involved. Any `error` blocks 
 - `self-defeating-guard` (warning): a guard that expects the value its own form writes was
   dropped.
 - `auto-guard` (warning): the compiler added a compare-and-swap guard the plan left out.
+- `computed-guard` (warning): a guard that compared with a computed value was dropped.
 - `stream-continuation` (incremental compiler only): a streamed step continues a page whose
   fragment already ran and can't be re-opened.
 - `segments` (incremental compiler only): segment formation failed for a streamed phase.

@@ -5,12 +5,12 @@
 Overclock makes AI browser agents faster by compiling unfamiliar tasks into optimized,
 verified execution programs instead of reasoning about every action.
 
-> **Status (2026-10-24, Cal Hacks build).** The compiler, scheduler, browser runtime,
-> recovery ladder, arena, benchmark harness, SDK, CLI, and dashboard are implemented, and most
-> of them have automated tests. Mode E (the streaming pipeline, with online access-path
-> substitution) has landed in code and has not been run end to end yet. The Overclock
-> Network (SpacetimeDB) has a tested capability layer but is not wired into the engine.
-> **No benchmark results exist yet.** See [Feature status](#feature-status) and
+> **Status (2026-10-24, Cal Hacks build).** Every component is implemented, and most have
+> automated tests. Modes B–E have recorded benchmark runs, all graded by the arena's
+> ground-truth checker: streaming mode E is 1.4–2× faster than stage-gated mode D, and slower
+> than the simple compiled mode C (see [Benchmark results](#benchmark-results-2026-10-24)).
+> The Overclock Network transfers a validated capability between independent runtimes
+> ([`docs/NETWORK.md`](docs/NETWORK.md#results)). See [Feature status](#feature-status) and
 > [`PROGRESS.md`](PROGRESS.md).
 
 ## The problem
@@ -62,8 +62,10 @@ stage-gated system, including all cold-start overhead?
 The Overclock Network shares validated, portable capabilities that one runtime discovered
 through SpacetimeDB, so independent runtimes can reuse them safely. A capability carries the
 plan plus semantic, data-free control descriptors, so a fresh runtime rebinds every control
-against its own live observation before anything executes. This layer is in progress: the
-capability layer is tested, but the engine doesn't use it yet.
+against its own live observation before anything executes. In one recorded run (10 records,
+local arena), a fresh runtime imported another runtime's capability, made no planner call,
+and finished in 3.0 s, against 169 s for a fresh strict-cold runtime on the same scenario.
+Both passed the arena's ground-truth check. See [`docs/NETWORK.md`](docs/NETWORK.md#results).
 
 **Research question:** Can a fresh runtime execute a compatible workflow with less discovery
 and fewer model calls because another runtime already learned it?
@@ -100,7 +102,7 @@ flowchart LR
   end
   work -->|"allowlisted origins only"| apps["Arena apps :4101–4104"]
   engine --> db[("SQLite event log")]
-  engine -.->|"in progress"| net[("Overclock Network<br/>SpacetimeDB")]
+  engine <-->|"lookup · import · publish"| net[("Overclock Network<br/>SpacetimeDB")]
 ```
 
 Every state change in a run is an event. The engine persists each event to SQLite before it
@@ -148,7 +150,7 @@ mode by the same ground truth.
 | E vs C | The whole Overclock system against the strongest simple compiled baseline, with all cold-start overhead counted. |
 | E vs D | The streaming pipeline against the stage-gated swarm, with the same compiler, scheduler, and verifier. This answers research question A. It is not stage gating alone: E also plans one strategy instead of competing several, skips dry-run probes, and adds online access paths. The `overclock-no-access-paths` ablation isolates access paths; the planning differences are not isolated. |
 | D vs B | What the discovery swarm, competing strategies, and adaptive parallel scheduling add over one compiled program on one worker. |
-| Network warm vs strict cold | Capability transfer between runtimes, mode E in both arms. This answers research question B. Not in the harness yet. |
+| Network warm vs strict cold | Capability transfer between runtimes, mode E in both arms, same scenario, separate fresh runtimes. This answers research question B. Measured by `pnpm network:demo`, not by the benchmark harness. |
 
 The `ablations` suite also adds components one at a time and removes single features from E.
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#acceptance-tests) for what is automated.
@@ -166,14 +168,46 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#acceptance-tests) for what is 
 - **Worker utilization**, **peak concurrency**, and **recovery time**.
 - **Duplicate writes**, **collateral writes**, and **verified-but-wrong records**. All three
   should be 0.
-- **Network metrics** (lookups, hits, fetch and rebind time, avoided discovery). The run
-  summary has fields for them, but nothing populates them yet.
+- **Network metrics** (lookups, hits, the compatibility outcome, lookup, fetch, and rebind
+  time, and whether the run published), in `RunSummary.network`.
 
-### Benchmark results: pending (generated in docs/BENCHMARKS.md)
+### Benchmark results (2026-10-24)
 
-`pnpm benchmark:report` writes [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) from the result
-files in `benchmarks/results/*.json`. Every number in that file comes from an executed run.
-No result files exist yet.
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) is generated from the result files in
+`benchmarks/results/` by `pnpm benchmark:report`. Every number in it comes from an executed
+run. The current result file has 34 runs of modes B, C, D, and E on `t1-order-reconcile` seed
+4242: 3 trials per mode at 25 records under two conditions (local, and realistic injected
+latency), a warm repeat after every cold E run, and one 100-record run per mode. No run failed.
+Median accuracy was 100% in every group. Across all runs, 0 records were reported VERIFIED but
+wrong, with 0 duplicate and 0 collateral writes. Modes A and the external baseline were not run
+in this round.
+
+| Comparison (median wall time) | Local, 25 records | Realistic latency, 25 records | Local, 100 records (n=1) |
+| --- | --- | --- | --- |
+| **E vs D** (research question A) | 95.8 s vs 3.2 min: **1.98×** | 2.1 min vs 3.0 min: **1.48×** | 107 s vs 2.5 min: **1.38×** |
+| **E vs C** | 95.8 s vs 42.4 s: **0.44×** (E slower) | 2.1 min vs 95.6 s: **0.78×** | 107 s vs 58 s: **0.54×** |
+| E warm repeat | 2.1 s, no model calls | 5.9 s, no model calls | — |
+
+What this shows:
+
+- **Streaming beats stage gating.** E reached a correct result 1.4–2× faster than D with the
+  same compiler, scheduler, verifier, and critique gate, including every cold-start cost. It
+  also cost about a third as much ($0.34–0.39 against about $1 per run), because it plans one
+  strategy instead of competing several.
+- **E is slower than C.** C is one planner with no critique and no dry run. E's write gate
+  (critique, a median of 15–17 s, plus a repair round of 40–55 s whenever the critique flags a
+  high-severity risk) costs more than overlapping reads with planning saves on this arena,
+  where execution takes seconds. The overlap is real (88–105 s of reads ran during planning),
+  but it has little to hide here.
+- **Holdout.** After a code freeze, E, D, and C each ran an unseen task (t3) on the known apps
+  and the unfamiliar fourth app (t4), under both conditions. t3: 25/25 in all 6 runs (E 54.4 s
+  and 31.3 s, D 67.4 s and 67.4 s, C 16.2 s and 20.8 s). t4: all 6 runs failed at sign-in,
+  before any write, because the generic login didn't recognize the app's username field. The
+  system doesn't yet generalize to an unfamiliar login form.
+- **Errors were reported, not hidden.** C under realistic latency left 5 records `UNCONFIRMED`
+  in one trial. D (realistic latency, one trial) and B (local, one trial) each missed one
+  cross-record customer hold and reported the affected orders as `SKIPPED`: 4 records that were
+  wrong decisions, not failed writes.
 
 ## Quick start
 
@@ -208,8 +242,7 @@ TypeSafe key is optional: without it, reflex decisions fall back to deterministi
    The arena's ports come from `OVERCLOCK_ARENA_ADMIN_PORT` (4100) and
    `OVERCLOCK_ARENA_CRM_PORT`, `OVERCLOCK_ARENA_ORDERS_PORT`, `OVERCLOCK_ARENA_SUPPORT_PORT`,
    and `OVERCLOCK_ARENA_APP4_PORT` (4101–4104). The fourth app is the holdout. `pnpm dev`
-   points at `scripts/dev.ts`, which doesn't exist yet, so start the three services
-   separately.
+   starts all three in one terminal with prefixed output.
 
 4. Load the demo scenario and check the engine:
 
@@ -225,8 +258,8 @@ TypeSafe key is optional: without it, reflex decisions fall back to deterministi
    ```
 
    The CLI streams progress and prints the verified result. It exits 1 unless every record
-   was verified, skipped, or escalated. Mode E has not been run end to end yet. If it fails,
-   run the stage-gated pipeline instead: `pnpm cli run --scenario --mode overclock-staged`.
+   was verified, skipped, or escalated. `--mode overclock-staged` runs the stage-gated
+   pipeline (mode D) instead.
 
 6. Compare with ground truth:
 
@@ -234,14 +267,24 @@ TypeSafe key is optional: without it, reflex decisions fall back to deterministi
    pnpm cli check
    ```
 
+7. Optional: transfer a capability between runtimes through the Overclock Network:
+
+   ```bash
+   pnpm network:dev     # local SpacetimeDB on ws://127.0.0.1:3100, module published
+   pnpm network:demo    # runtime A discovers and publishes; B imports; fresh C runs cold
+   ```
+
+   The demo exits 1 unless both runtimes pass the arena checker, B imported and executed the
+   capability, and B made no planner call.
+
 Each run spends model money. `OVERCLOCK_BENCH_BUDGET_USD` caps benchmark spend (default $50).
 
 ## Tests
 
 | Command | What it covers | Model spend |
 | --- | --- | --- |
-| `pnpm test` | Unit: expressions, compiler, incremental compiler, plan stream, scheduler, optimizer, redaction, arena oracle, benchmark harness, SDK, CLI. | none |
-| `pnpm test:integration` | Arena apps, browser runtime, perception, engine API and store, SDK against real servers, scripted mode A. | none unless `OVERCLOCK_LIVE=1` |
+| `pnpm test` | Unit: expressions, compiler (guards, page re-opening), incremental compiler, a recorded live plan stream, scheduler (invalidation, approvals), optimizer, redaction, arena oracle, benchmark harness, SDK, CLI, the engine's network service, and the model-stream stall watchdog. | none |
+| `pnpm test:integration` | Arena apps, browser runtime, perception (including region facts), engine API and store, SDK against real servers, scripted mode A, and the executor end to end on a fixture app (entry verification, duplicate, rejected, and ambiguous submissions, and the invalidation regression). | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:adversarial` | Recovery L0/L1 against a fixture app with every UI surprise; refusal to guess; repair dedupe. | none unless `OVERCLOCK_LIVE=1` |
 | `pnpm test:e2e` | Dashboard against a synthetic, test-only replay server (Playwright). | none |
 | `pnpm typecheck` | TypeScript across the workspace and the dashboard. | none |
@@ -273,24 +316,31 @@ Full details: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Known limitations
 
-- Mode E is new code with no end-to-end test or recorded run yet. It also writes the local
-  program cache but never reads it, so a warm-cache mode E run repeats discovery and planning.
+- Mode E plans one strategy and runs no dry-run probes, while mode D can compete candidates and
+  probe them. E versus D measures those differences together with the overlap.
+- One high-severity critique finding triggers a full repair round (about 40–55 s with Claude
+  Opus 5.5 in recorded runs), including findings that turn out to be false positives. The gate
+  is kept strict on purpose, and the time it costs is reported. Repaired plans pass every
+  static check but aren't critiqued a second time, in mode D or mode E.
+- A plan's decision to skip an append (for example "the note is already there") reads the
+  section's text with `contains()`, so a longer unrelated entry can cause a skip. Verification
+  never accepts that case: an appended entry is `VERIFIED` only when exactly one entry equals
+  it on the targeted record's page.
 - Online access-path substitution is wired into mode E only and has no test. No other online
   re-optimization exists, so the `onlineReoptimization` switch only turns access paths off.
-- The Overclock Network is not connected to the engine. The `network-read` and
-  `network-read-and-contribute` knowledge policies are accepted but behave like a cold run.
-- Approving an irreversible step records the decision but doesn't re-run the step: the task
-  is already terminal when the approval arrives.
-- The executor, staged swarm, crawler, dry run, and effect classification have no automated
-  tests. They are exercised only by live runs.
-- The locator-reuse pass reports shared control references, but the runtime has no per-worker
-  locator cache yet.
+- The engine reports reuse of imported capabilities but doesn't start network repair jobs
+  after a capability breaks; it discovers cold instead.
+- The staged swarm, crawler, dry run, critique, and effect classification have no automated
+  tests. They run in every live run and benchmark.
+- `recordsVerified` counts outcomes of every phase, so a run over 10 orders with one
+  cross-record hold reports 11.
 - Bulk-import operations are detected but never planned, because read-back verification
   covers one entity per write.
+- Sign-in is generic: it looks for a password field plus an email, text, or user-named input.
+  It failed on the holdout app's login form, so every holdout run on that app failed before
+  discovery.
 - The engine and arena admin APIs have no authentication. Both bind to `127.0.0.1` and allow
   CORS only from localhost origins.
-- One integration test (`arena.test.ts`, "applies surprises and validates variation edits")
-  fails because it still expects three apps.
 
 ## Feature status
 
@@ -300,34 +350,32 @@ written or not wired in. **Proposed** means design only.
 
 | Feature | Status | Evidence |
 | --- | --- | --- |
-| Procedure DSL, expression language, lowering, IR validation | Working (tested) | `tests/unit/compiler.test.ts`, `tests/unit/expr.test.ts` |
+| Procedure DSL, expression language (with arithmetic), lowering, IR validation | Working (tested) | `tests/unit/compiler.test.ts`, `tests/unit/expr.test.ts` |
+| Compiler-added and compiler-dropped guards; page re-opening for read-decide-act chains | Working (tested) | `tests/unit/compiler.test.ts` |
 | Optimizer passes and segment formation | Working (tested) | `tests/unit/compiler.test.ts` |
-| Locator-reuse pass | Partial | Reports only; no runtime cache |
-| Incremental compiler and plan stream watcher | Working (tested) | `tests/unit/incremental.test.ts`, `tests/unit/plan-stream.test.ts` |
-| Scheduler: expansion, dependencies, locks, critical path, invalidation, AIMD | Working (tested) | `tests/unit/scheduler.test.ts` |
-| Scheduler gates (canary, deferred) and incremental phases | Partial | Implemented; no unit test |
+| Incremental compiler and plan stream watcher | Working (tested) | `tests/unit/incremental.test.ts`, `tests/unit/plan-stream.test.ts`, `tests/unit/stream-replay.test.ts` (a recorded live stream) |
+| Scheduler: expansion, dependencies, locks, critical path, invalidation, AIMD, approval parking | Working (tested) | `tests/unit/scheduler.test.ts` |
 | Latency model, list-scheduling simulator, cost model, worker choice | Working (tested) | `tests/unit/optimizer.test.ts` |
 | Browser guards, read-back, uncertain-write detection | Working (tested) | `tests/integration/runtime.test.ts` |
-| Read-only pages during read fragments | Partial | Implemented in `BrowserManager` and `Executor`; no test |
+| Region facts and exactly-one-entry verification of appended entries | Working (tested) | `tests/integration/perception.test.ts`, `tests/integration/entry-verification.test.ts` |
+| Executor: reconciliation, duplicates, rejected and ambiguous submissions, invalidation after a committed write | Working (tested) | `tests/integration/entry-verification.test.ts` |
 | Recovery L0/L1, L4 escalation, repair dedupe | Working (tested) | `tests/adversarial/recovery.test.ts` |
 | Recovery L2 (Jev) and L3 (Claude) | Partial | Live tests gated behind `OVERCLOCK_LIVE=1` |
-| Executor (leases, reconciliation, invalidation, watchdog) | Partial | Runs in local development; no automated test |
 | Mode A sequential baseline | Working (tested) | `tests/integration/baseline.test.ts` (scripted model) |
-| Modes B, C, D (staged swarm) | Partial | Implemented; no automated end-to-end test |
-| Mode E streaming pipeline | In progress | `services/engine/src/streaming.ts`; not yet run |
-| Access-path substitution | In progress | `services/engine/src/accessPaths.ts`, wired into mode E; no test |
+| Modes B, C, D, E | Working (measured) | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
+| Access-path substitution | Partial | Wired into mode E; no test |
 | Other online strategy re-optimization | Proposed | Not implemented |
-| Approvals for irreversible steps | Partial | Request works; approved steps don't resume |
+| Model-stream stall watchdog | Working (tested) | `tests/unit/model-stall.test.ts` |
 | Event log, SQLite store, restart recovery, SSE resume | Working (tested) | `tests/integration/engine-api.test.ts` |
-| Cold-start metrics (`firstVerifiedMs`, `overlapMs`) | Working (tested) | Replayed scripted events in `engine-api.test.ts` |
+| Cold-start metrics (`firstVerifiedMs`, `overlapMs`) | Working (tested) | `tests/integration/engine-api.test.ts` |
 | SDK and CLI | Working (tested) | `tests/unit/sdk.test.ts`, `tests/integration/sdk-*.test.ts` |
 | Dashboard | Working (tested) | `tests/e2e/dashboard.spec.ts` against the replay server |
-| Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts` (1 stale failure), `tests/unit/arena-oracle.test.ts` |
+| Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts`, `tests/unit/arena-oracle.test.ts` |
 | Benchmark harness, suites, report, holdout freeze gate | Working (tested) | `tests/unit/benchmark.test.ts` |
-| Benchmark results | Pending | `benchmarks/results/` is empty |
-| Capability export, sanitizer, static analysis, rebinding, validation worker | Partial | `tests/network-capability/` (23 tests passed on 2026-10-24); not used by the engine |
-| SpacetimeDB module and network client | In progress | `tests/network/` against a real local SpacetimeDB; not run for this report |
-| Engine integration with the network | Proposed | Not wired |
+| Capability export, sanitizer, static analysis, rebinding, validation worker | Working (tested) | `pnpm test:network-capability` |
+| SpacetimeDB module and network client | Working (tested) | `pnpm test:network` against a real local SpacetimeDB |
+| Engine integration with the network (lookup, import, publish, reuse) | Working (one recorded run) | `pnpm network:demo`; [`docs/NETWORK.md`](docs/NETWORK.md#results) |
+| Engine-started network repair jobs | Proposed | Client-level repair leases are tested; the engine doesn't start them |
 
 ## Cal Hacks context and tech stack
 

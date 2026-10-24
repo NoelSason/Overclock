@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RunConfigSchema, type DslStep, type EventPayload } from "@overclock/contracts";
 import { PortableCapability, type INetworkClient } from "@overclock/network-contracts";
-import { publishCapability } from "../../services/engine/src/network";
+import { importCapability, publishCapability } from "../../services/engine/src/network";
 import {
   analyzeCapability,
   canonicalJson,
@@ -291,5 +291,27 @@ describe("path templates", () => {
     expect(pathTemplateFor("/orders/:id/edit", ["/orders/{$rec.orderId}/edit"], ["orderId"])).toBe("/orders/{orderId}/edit");
     expect(pathTemplateFor("/orders/:id", ["/orders/{encode($rec.orderId)}"], ["orderId"])).toBe("/orders/{orderId}");
     expect(pathTemplateFor("/tickets/:id", ["/tickets/{encode($out.decide.ticketId)}"], ["orderId"])).toBe("/tickets/{id}");
+  });
+});
+
+describe("engine import", () => {
+  it("refuses a capability that fails static analysis, before rebinding anything", async () => {
+    // The registry served a version whose submit lost its compare-and-swap guards.
+    const bad = tamper((c) => {
+      stepById<"submit">(c, "save").guards = [];
+    });
+    expect(analyzeCapability(bad).ok).toBe(false);
+    const candidate = { capabilityId: bad.capabilityId, versionId: `${bad.capabilityId}@${bad.version}`, version: bad.version, canonicalOperation: bad.intent.canonicalOperation, origins: env.apps.map((a) => a.origin), interfaceFingerprints: [], state: "ACTIVE", contentHash: "x", bytes: 1, publisherId: "p", validations: 1, successfulReuses: 0, updatedAt: 0 };
+    // Partial fake: importCapability uses only lookup and fetchArtifact.
+    const client = {
+      lookup: async () => ({ candidates: [candidate], source: "local-cache" as const, ms: 1 }),
+      fetchArtifact: async () => ({ capability: bad, source: "local-cache" as const, ms: 1 }),
+    } as unknown as INetworkClient;
+    const events: EventPayload[] = [];
+    const config = RunConfigSchema.parse({ goal: GOAL, applications: env.apps, records: env.records });
+    const imported = await importCapability({ client, config, browser: env.browser, storageState: env.operator, signal: new AbortController().signal, emit: (e) => events.push(e) });
+    expect(imported).toBeNull();
+    expect(events.find((e) => e.type === "network.import")).toMatchObject({ outcome: "INCOMPATIBLE", rebindMs: 0 });
+    expect(events.some((e) => e.type === "log" && e.message.includes("failed static analysis"))).toBe(true);
   });
 });

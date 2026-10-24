@@ -179,6 +179,7 @@ export function aggregateGroup(group: RunGroup): AggregateRow {
     costPerCorrectUsd: totalCorrect > 0 ? totalCost / totalCorrect : null,
     modelCalls: { median: median(ok.map((r) => r.modelCalls)) },
     verifiedButWrong: sum(checked.map((r) => r.verifiedButWrong)),
+    skippedButWrong: checked.every((r) => typeof r.skippedButWrong === "number") ? sum(checked.map((r) => r.skippedButWrong ?? 0)) : null,
     firstVerifiedMs: { median: nullableMedian(firstVerified) },
     neverVerified: ok.length - firstVerified.length,
     firstActionMs: { median: nullableMedian(finite(ok.map((r) => r.firstActionMs))) },

@@ -1,69 +1,82 @@
 # Progress
 
-Status of the Overclock Cal Hacks build on 2026-10-24 (about 00:50 PDT). The code changes
-quickly; when this file and the code disagree, the code wins.
+Status of the Overclock Cal Hacks build on 2026-10-24 (about 03:00 PDT). When this file and the
+code disagree, the code wins.
 
-Labels: **Working (tested)**, **Partial** (implemented, untested end to end or with a known
-gap), **In progress**, **Blocked**, **Proposed** (design only).
+Labels: **Working (tested)** means automated tests cover it. **Working (measured)** means
+recorded live runs exercise it and pass the arena's ground-truth check. **Partial** means it
+is implemented with a known gap. **Proposed** means design only.
 
 ## Milestones
 
 | Milestone | Status | Evidence and gaps |
 | --- | --- | --- |
-| Contracts, Procedure DSL, expression language | Working (tested) | `tests/unit/expr.test.ts`, `tests/unit/compiler.test.ts` |
-| Compiler: lowering, validation, 8 passes, segments | Working (tested) | `tests/unit/compiler.test.ts`. The locator-reuse pass only reports; no runtime cache exists. |
-| Incremental compiler and plan stream watcher | Working (tested) | `tests/unit/incremental.test.ts`, `tests/unit/plan-stream.test.ts` |
-| Scheduler, locks, invalidation, AIMD | Working (tested) | `tests/unit/scheduler.test.ts`. Canary and deferred gates have no unit test. |
+| Contracts, Procedure DSL, expression language | Working (tested) | `tests/unit/expr.test.ts` (now with arithmetic), `tests/unit/compiler.test.ts` |
+| Compiler: lowering, validation, 8 passes, segments | Working (tested) | `tests/unit/compiler.test.ts`: dropped self-defeating guards, compiler-added guards, page re-opening when an action needs a decision from its own page's reads |
+| Incremental compiler and plan stream watcher | Working (tested) | `tests/unit/incremental.test.ts`, `tests/unit/plan-stream.test.ts`, `tests/unit/stream-replay.test.ts` (a recorded live planner stream) |
+| Scheduler, locks, invalidation, AIMD, approval parking | Working (tested) | `tests/unit/scheduler.test.ts`. Canary and deferred gates have no unit test; live runs use them. |
 | Optimizer: latency model, simulator, cost, worker choice | Working (tested) | `tests/unit/optimizer.test.ts` |
-| Browser runtime: guards, locators, actions, read-back | Working (tested) | `tests/integration/runtime.test.ts`, `tests/integration/perception.test.ts`. Per-page read-only mode has no test. |
-| Recovery L0/L1/L4, repair dedupe | Working (tested) | `tests/adversarial/recovery.test.ts` |
-| Recovery L2 (Jev) and L3 (Claude) | Partial | Live tests exist behind `OVERCLOCK_LIVE=1`; not run. |
+| Browser runtime: guards, locators, actions, read-back | Working (tested) | `tests/integration/runtime.test.ts`, `tests/integration/perception.test.ts` |
+| Appended-entry verification (exactly one matching entry, same entity) | Working (tested) | `tests/integration/entry-verification.test.ts` |
+| Executor: reconciliation, duplicates, retries, invalidation after a committed write | Working (tested) | `tests/integration/entry-verification.test.ts`, including the regression for a record reported `VERIFIED` whose note never ran |
+| Recovery L0/L1/L4, repair dedupe | Working (tested) | `tests/adversarial/recovery.test.ts` (fixture app) |
+| Recovery L2 (Jev) and L3 (Claude) | Partial | Live tests behind `OVERCLOCK_LIVE=1`; not run |
 | Engine store, HTTP API, SSE, restart recovery | Working (tested) | `tests/integration/engine-api.test.ts` |
-| Executor (leases, reconciliation, invalidation, watchdog) | Partial | Exercised only by live runs; no automated test. |
-| Mode A sequential baseline | Working (tested) | `tests/integration/baseline.test.ts` with a scripted model |
-| Modes B, C, D (staged swarm) | Partial | Implemented. Mode C has completed runs in local development; no automated end-to-end test. |
-| Mode E streaming pipeline | In progress | `services/engine/src/streaming.ts` landed; not yet run end to end. |
-| Online access-path substitution | In progress | Wired into mode E (`services/engine/src/accessPaths.ts`); no test. |
-| Other online re-optimization | Proposed | Not implemented. |
-| Approvals for irreversible steps | Partial | Requests work; approved steps don't resume (bug). |
-| Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts` (1 stale failure), `tests/unit/arena-oracle.test.ts` |
-| SDK and CLI | Working (tested) | `tests/unit/sdk.test.ts`, `tests/integration/sdk-*.test.ts` |
-| Dashboard | Working (tested) | `tests/e2e/dashboard.spec.ts` against the replay server; not run for this report. |
-| Benchmark harness, suites, report, holdout freeze gate | Working (tested) | `tests/unit/benchmark.test.ts` |
-| Benchmark results | In progress | `benchmarks/results/` is empty. Modes A–D can run now; E comparisons wait on a working mode E run. |
-| Holdout evaluation | Blocked | Waits for a code freeze (`OVERCLOCK_HOLDOUT_FROZEN`). |
-| Network capability layer and validation worker | Partial | `tests/network-capability/` passed; not used by the engine. |
-| SpacetimeDB module and network client | In progress | `tests/network/` runs against a real local SpacetimeDB; not run for this report. |
-| Engine integration with the network | Proposed | Not wired; network knowledge policies behave like cold runs. |
-| Network-warm vs strict-cold benchmark arm | Blocked | Waits on engine integration. |
-| One-command dev start (`pnpm dev`) | Proposed | `package.json` points at `scripts/dev.ts`, which doesn't exist. |
+| Model-stream stall watchdog | Working (tested) | `tests/unit/model-stall.test.ts`. Added after a repair request hung for 38 minutes during a network outage. |
+| Mode A sequential baseline | Working (tested) | `tests/integration/baseline.test.ts` with a scripted model; not benchmarked in this round |
+| Modes B, C, D, E | Working (measured) | `docs/BENCHMARKS.md`: 34 runs, no failed run, 0 verified-but-wrong records. E 1.4–2× faster than D; E slower than C. |
+| Holdout evaluation | Done once, after a freeze | Freeze `freeze-2026-10-24-e14db0e-tree-b59e0e950646`. t3 (unseen task): 25/25 in all 6 runs. t4 (unfamiliar app): all 6 runs failed at generic sign-in, before any write. Not re-run after any fix, so the result stays a clean holdout. |
+| Live recovery on the arena | One run | Support save buttons renamed mid-run: 10/10, 0 duplicates; resolved by a lower-ranked locator, no model call |
+| Online access-path substitution | Partial | Wired into mode E; no test |
+| Other online re-optimization | Proposed | Not implemented |
+| Arena apps, judge console, surprises, checker | Working (tested) | `tests/integration/arena.test.ts`, `tests/unit/arena-oracle.test.ts` |
+| SDK and CLI (`--knowledge` added) | Working (tested) | `tests/unit/sdk.test.ts`, `tests/integration/sdk-*.test.ts` |
+| Dashboard | Working (tested) | `tests/e2e/dashboard.spec.ts`; see Test runs for this round |
+| Benchmark harness, suites, report, holdout freeze gate, `--only` | Working (tested) | `tests/unit/benchmark.test.ts` |
+| Network capability layer and validation worker | Working (tested) | `pnpm test:network-capability` |
+| SpacetimeDB module and network client | Working (tested) | `pnpm test:network` against a real local SpacetimeDB |
+| Engine integration with the network | Working (measured) | `pnpm network:demo`: one run with every acceptance check passing ([`docs/NETWORK.md`](docs/NETWORK.md#results)) |
+| Network-warm vs strict-cold comparison | Working (measured, one trial) | Runtime B versus fresh runtime C in `pnpm network:demo` |
+| Engine-started network repair | Proposed | Client-level repair leases are tested; the engine doesn't start repair jobs |
+| One-command dev start (`pnpm dev`) | Working | `scripts/dev.ts` |
 
-## Test runs for this report
+## Bugs found by live runs this round, and their fixes
 
-Run on 2026-10-24 between 00:24 and 00:50 PDT, with `OVERCLOCK_LIVE` unset (no model calls).
+| Symptom in a live run | Cause | Fix and test |
+| --- | --- | --- |
+| Mode E fell back on every run | `formSegments` crashed on segments released earlier in the stream | `segments.ts`; `tests/unit/stream-replay.test.ts` |
+| A record was `VERIFIED` but its note was missing | A self-defeating guard failed; invalidation re-ran reads after the record's first write committed; the decision then skipped the note | Guards that expect their own write are dropped; invalidation is refused after a committed write; `tests/integration/entry-verification.test.ts` |
+| Notes couldn't be read or verified | Perception didn't see titled lists | Region facts; exactly-one-entry verification; `tests/integration/perception.test.ts` |
+| A repaired plan crashed the compiler ("page chain would form a cycle") | Read, decide, act on the same page | Page re-opening; `tests/unit/compiler.test.ts` |
+| A repaired plan was invalid and mode E failed | `len(...) - 1`: no arithmetic in the language; no validation repair round in mode E | Arithmetic; one bounded validation round, as in mode D |
+| Every published capability failed validation (integrity) | The hash covered `publisherId`, which the client replaces | Export with the publisher's identity; `tests/network-capability/capability.test.ts` |
+| Validation failed (no probe record) | `{encode($rec.orderId)}` path templates weren't recognized | `pathTemplateFor`; `tests/network-capability/capability.test.ts` |
+| Validation failed (missing guards) | The plan overwrote fields it had read without guards | Compiler-added guards, also in the published plan; `tests/unit/compiler.test.ts` |
+| 5 of 25 records FAILED ("stale repeatedly") in a benchmark trial | The planner guarded edits with the target values it was about to write | Guards with computed values are dropped; compiler-added guards use only reads taken before the form changed; `tests/unit/compiler.test.ts`. The benchmark was restarted from scratch on the fixed code. |
+| The validator never saw a proposal | Proposals made before the worker started were ignored | Backlog scan (`versionsInState`) |
+| A runtime could lose its identity | The token save wasn't awaited on close | `close()` awaits it; `pnpm test:network` passed 3 runs in a row |
+| A benchmark run hung for 30 minutes | A model stream stalled during a network outage | Stall watchdog; `tests/unit/model-stall.test.ts` |
+| Warm benchmark repeats never hit the cache | Cold runs didn't store their plan | Every run stores its final plan; only `local-only` and network policies read it |
+| (Found by test, not seen in a recorded run) Form fills could be released as a fragment before their submit when another step streamed in between, forcing a fallback | The release rule treated any segment the stream had moved past as complete | A segment with fills waits for its submit or the phase seal; `tests/unit/incremental.test.ts`. Added after the benchmark and the final demo, neither of which fell back for this reason. |
+
+## Test runs for this round
+
+Run on 2026-10-24, with `OVERCLOCK_LIVE` unset (no model calls) unless noted.
 
 | Command | Result |
 | --- | --- |
-| `npx vitest run --project unit` | 10 files, 112 tests passed |
+| `npx tsc -p tsconfig.json` and the dashboard typecheck | Passed |
+| `npx vitest run --project unit` | 127 passed |
+| `npx vitest run --project integration` | 110 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
-| `npx vitest run --project integration` | 70 passed, 1 failed, 2 skipped (live). `tests/integration/arena-holdout.test.ts` was added after this run. |
-| `pnpm test:network-capability` (run as `npx vitest run -c tests/network-capability/vitest.config.ts`) | 3 files, 23 tests passed |
-| `npx tsc -p tsconfig.json` | Passed |
+| `pnpm test:network-capability` | 26 passed |
+| `pnpm test:network` | 26 passed (3 consecutive runs after the token fix; 1 of 3 failed before it) |
+| `pnpm network:demo --records 10` (live, spends money) | Every acceptance check passed, twice (the second run on the code benchmarked below) |
+| Benchmark `--suite all --only overclock,overclock-staged,compiled-parallel,compiled-single` (live) | 34 runs, 0 failed, $12.24; see `docs/BENCHMARKS.md` |
+| Holdout `--suite holdout` (live, after the freeze) | 12 runs, $1.37: t3 passed 6/6; t4 failed 6/6 at sign-in |
+| `pnpm test:e2e` | Not run: a dashboard dev server was already running from `apps/dashboard`, and Next.js allows one per app directory |
 
-Not run: `pnpm test:e2e`, the dashboard typecheck, `tests/network/` (needs the shared local
-SpacetimeDB), any `OVERCLOCK_LIVE=1` test, and any benchmark.
+## Known gaps
 
-## Known bugs and gaps
-
-- Approving an irreversible step doesn't re-run it: `scheduler.retry` ignores tasks already in
-  the terminal `NEEDS_APPROVAL` state.
-- Mode E writes the local program cache but never reads it, so warm mode E runs repeat
-  discovery and planning.
-- `tests/integration/arena.test.ts` ("applies surprises and validates variation edits") still
-  expects three apps. Its failure diff prints holdout app details, which exposes them to anyone
-  running the integration suite.
-- The locator-reuse pass reports a per-worker locator cache that the runtime doesn't have.
-- Port collision: local SpacetimeDB now defaults to 3100, which is also the default port of the
-  dashboard that `pnpm test:e2e` starts (`OVERCLOCK_E2E_DASHBOARD_PORT`).
-- The executor, staged swarm, crawler, effect classification, critique, and dry run have no
-  automated tests.
+See the Known limitations sections in [`README.md`](README.md#known-limitations) and
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#limitations).

@@ -148,13 +148,14 @@ export class RunController implements RunHandle {
     const executeState = await this.runtime.executeSessions.storageStateFor(apps);
     const knowledge = knowledgePolicy(this.config);
     const imported = knowledge.startsWith("network") ? await this.importFromNetwork(executeState) : null;
-    // Every path stores its final plan through the cache; reads and persistence follow the knowledge policy.
+    // Every run stores its final plan, so a later warm run can reuse it. Only local-only and
+    // network policies read the cache; a strict-cold run never does.
     const localCache = knowledge === "local-only" || knowledge.startsWith("network") ? this.runtime.cache : undefined;
     const cache = {
       get: (key: string) => localCache?.get(key),
       put: (key: string, value: { plan: import("@overclock/contracts").DslPlan; models: import("@overclock/contracts").AppModel[] }) => {
         this.finalPlan = value;
-        localCache?.put(key, value);
+        this.runtime.cache.put(key, value);
       },
     };
     const swarmDeps = {

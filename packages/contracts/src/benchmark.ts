@@ -38,6 +38,8 @@ export interface BenchmarkRunRecord {
   maxConcurrency: number;
   /** Records the engine reported VERIFIED that the checker marks incorrect (should be 0). */
   verifiedButWrong: number;
+  /** Records the engine reported SKIPPED (no change needed) that the checker marks incorrect. Absent in older result files. */
+  skippedButWrong?: number | undefined;
   /** Cold-start metrics (ms since submission); null when nothing happened. */
   firstActionMs: number | null;
   firstVerifiedMs: number | null;
@@ -74,6 +76,8 @@ export interface BenchmarkAggregate {
   costUsd: { median: number };
   modelCalls: { median: number };
   verifiedButWrong: number;
+  /** null when a run in the group predates the field. */
+  skippedButWrong: number | null;
   failedRuns: number;
   firstVerifiedMs: { median: number | null };
   condition: string;

@@ -189,13 +189,13 @@ Redaction is pattern based, so a secret in an unusual format can slip through.
 
 ## Network publication pipeline and trust boundaries
 
-**Status: In progress.** The code exists in `packages/network-capability`,
-`packages/network-client`, `services/network/spacetimedb`, and
-`services/network/validation-worker`. The sanitizer, static analysis, rebinding, and
-validation worker pass `tests/network-capability/` (23 tests on 2026-10-24). The module's
-authorization, payload, and promotion rules have tests in `tests/network/registry.test.ts`,
-which run against a real local SpacetimeDB and were not run for this report. The engine doesn't
-call any of it yet. See [`NETWORK.md`](NETWORK.md).
+**Status: Working.** The code is in `packages/network-capability`, `packages/network-client`,
+`services/network/spacetimedb`, `services/network/validation-worker`, and
+`services/engine/src/network.ts`. The sanitizer, static analysis, rebinding, validation worker,
+engine publication, and engine import pass `pnpm test:network-capability`. The module's
+authorization, payload, and promotion rules pass `pnpm test:network` against a real local
+SpacetimeDB. One live transfer between independent runtimes is recorded in
+[`NETWORK.md`](NETWORK.md#results).
 
 A capability crosses three boundaries: from the publishing runtime to the network, from the
 network to a validator, and from the network to an importing runtime. None of them trusts the
@@ -259,17 +259,26 @@ publisher's verified-receipt evidence. Full sandbox write validation is not impl
 
 ### Importing runtime
 
-By design, an importing runtime verifies the content hash, re-runs static analysis, rebinds
-every control against its own observation (`rebindCapability`), rewrites the plan to local
-control ids, and compiles it locally. From then on the capability is an ordinary plan: every
-compile-time, run-time, and release gate in this document applies to it. The engine doesn't
-import capabilities yet.
+An importing runtime accepts only versions the registry marks ACTIVE, which requires a passing
+validation by a validator identity other than the publisher and promotion by an admin. It
+then verifies the content hash, re-runs static analysis, rebinds every control against its
+own mutation-blocked observation (`rebindCapability`), rewrites the plan to local control
+ids, and compiles it locally. It executes the plan only when the outcome is
+`EXACT_COMPATIBLE`, `STRUCTURALLY_COMPATIBLE`, or `REQUIRES_REBINDING`, every write bound
+uniquely, and the plan compiled without errors; otherwise it discovers cold.
+
+From then on every compile-time and run-time check applies: validation, compare-and-swap
+guards, locks, read-back verification, reconciliation, and the origin allowlist. Two cold-run
+gates are replaced rather than repeated: the importing runtime runs no critique and no dry run,
+because the validator already ran static analysis and a read-only dry run on that version. It
+also runs the plan staged, without a write canary.
 
 ## Known gaps
 
-- Approved irreversible steps don't resume.
 - Per-page read-only mode, risky-GET blocking, WebSocket blocking, and the operator-session
   fallback for exploration have no automated tests.
 - The engine and arena APIs are unauthenticated and rely on binding to localhost.
 - Redaction and sanitization are pattern based.
-- The network pipeline is not connected to the engine, and validation never executes writes.
+- Validation never executes writes: write validation relies on static analysis plus the
+  publisher's verified-receipt evidence.
+- An imported plan runs without a write canary.

@@ -5,6 +5,40 @@ import { priceFor, type ModelLedger } from "./ledger";
 
 export class ModelUnavailableError extends Error {}
 
+/** A model stream delivered nothing for STREAM_IDLE_MS (a stalled connection never errors on its own). */
+export class ModelStallError extends Error {}
+
+const STREAM_IDLE_MS = Number(process.env.OVERCLOCK_MODEL_STREAM_IDLE_MS ?? 90_000);
+
+/** Abort signal for one stream: follows the caller's signal, and fires after STREAM_IDLE_MS without an event. */
+function stallGuard(outer: AbortSignal | undefined) {
+  const ac = new AbortController();
+  let stalled = false;
+  let timer: NodeJS.Timeout | undefined;
+  const onOuter = () => ac.abort(outer?.reason);
+  if (outer?.aborted) ac.abort(outer.reason);
+  else outer?.addEventListener("abort", onOuter, { once: true });
+  const kick = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stalled = true;
+      ac.abort(new ModelStallError(`model stream stalled: no data for ${Math.round(STREAM_IDLE_MS / 1000)} s`));
+    }, STREAM_IDLE_MS);
+  };
+  kick();
+  return {
+    signal: ac.signal,
+    kick,
+    get stalled() {
+      return stalled;
+    },
+    done() {
+      clearTimeout(timer);
+      outer?.removeEventListener("abort", onOuter);
+    },
+  };
+}
+
 export class ModelOutputError extends Error {
   constructor(
     message: string,
@@ -138,6 +172,7 @@ export class ClaudeProvider {
     const start = performance.now();
     let firstTextMs: number | null = null;
     const useFallback = FALLBACK_MODELS.has(model);
+    const guard = stallGuard(req.signal);
     try {
       const stream = this.api.beta.messages.stream(
         {
@@ -148,8 +183,9 @@ export class ClaudeProvider {
           output_config: { format: betaZodOutputFormat(req.schema), effort: req.effort ?? (req.role === "planner" ? this.config.plannerEffort : this.config.helperEffort) },
           ...(useFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         },
-        { signal: req.signal },
+        { signal: guard.signal },
       );
+      stream.on("streamEvent", guard.kick);
       stream.on("text", (delta, snapshot) => {
         firstTextMs ??= performance.now() - start;
         req.onText?.(delta, snapshot);
@@ -180,8 +216,11 @@ export class ClaudeProvider {
       return { data: parsed as z.infer<T>, ms, inputTokens: input, outputTokens: u.output_tokens, costUsd, model: response.model ?? model, firstTextMs };
     } catch (err) {
       if (err instanceof ModelOutputError) throw err;
-      this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms: performance.now() - start, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: (err as Error).message.slice(0, 200) });
-      throw err;
+      const e = guard.stalled ? new ModelStallError(`model stream stalled: no data for ${Math.round(STREAM_IDLE_MS / 1000)} s`) : (err as Error);
+      this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms: performance.now() - start, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: e.message.slice(0, 200) });
+      throw e;
+    } finally {
+      guard.done();
     }
   }
 
@@ -195,11 +234,12 @@ export class ClaudeProvider {
     const model = this.modelFor(req.role);
     const price = priceFor(model);
     const useFallback = FALLBACK_MODELS.has(model);
-    const call = async (user: string, onText?: (d: string, s: string) => void) => {
+    const attempt = async (user: string, onText?: (d: string, s: string) => void) => {
       const projected = ((req.system.length + user.length) / 3.5 / 1e6) * price.input + ((req.maxTokens ?? 16_000) / 1e6) * price.output * 0.5;
       this.ledger.guard(projected);
       const start = performance.now();
       let firstTextMs: number | null = null;
+      const guard = stallGuard(req.signal);
       try {
         const stream = this.api.beta.messages.stream(
           {
@@ -210,8 +250,9 @@ export class ClaudeProvider {
             output_config: { effort: req.effort ?? (req.role === "planner" ? this.config.plannerEffort : this.config.helperEffort) },
             ...(useFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
           },
-          { signal: req.signal },
+          { signal: guard.signal },
         );
+        stream.on("streamEvent", guard.kick);
         stream.on("text", (delta, snapshot) => {
           firstTextMs ??= performance.now() - start;
           onText?.(delta, snapshot);
@@ -225,8 +266,22 @@ export class ClaudeProvider {
         const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
         return { response, text, ms, input, output: u.output_tokens, costUsd, firstTextMs };
       } catch (err) {
-        this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms: performance.now() - start, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: (err as Error).message.slice(0, 200) });
-        throw err;
+        const e = guard.stalled ? new ModelStallError(`model stream stalled: no data for ${Math.round(STREAM_IDLE_MS / 1000)} s`) : (err as Error);
+        this.ledger.record({ provider: "anthropic", model, purpose: req.purpose, ms: performance.now() - start, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false, error: e.message.slice(0, 200) });
+        throw Object.assign(e, { textDelivered: firstTextMs !== null });
+      } finally {
+        guard.done();
+      }
+    };
+    // A stalled stream is retried once, unless its text already reached a live consumer (onText):
+    // replaying deltas there would corrupt whatever consumes them.
+    const call = async (user: string, onText?: (d: string, s: string) => void) => {
+      try {
+        return await attempt(user, onText);
+      } catch (err) {
+        const delivered = (err as { textDelivered?: boolean }).textDelivered === true;
+        if (!(err instanceof ModelStallError) || req.signal?.aborted || (onText && delivered)) throw err;
+        return attempt(user, onText);
       }
     };
     const extract = (text: string): { ok: true; value: z.infer<T> } | { ok: false; error: string } => {

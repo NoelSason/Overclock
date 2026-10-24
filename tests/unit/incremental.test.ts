@@ -51,6 +51,25 @@ describe("incremental compiler", () => {
     expect(new Set(all)).toEqual(new Set(steps.map((s) => s.id)));
   });
 
+  it("never releases form fills before their submit, even when another step streams in between", () => {
+    // Seen live: goto edit -> select -> compute -> submit. The compute step made the stream "move
+    // on", the select was released alone, and the submit could no longer join its page.
+    const c = compiler();
+    c.addPhase({ id: "per_order", kind: "foreach", over: "$input.records", key: "$rec.orderId", dependsOn: [] });
+    const between: DslStep = { id: "note_text", op: "compute", assign: [{ name: "why", expr: "concat('refund ', $rec.orderId)" }] };
+    const order = [...steps.slice(0, 7), between, steps[7]!];
+    const released: string[] = [];
+    for (const st of order) {
+      const r = c.addStep("per_order", st);
+      expect(r.issues.filter((i) => i.severity === "error")).toEqual([]);
+      for (const x of r.released) released.push(`${x.segment.nodeIds.join("+")}${x.write ? " [write]" : ""}`);
+    }
+    c.sealPhase("per_order");
+    expect(released.some((x) => x === "open_edit+set_status")).toBe(false);
+    expect(released).toContain("open_edit+set_status+save [write]");
+    expect(c.unreleasedSteps("per_order")).toEqual([]);
+  });
+
   it("streams the same work as the staged compiler (plus explicit re-navigations)", () => {
     const c = compiler();
     c.addPhase({ id: "per_order", kind: "foreach", over: "$input.records", key: "$rec.orderId", dependsOn: [] });

@@ -27,42 +27,102 @@ export interface LowerResult {
 
 const DEFAULT_TIMEOUT = 10_000;
 
+/** Functions that normalize a value without computing a different one. */
+const NORMALIZERS = new Set(["trim", "lower", "upper", "toString"]);
+
+/** `$out.<step>.<field>…`, optionally wrapped in normalizers like lower(trim(x)), or null. */
+function outPath(src: string): { step: string; field: string | undefined } | null {
+  let ast: ReturnType<typeof parseExpr>["ast"];
+  try {
+    ast = parseExpr(src).ast;
+  } catch {
+    return null;
+  }
+  while (ast.k === "call" && NORMALIZERS.has(ast.fn) && ast.args.length === 1) ast = ast.args[0]!;
+  const chain: string[] = [];
+  while (ast.k === "member" || ast.k === "index") {
+    chain.unshift(ast.k === "member" ? ast.prop : "[]");
+    ast = ast.obj;
+  }
+  if (ast.k !== "root" || ast.name !== "out" || !chain[0]) return null;
+  return { step: chain[0], field: chain[1] };
+}
+
 /**
- * Compare-and-swap guards the plan forgot: when an edit fills or selects a control whose value an
- * earlier extract read under the same condition, its submit must check that the form still shows
- * that value. Applied before lowering, and to every plan that is published, so the executed
- * program and the shared capability agree. Existing guards are kept.
+ * Make a plan's compare-and-swap guards mean what they must: "the form still shows the value
+ * read earlier". Applied before lowering, and to every plan that is published, so the executed
+ * program and the shared capability agree.
+ *  - A guard whose expected value is computed (for example the target value of the edit) is
+ *    dropped: it fails whenever a change is needed. A guard is kept when its value is a direct
+ *    read (an extract output, possibly through one compute field that copies it), a literal, or
+ *    a record field.
+ *  - A guard the plan left out is added when an edit fills or selects a control whose value an
+ *    extract read, under the same condition, before the form's first change.
  */
-export function addReadGuards(plan: DslPlan): { plan: DslPlan; added: { stepId: string; control: string }[] } {
+export function addReadGuards(plan: DslPlan): { plan: DslPlan; added: { stepId: string; control: string }[]; dropped: { stepId: string; control: string; equals: string }[] } {
   const added: { stepId: string; control: string }[] = [];
+  const dropped: { stepId: string; control: string; equals: string }[] = [];
   const phases = plan.phases.map((ph) => {
+    const extracts = new Set<string>();
+    const computes = new Map<string, Map<string, string>>();
+    const isRead = (src: string): boolean => {
+      const p = outPath(src);
+      if (!p) return parseExprRefs(src).size === 0;
+      if (extracts.has(p.step)) return true;
+      const assigned = p.field !== undefined ? computes.get(p.step)?.get(p.field) : undefined;
+      const q = assigned !== undefined ? outPath(assigned) : null;
+      return q !== null && extracts.has(q.step);
+    };
     const reads = new Map<string, { expr: string; when: string }>();
+    let formReads: Map<string, { expr: string; when: string }> | null = null;
     let form: DslStep[] = [];
     const steps = ph.steps.map((st): DslStep => {
       if (st.op === "extract") {
+        extracts.add(st.id);
         for (const f of st.fields) if (f.parse === "string" && !reads.has(f.control)) reads.set(f.control, { expr: `$out.${st.id}.${f.name}`, when: st.when ?? "" });
-      } else if (st.op === "goto") form = [];
-      else if (st.op === "fill" || st.op === "select") form.push(st);
-      else if (st.op === "submit") {
-        const guarded = new Set(st.guards.map((g) => g.control));
+      } else if (st.op === "extractTable") extracts.add(st.id);
+      else if (st.op === "compute") computes.set(st.id, new Map(st.assign.map((a) => [a.name, a.expr])));
+      else if (st.op === "goto") {
+        form = [];
+        formReads = null;
+      } else if (st.op === "fill" || st.op === "select") {
+        formReads ??= new Map(reads);
+        form.push(st);
+      } else if (st.op === "submit") {
+        const kept = st.guards.filter((g) => {
+          if (isRead(g.equals)) return true;
+          dropped.push({ stepId: st.id, control: g.control, equals: g.equals });
+          return false;
+        });
+        const guarded = new Set(kept.map((g) => g.control));
         const extra: { control: string; equals: string }[] = [];
         for (const f of form) {
           if (f.op !== "fill" && f.op !== "select") continue;
-          const r = reads.get(f.control);
+          const r = (formReads ?? reads).get(f.control);
           if (!r || guarded.has(f.control) || (r.when !== "" && r.when !== (st.when ?? ""))) continue;
           guarded.add(f.control);
           extra.push({ control: f.control, equals: r.expr });
           added.push({ stepId: st.id, control: f.control });
         }
         form = [];
-        if (extra.length) return { ...st, guards: [...st.guards, ...extra] };
+        formReads = null;
+        if (extra.length || kept.length !== st.guards.length) return { ...st, guards: [...kept, ...extra] };
       }
       return st;
     });
     return { ...ph, steps };
   });
-  return { plan: added.length ? { ...plan, phases } : plan, added };
+  return { plan: added.length || dropped.length ? { ...plan, phases } : plan, added, dropped };
 }
+
+function parseExprRefs(src: string): Set<string> {
+  try {
+    return parseExpr(src).outRefs;
+  } catch {
+    return new Set();
+  }
+}
+
 
 /** `{$rec.id}`-style template with every expression replaced by `*` (for resource identity). */
 export function templateShape(t: string): string {
@@ -119,8 +179,9 @@ export function stepExprs(s: DslStep): string[] {
  */
 export function lowerPlan(input: LowerInput): LowerResult {
   const issues: Issue[] = [];
-  const { plan, added } = addReadGuards(input.plan);
+  const { plan, added, dropped } = addReadGuards(input.plan);
   for (const a of added) issues.push({ severity: "warning", code: "auto-guard", message: `Submit "${a.stepId}" now guards "${a.control}" with the value the plan read earlier (compare-and-swap)`, stepId: a.stepId });
+  for (const d of dropped) issues.push({ severity: "warning", code: "computed-guard", message: `Submit "${d.stepId}" guarded "${d.control}" with a computed value (${d.equals}); a guard must compare with a value read from the app, so it was dropped`, stepId: d.stepId });
   const controls = new Map<string, AppControl>();
   for (const m of input.models) for (const [id, c] of Object.entries(m.controls)) controls.set(id, c);
   const appNames = new Set(input.apps.map((a) => a.name));

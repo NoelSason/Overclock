@@ -130,6 +130,29 @@ describe("lowering and validation", () => {
     expect(addReadGuards(plan(conditional as DslStep[])).added).toEqual([]);
   });
 
+  it("drops guards that compare with a computed value, keeps reads, and auto-guards only from reads before the form changed", () => {
+    // Seen live: guards: [{ control: <customer id input>, equals: "$out.decide3.targetCust" }], the
+    // value the edit is about to write. Such a guard fails whenever a change is needed.
+    const edit = (guards: { control: string; equals: string }[], extra: DslStep[] = []): DslStep[] => [
+      steps[0]!,
+      steps[1]!,
+      { id: "pick", op: "compute", assign: [{ name: "target", expr: "if($out.read_order.status == 'refunded', 'resolved', 'open')" }, { name: "seen", expr: "$out.read_order.status" }] },
+      { id: "open_edit", op: "goto", app: "Support", url: "/tickets/{$rec.orderId}/edit" },
+      { id: "set_status", op: "select", control: "support.edit.status", value: "$out.pick.target" },
+      ...extra,
+      { ...(steps[7] as Extract<DslStep, { op: "submit" }>), when: undefined, guards },
+    ];
+    const computed = addReadGuards(plan(edit([{ control: "support.edit.status", equals: "$out.pick.target" }])));
+    expect(computed.dropped).toEqual([{ stepId: "save", control: "support.edit.status", equals: "$out.pick.target" }]);
+    expect((computed.plan.phases[0]!.steps.find((x) => x.id === "save") as Extract<DslStep, { op: "submit" }>).guards).toEqual([]);
+    expect(lower(plan(edit([{ control: "support.edit.status", equals: "$out.pick.target" }]))).issues.some((i) => i.code === "computed-guard")).toBe(true);
+    // A compute field that only copies a read, a direct read, and a literal precondition are kept.
+    for (const equals of ["$out.pick.seen", "$out.read_order.status", "lower(trim($out.read_order.status))", "'open'"]) expect(addReadGuards(plan(edit([{ control: "support.edit.status", equals }]))).dropped).toEqual([]);
+    // An extract after the form changed reads the new value, so it never becomes a guard.
+    const late = addReadGuards(plan(edit([], [{ id: "confirm", op: "extract", fields: [{ name: "status", control: "support.edit.status", parse: "string" }] }])));
+    expect(late.added).toEqual([]);
+  });
+
   it("rejects controls that were never observed", () => {
     const bad = steps.map((s) => (s.id === "set_status" ? { ...s, control: "support.edit.priority" } : s));
     expect(lower(plan(bad as DslStep[])).issues.some((i) => i.code === "unknown-control")).toBe(true);

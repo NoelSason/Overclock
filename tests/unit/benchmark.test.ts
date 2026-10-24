@@ -19,6 +19,7 @@ import {
   aggregateRuns,
   computeSpeedup,
   conditionVariations,
+  countVerifiedButWrong,
   DEFAULT_PLAN_OPTIONS,
   formatPlan,
   generateReport,
@@ -292,6 +293,18 @@ describe("benchmark planning", () => {
     expect(plan.every((r) => r.overrides.thumbnails === false)).toBe(true);
     expect(planSuite("all", { ...opts, includeSequential100: true, includeExternal: true })).toHaveLength(40 + 1 + 6);
     expect(planSuite("all", { ...opts, conditions: ["local"] }).every((r) => r.condition === "local")).toBe(true);
+  });
+
+  it("separates wrong records the engine called VERIFIED from ones it called SKIPPED", () => {
+    const outcomes = [
+      { recordKey: "a", status: "VERIFIED" as const, writes: 1, receipts: [], notes: [] },
+      { recordKey: "b", status: "SKIPPED" as const, writes: 0, receipts: [], notes: [] },
+      { recordKey: "c", status: "FAILED" as const, writes: 0, receipts: [], notes: [] },
+      { recordKey: "d", status: "VERIFIED" as const, writes: 1, receipts: [], notes: [] },
+    ];
+    const check = { scenarioId: "s", totalRecords: 4, correctRecords: 1, accuracy: 0.25, mismatches: ["a", "b", "c"].map((k) => ({ recordKey: k, entity: "e", field: "f", expected: 1, actual: 0 })), duplicateWrites: 0, collateralWrites: 0, escalationExpected: 0, checkedAt: 0 } as CheckResult;
+    expect(countVerifiedButWrong(outcomes, check)).toBe(1);
+    expect(countVerifiedButWrong(outcomes, check, "SKIPPED")).toBe(1);
   });
 
   it("keeps only the requested labels and renumbers warm-run dependencies", () => {

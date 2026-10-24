@@ -5,11 +5,12 @@ capabilities through SpacetimeDB. One runtime discovers how to do a task on an a
 another runtime that has never seen the application reuses that knowledge with less discovery
 and fewer model calls, after checking it against its own live view of the app.
 
-**Status (2026-10-24): In progress.** The contracts, the SpacetimeDB module, the capability
-layer (export, sanitize, analyze, rebind), the network client, the validation worker, and setup
-scripts exist in code. The capability layer and validation worker have passing tests, and the
-client and module have tests against a real local SpacetimeDB. The engine doesn't call any of
-them yet, so a run with a network knowledge policy behaves like a cold run today.
+**Status (2026-10-24): Working, with one recorded live A→B run.** The contracts, the SpacetimeDB
+module, the capability layer (export, sanitize, analyze, rebind), the network client, the
+validation worker, and the engine integration exist and are tested. `pnpm network:demo` runs
+the full transfer between independent runtimes and exits non-zero unless every acceptance
+check passes. See [Results](#results). Repair coordination (`reportFailure`, repair leases) is
+implemented and tested at the client level, but the engine doesn't start repair jobs yet.
 
 ## Research question
 
@@ -33,26 +34,28 @@ optimization) and never pooled with it.
 | Policy | Reads local cache | Reads the network | Publishes | Works today |
 | --- | --- | --- | --- | --- |
 | `strict-cold` | no | no | no | Yes |
-| `local-only` | yes, when `cache: "warm"` | no | no | Modes B–D only. Mode E writes the local cache but never reads it. |
-| `network-read` | no | yes | no | No: behaves like a cold run that also writes the local cache |
-| `network-read-and-contribute` | no | yes | yes | No: same as `network-read` |
+| `local-only` | yes, when `cache: "warm"` | no | no | Yes. A warm hit runs staged in every mode, because there is no plan to stream. |
+| `network-read` | no | yes | no | Yes |
+| `network-read-and-contribute` | no | yes | yes, after a run where every record verified | Yes |
 
-The CLI has no `--knowledge` flag yet. Set the field through the SDK or `POST /api/runs`.
+Set it with `pnpm cli run --knowledge <policy>`, the SDK, or `POST /api/runs`. The engine's
+network must also be enabled (`OVERCLOCK_NETWORK_ENABLED=true`); otherwise network policies
+report `NETWORK_UNAVAILABLE` and discover cold.
 
 ## Component status
 
 | Component | Location | Status |
 | --- | --- | --- |
-| Contracts: capability, compatibility, publication, repair, client interface | `packages/network-contracts` | Partial (types; exercised by the tests in the following rows) |
-| Capability layer: export, sanitizer, static analysis, rebinding, registry helpers | `packages/network-capability` | Partial: `tests/network-capability/` passed (23 tests) on 2026-10-24; not used by the engine |
-| Validation worker | `services/network/validation-worker` | Partial: covered by `tests/network-capability/validator.test.ts`; not deployed |
-| SpacetimeDB module: tables, reducers, procedures, views | `services/network/spacetimedb` | In progress: `tests/network/registry.test.ts` and `repair.test.ts` run it on a real local server; not run for this report |
-| Network client and disabled client | `packages/network-client` | In progress: `tests/network/` (registry, repair, resilience, disabled); not run for this report |
-| Setup scripts | `scripts/network-*.ts` | In progress |
-| Engine integration: lookup, import, publish, repair, `network.*` events | `services/engine` | Proposed (not wired) |
-| Dashboard **Knowledge network** panel | `apps/dashboard/src/components/console/network-panel.tsx` | Partial (renders `network.*` events, which nothing emits yet) |
-| Benchmark arm: network warm vs strict cold | `packages/benchmarks` | Proposed |
-| Engine-level two-runtime transfer (runtime B executes with less discovery) | none | Not yet automated |
+| Contracts: capability, compatibility, publication, repair, client interface | `packages/network-contracts` | Working (exercised by the tests in the following rows) |
+| Capability layer: export, sanitizer, static analysis, rebinding, registry helpers | `packages/network-capability` | Working (tested): `pnpm test:network-capability` (25 tests) |
+| Validation worker | `services/network/validation-worker` | Working (tested): `tests/network-capability/validator.test.ts`; runs as a service in the demo. Picks up proposals that existed before it started. |
+| SpacetimeDB module: tables, reducers, procedures, views | `services/network/spacetimedb` | Working (tested): `pnpm test:network` (26 tests) on a real local server |
+| Network client and disabled client | `packages/network-client` | Working (tested): `tests/network/` (registry, repair, resilience, disabled) |
+| Engine integration: lookup, import, rebind, publish, reuse reports, `network.*` events | `services/engine/src/network.ts` | Working: live A→B run below; unreachable-network fallback in `tests/unit/network-service.test.ts`; publication hash in `tests/network-capability/capability.test.ts` |
+| Engine-started repair jobs | `services/engine` | Not wired |
+| Dashboard **Knowledge network** panel | `apps/dashboard/src/components/console/network-panel.tsx` | Working (renders the engine's `network.*` events) |
+| Two-runtime transfer with ground truth | `scripts/network-demo.ts` (`pnpm network:demo`) | Working: one recorded run, below |
+| Benchmark arm: network warm vs strict cold | `scripts/network-demo.ts` (runtime C) | One trial, below; not part of the benchmark harness |
 
 ## Portable capabilities
 
@@ -81,11 +84,12 @@ payload whose `publisherId` is not the caller.
 
 ## How a capability moves
 
-### Lookup (design)
+### Lookup
 
-1. A runtime takes a lightweight observation of the apps in the run and computes
+1. The engine looks up by canonical operation and the run's origins. (The client also ranks by
    non-sensitive **interface signatures**: origin, route family, page fingerprint, region
-   fingerprints, and role class.
+   fingerprints, and role class. The engine doesn't send signatures yet, because it looks up
+   before observing anything.)
 2. It subscribes only to registry rows for those origins (`watchOrigins`), then looks up
    candidates in its client cache. A lookup is bounded by `OVERCLOCK_NETWORK_LOOKUP_TIMEOUT_MS`
    (default 500 ms) and reports its source: `local-cache`, `network`, `negative-cache`, or
@@ -93,7 +97,7 @@ payload whose `publisherId` is not the caller.
 3. Candidates are ranked deterministically. No artifact is downloaded and no model is called
    during lookup.
 
-### Import (design)
+### Import
 
 1. Fetch the chosen version's payload on demand, from a local content-addressed cache first,
    and verify its hash.
@@ -292,8 +296,16 @@ The network suite starts SpacetimeDB if needed, publishes the module to a fresh 
 
 ### Two runtimes
 
-Each runtime needs its own engine port, data directory, and label, so tokens and caches are
-never shared:
+`pnpm network:demo` does everything in this section and the next one for you. It needs the
+arena (`pnpm arena`) and a local SpacetimeDB (`pnpm network:dev`). It wipes and republishes a
+separate `overclock-demo` database, enrolls separate admin, validator, and runtime identities,
+starts runtimes A (:4010), B (:4020), and C (:4030), runs the validator as a service, and
+writes `.data/demo/report.json`. Add `--keep` to leave the engines running for the dashboard,
+`--variation rename-save` to change the UI before runtime B runs, and `--no-cold-arm` to skip
+runtime C.
+
+To run runtimes by hand, give each its own engine port, data directory, and label, so tokens
+and caches are never shared:
 
 ```bash
 OVERCLOCK_ENGINE_PORT=4000 OVERCLOCK_DATA_DIR=.data/runtime-a OVERCLOCK_RUNTIME_LABEL=runtime-a pnpm engine
@@ -313,13 +325,59 @@ pnpm exec tsx services/network/validation-worker/src/main.ts --network --arena h
 
 In network mode it loads the client from `OVERCLOCK_NETWORK_CLIENT_MODULE` (default
 `@overclock/network-client`). Credentials come from the environment, and every validator
-browser context blocks mutations. The worker imports `packages/network-capability` by
-relative path, because `services/network/*` is outside the pnpm workspace globs.
+browser context blocks mutations. The worker is a workspace package
+(`services/network/validation-worker` is listed in `pnpm-workspace.yaml`). The SpacetimeDB
+module in `services/network/spacetimedb` is not: the `spacetime` CLI builds it with its own
+lockfile.
 
 ## Metrics
 
-When the engine integration lands, each run will report `network.lookup`, `network.import`,
-`network.publish`, `network.repair`, and `network.update` events, and `RunSummary.network` will
-hold lookups, hits, lookup, fetch, and rebind time, whether the run published, and repairs.
-Avoided discovery time and model calls on import are estimates and are marked as such
-(`estimated: true`). None of these fields is populated today.
+Each run reports `network.lookup`, `network.import`, `network.publish`, and `network.update`
+events, and `RunSummary.network` holds lookups, hits, the compatibility outcome, lookup, fetch,
+and rebind time, and whether the run published. The engine doesn't estimate avoided discovery
+time or model calls; compare against a strict-cold run instead.
+
+## Results
+
+One recorded run of `pnpm network:demo --records 10` on 2026-10-24: local SpacetimeDB, local
+arena with no injected latency, mode E, template `t1-order-reconcile`. Runtime A used seed 4242.
+Runtimes B and C used seed 4243 (different records, same apps). This is one trial; treat the
+numbers as a demonstration, not a benchmark.
+
+| | A: cold, contributes | B: network-read | C: fresh runtime, strict-cold |
+| --- | --- | --- | --- |
+| Arena checker (ground truth) | 10/10, 0 duplicate, 0 collateral writes | 10/10, 0 duplicate, 0 collateral | 10/10, 0 duplicate, 0 collateral |
+| Wall time | 97.6 s | 3.0 s | 169.1 s |
+| Time to first verified write | 97.3 s | 2.8 s | 168.8 s |
+| Planner calls (plan + repair) | 2 | 0 | 3 |
+| All model calls | 6 | 0 | 7 |
+| Model cost | $0.367 | $0.000 | $0.623 |
+| Streaming fallbacks (critique) | 1 | 0 | 1 |
+
+- **What B imported:** `cap_4d4a431303f0e4fc54ffd623@1`, outcome `EXACT_COMPATIBLE`, 24
+  controls bound, 0 unbound. Policy `network-import`; no planner, critique, or discovery-swarm
+  call.
+- **Overhead:** A's lookup 4 ms and publication 58 ms (27 KB, 34 redactions). Validation by a
+  separate validator identity took 1,569 ms; promotion by the admin took 7 ms. B's lookup took
+  6 ms, the artifact fetch 8 ms, and rebinding (a mutation-blocked mini-crawl) 1,185 ms.
+- **B versus C** (same scenario, both correct): 56× less wall time, 61× sooner to the first
+  verified write, 0 versus 7 model calls, $0 versus $0.62. C's cold run needed two repair
+  rounds (a critique fallback, then a validation round), so it is slower than a typical cold
+  run. Against A's cold run, B used about 32× less wall time.
+- **Not shown:** a UI change before B runs (`--variation`), repair after a breaking change, and
+  more than three runtimes.
+
+A second run on the final code (after the guard and import changes) also passed every check:
+A 95.6 s and $0.40, B 2.9 s and $0 (`EXACT_COMPATIBLE`, 25 controls bound), C 94.8 s and $0.39,
+all 10/10. B versus C: 32.7× less wall time, 36× sooner to the first verified write. C needed
+one repair round there, so this ratio is closer to a typical cold run than the first one.
+
+Bugs this run found and fixed on the way:
+
+- The artifact hash covered `publisherId`, but the client replaces it with the authenticated
+  identity, so every published capability failed integrity validation. The engine now
+  exports with its own identity.
+- A path template written as `{encode($rec.orderId)}` lost its link to the record field, so
+  the validator couldn't find a probe record. `encode()` is now recognized.
+- The validation worker missed proposals made before it started, and the client could lose a
+  freshly issued token when it closed right after connecting. Both are fixed and tested.

@@ -463,6 +463,8 @@ as follows:
    - Every step in it lowered without errors (known controls, valid expressions, consistent
      effects).
    - Every segment it depends on was already released.
+   - A segment that holds form fills or selects without their submit waits for the submit (or
+     the phase seal), so the submit always joins the page it belongs to.
 
    Released fragments are immutable. A later step that continues a page an earlier read
    fragment loaded gets its own re-navigation; if that earlier fragment was not pure, the step
@@ -538,25 +540,33 @@ never from browser workers:
 
 ## Limitations
 
-- **Mode E is unproven.** The streaming pipeline has no automated test and no recorded run.
-- **Mode E ignores the warm cache.** It writes the local program cache but never reads it, so a
-  warm-cache mode E run repeats discovery and planning. Until this changes, the warm repeats in
-  the `all` benchmark suite measure no cache reuse for mode E.
-- **No executor tests.** The executor, staged swarm, crawler, effect classification, critique,
-  and dry run run only in live runs.
-- **Access paths are new.** Access-path substitution is wired into mode E only and has no
-  test. Online re-optimization beyond access paths doesn't exist, so the
-  `overclock-no-online-reopt` ablation rung measures the same thing as
-  `overclock-no-access-paths`.
-- **Approvals don't resume.** Approving an irreversible step calls `scheduler.retry`, which
-  ignores tasks already in a terminal state, so the approved step never runs.
+- **E versus D is not a pure test of stage gating.** Mode E plans one strategy and runs no
+  dry-run probes; mode D can plan competing candidates and probes them. Both gate writes on
+  the same critique.
+- **Critique false positives cost a repair round.** One high-severity finding is enough to
+  trigger the repair, including findings about valid syntax. The gate is intentionally not
+  relaxed; the time it costs is reported.
+- **Repaired plans aren't critiqued again** in either mode D or mode E. They pass every static
+  check (validation, compilation, guards, verification placement) before any write.
+- **Idempotency decisions read region text.** A plan that skips an append when the notes
+  already contain its text uses `contains()` on the region's text, so a longer unrelated entry
+  that contains the text can cause a skip. Verification never accepts that case.
+- **Record counts include aggregate phases.** `recordsVerified` counts outcomes of every
+  phase, so a run over 10 orders with one cross-record hold can report 11.
+- **Access paths have no test.** Access-path substitution is wired into mode E only. Online
+  re-optimization beyond access paths doesn't exist, so the `overclock-no-online-reopt`
+  ablation rung measures the same thing as `overclock-no-access-paths`.
+- **Some components run only in live runs.** The staged swarm, crawler, effect
+  classification, critique, and dry run have no automated tests.
 - **Competition is narrow.** Only two strategy directives exist. Bulk-import operations are
   detected but not offered, because read-back verification covers one entity per write.
 - **No nested loops.** A `foreach` inside a `foreach` is rejected.
 - **Per-run learning.** Recovery rules and the latency model are not persisted between runs.
   The local program cache is.
-- **Generic login.** Sign-in looks for a password field and a username-like field; apps with
-  other login flows need `OVERCLOCK_APP_CREDENTIALS` and may still fail.
+- **Generic login.** Sign-in looks for a password field and a username-like field (an email or
+  text input, or a field named like user or email). The holdout evaluation hit this: every run
+  on the unfamiliar fourth app failed at sign-in. Apps with other login forms need their own
+  sign-in support; `OVERCLOCK_APP_CREDENTIALS` supplies credentials, not a login flow.
 - **Pattern-based redaction.** Event and config redaction matches key names and token shapes;
   it can miss secrets in unusual formats.
 
@@ -564,13 +574,16 @@ never from browser workers:
 
 | Check | Command or test | Status |
 | --- | --- | --- |
-| Mode E records discovery/execution overlap | `stageOverlapMs` computes `overlapMs` from `stage` events; `tests/integration/engine-api.test.ts` rebuilds it from replayed scripted events. A live check is `pnpm cli run --scenario --mode overclock` (the progress line and summary show overlap). | Metric tested; a real mode E run is not yet automated |
-| Time to first verified action is measured | `firstVerifiedMs` comes from the first `VERIFIED` receipt. `tests/integration/engine-api.test.ts` ("rebuilds a completed run's view identical to the live reducer state") and `tests/unit/benchmark.test.ts` (harness records it). | Working (tested) |
-| Holdout evaluated after a code freeze | The harness refuses holdout scenarios unless `OVERCLOCK_HOLDOUT_FROZEN` names a freeze identifier, and records it. `tests/unit/benchmark.test.ts` ("refuses holdout runs without a code-freeze identifier and records it when given"). Run with `OVERCLOCK_HOLDOUT_FROZEN=<freeze-id> pnpm exec tsx packages/benchmarks/src/cli.ts --suite holdout` (spends money). | Gate tested; holdout not yet evaluated |
-| Judge-induced UI change triggers recovery without duplicate writes | `pnpm test:adversarial`: for a renamed save button, reordered fields, a confirmation modal, an announcement modal, a field in a hidden tab, a renamed label, and all at once, record 1 is repaired at L0/L1 with 0 model calls, record 2 reuses the repair with no observation, and the app sees exactly 2 writes. The arena checker counts duplicate writes (`tests/unit/arena-oracle.test.ts`). | Tested on a fixture app; engine + arena + live surprise not yet automated |
-| Two independent runtimes transfer a capability via SpacetimeDB | Client level: `tests/network/registry.test.ts` ("B receives the promoted version live, then fetches and verifies the artifact") uses separate publisher, validator, admin, and reader identities against a real local SpacetimeDB, with a synthetic capability. Run with `pnpm test:network` (needs the `spacetime` CLI). Engine level (runtime B executes with less discovery): no test. | Client level tested (not run for this report); engine level not yet automated |
-| Network-disabled operation | The engine has no network dependency today, and every engine test runs without SpacetimeDB. `tests/network/disabled.test.ts` ("returns NO_CAPABILITY instantly and throws NetworkDisabledError elsewhere") covers the disabled client. A test that a network-enabled engine falls back when SpacetimeDB is unreachable doesn't exist. | Disabled client tested (not run for this report); engine fallback not yet automated |
-| A–E produce comparable records | Every mode writes the same `BenchmarkRunRecord`. The harness checks seed, template, record count, and dataset hash before each run. `tests/unit/benchmark.test.ts` ("separates cold, warm, holdout, record-count, and condition groups", "computes speedups only between matched groups", "fails a run when the arena serves a different dataset for the same key"). | Harness tested; no records yet |
-| The compiler rejects unsafe programs | `tests/unit/compiler.test.ts` | Working (tested) |
-| Uncertain writes are reconciled, not repeated | `tests/integration/runtime.test.ts` ("reports an after-commit 500 as uncertain, and read-back shows it committed"). Executor reconciliation itself has no test. | Runtime tested; executor not yet automated |
-| Read fragments can't write | Exploration-context blocking is tested in `tests/integration/runtime.test.ts`. Per-page read-only mode in execution contexts has no test. | Not yet automated |
+| Mode E overlaps discovery with execution | `overlapMs` from `stage` events (`tests/integration/engine-api.test.ts`). Live: 88–105 s median overlap in the benchmark (`docs/BENCHMARKS.md`, "Where time goes"). | Working (measured) |
+| E versus D, all cold-start overhead counted | `pnpm exec tsx packages/benchmarks/src/cli.ts --suite all --only overclock,overclock-staged,compiled-parallel,compiled-single` | Measured: E 1.4–2× faster than D at equal accuracy; E slower than C |
+| Time to first verified action is measured | `firstVerifiedMs` from the first `VERIFIED` receipt (`tests/integration/engine-api.test.ts`, `tests/unit/benchmark.test.ts`) | Working (tested, measured) |
+| Holdout evaluated after a code freeze | `OVERCLOCK_HOLDOUT_FROZEN=<freeze-id> pnpm exec tsx packages/benchmarks/src/cli.ts --suite holdout`; the gate is tested in `tests/unit/benchmark.test.ts` | Evaluated once, freeze `freeze-2026-10-24-e14db0e-tree-b59e0e950646`: t3 (an unseen task on the known apps) 25/25 in all 6 runs; t4 (the unfamiliar fourth app) failed in all 6 runs at sign-in, before any write |
+| A record is VERIFIED only when every write landed as planned | `tests/integration/entry-verification.test.ts` (appended entries, duplicates, rejected and ambiguous submissions, the invalidation regression); live: 0 verified-but-wrong records in 34 benchmark runs | Working (tested, measured) |
+| Judge-induced UI change triggers recovery without duplicate writes | `pnpm test:adversarial` on a fixture app (every surprise, repair reuse, exactly one write per record). Live: a mode E run with the Support save buttons renamed 15 s in finished 10/10 with 0 duplicate writes; the renamed button resolved through a lower-ranked locator (tier 2) with no model call. | Tested on a fixture app; one live run, where recovery levels above L0 weren't needed |
+| Two independent runtimes transfer a capability via SpacetimeDB | `pnpm network:demo` (exits non-zero unless both runtimes pass the arena checker, B imported and executed the capability, and B made no planner call); client level in `pnpm test:network` | Working (one recorded run) |
+| Network-disabled or unreachable operation | `tests/unit/network-service.test.ts` (no client, cold discovery), `tests/network/disabled.test.ts` | Working (tested) |
+| A–E produce comparable records | The harness checks seed, template, record count, and dataset hash before each run (`tests/unit/benchmark.test.ts`) | Working (tested); A not run this round |
+| The compiler rejects unsafe programs and repairs unsafe guards | `tests/unit/compiler.test.ts` | Working (tested) |
+| Uncertain writes are reconciled, not repeated | `tests/integration/runtime.test.ts`, `tests/integration/entry-verification.test.ts` (after-commit 500, before-commit 503) | Working (tested) |
+| A stalled model stream can't hang a run | `tests/unit/model-stall.test.ts` | Working (tested) |
+| Read fragments can't write | Exploration-context blocking in `tests/integration/runtime.test.ts`. Per-page read-only mode in execution contexts has no test. | Partial |

@@ -618,12 +618,12 @@ function writeSafetySection(rows: readonly AggregateRow[]): string[] {
     return L;
   }
   L.push(
-    "Totals from the arena checker over every run with a checker result, including failed runs, because damage counts either way. Incorrect records = total − correct. Duplicate writes are append-only side effects applied more than once; collateral writes changed entities the task never asked to change.",
+    "Totals from the arena checker over every run with a checker result, including failed runs, because damage counts either way. Incorrect records = total − correct. Duplicate writes are append-only side effects applied more than once; collateral writes changed entities the task never asked to change. Verified-but-wrong records were reported VERIFIED and skipped-but-wrong records were reported SKIPPED (no change needed), but the checker marks them incorrect. The rest of the incorrect records were reported FAILED or UNCONFIRMED.",
     "",
   );
   L.push(
     ...table(
-      ["Suite", "Label", "Scenario", "Records", "Condition", "Cache", "Runs checked", "Incorrect records", "Duplicate writes", "Collateral writes", "Verified-but-wrong"],
+      ["Suite", "Label", "Scenario", "Records", "Condition", "Cache", "Runs checked", "Incorrect records", "Duplicate writes", "Collateral writes", "Verified-but-wrong", "Skipped-but-wrong"],
       checked.map((r) => [
         `\`${r.suite}\``,
         `\`${r.label}\``,
@@ -636,6 +636,7 @@ function writeSafetySection(rows: readonly AggregateRow[]): string[] {
         String(r.writes.duplicateWrites),
         String(r.writes.collateralWrites),
         String(r.verifiedButWrong),
+        r.skippedButWrong === null ? NA : String(r.skippedButWrong),
       ]),
     ),
     "",
@@ -699,6 +700,7 @@ function limitations(
   }
 
   for (const r of rows) {
+    if (r.skippedButWrong !== null && r.skippedButWrong > 0) found.push(`\`${r.label}\` reported ${r.skippedButWrong} incorrect record${r.skippedButWrong === 1 ? "" : "s"} as SKIPPED (no change needed): a wrong decision, not a failed write (${where(r)}).`);
     if (r.verifiedButWrong > 0) found.push(`**\`${r.label}\` reported ${r.verifiedButWrong} record${r.verifiedButWrong === 1 ? "" : "s"} as VERIFIED that the checker marks incorrect** (${where(r)}).`);
     if (r.writes.duplicateWrites > 0) found.push(`**\`${r.label}\` made ${r.writes.duplicateWrites} duplicate write${r.writes.duplicateWrites === 1 ? "" : "s"}** across ${r.writes.checkedRuns} checked runs (${where(r)}).`);
     if (r.writes.collateralWrites > 0) found.push(`**\`${r.label}\` made ${r.writes.collateralWrites} collateral write${r.writes.collateralWrites === 1 ? "" : "s"}** across ${r.writes.checkedRuns} checked runs (${where(r)}).`);

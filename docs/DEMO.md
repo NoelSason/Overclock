@@ -5,9 +5,11 @@ and a fast reset procedure. Every number you show must come from a real run or f
 [`BENCHMARKS.md`](BENCHMARKS.md). If a number doesn't exist yet, say "results pending" and move
 on.
 
-> **Readiness (2026-10-24).** Mode E has not been run end to end yet, and the Overclock Network
-> is not wired into the engine. Rehearse the full script at least once before judging. Each
-> segment lists what to do if its feature isn't ready.
+> **Readiness (2026-10-24).** Mode E and the Overclock Network transfer both have recorded
+> runs that passed the arena's ground-truth check ([`BENCHMARKS.md`](BENCHMARKS.md),
+> [`NETWORK.md`](NETWORK.md#results)). Model latency varies from run to run, and a critique
+> finding can add a repair round of 40–55 s, so rehearse the full script at least once before
+> judging and quote numbers from recorded runs, not from the live one.
 
 ## Setup before judges arrive
 
@@ -131,31 +133,31 @@ arena with a live engine.
 
 ### 75–90 s: runtime B reuses runtime A's capability
 
-**Only if the network integration has landed** and a two-runtime test passes: start a second
-engine (see [`NETWORK.md`](NETWORK.md#two-runtimes)) and run the same task on it with a
-network knowledge policy. Point at the **Knowledge network** panel: lookup, import, rebind,
-and the discovery it skipped.
+**Before judging,** run the transfer once and keep its report:
 
-**Fallback (the current state):** pick one, rehearsed beforehand.
+```bash
+pnpm network:dev
+pnpm network:demo --keep
+```
 
-- **Client-level transfer.** If it passes in rehearsal, run the two-identity registry test
-  against the local SpacetimeDB:
+It takes about 5 minutes and spends about $1 (runtime A's and runtime C's cold runs). With
+`--keep`, the three engines stay up so you can show B's run in a second dashboard started with
+`NEXT_PUBLIC_OVERCLOCK_URL=http://127.0.0.1:4020`.
 
-  ```bash
-  pnpm test:network -t "B receives the promoted version"
-  ```
+**Show:** the acceptance checks the script printed (all `PASS`) and the Knowledge network panel
+of B's run: lookup, import (`EXACT_COMPATIBLE`, 24 controls bound), and no planner call.
 
-  Say what it shows: a publisher proposes a capability, a separate validator passes it, an
-  admin promotes it, and a reader identity receives it live, fetches it, and verifies its hash.
-  Say what it doesn't show: the capability is synthetic, and no engine executes it.
-- **Design only.** Show the publication state machine in [`NETWORK.md`](NETWORK.md) and say:
-  "Next, a validated capability that one runtime discovered goes to SpacetimeDB. A different
-  validator checks it, and a fresh runtime rebinds it to its own view of the app before running
-  it. That part is in progress."
+**Say:** "Runtime A discovered this task cold and published it. A separate validator identity
+checked it, and an admin promoted it. Runtime B, which had never seen these apps, rebound the
+capability to its own view of them and finished in 3 seconds with no model calls. A fresh
+runtime running the same task cold took 169 seconds. The arena's checker graded both 10 out
+of 10." These are the numbers from the recorded run in [`NETWORK.md`](NETWORK.md#results);
+use the numbers from your rehearsal if they differ.
+
+**If the live demo fails:** show the recorded report and say which check failed. The script
+exits non-zero on purpose instead of hiding a failure.
 
 **Closing line:** "One agent discovers. Every agent becomes faster."
-
-If you're using the fallback, say the closing line as the goal it is, not as a result.
 
 ## 3-minute extended version
 
@@ -167,7 +169,7 @@ If you're using the fallback, say the closing line as the goal it is, not as a r
 | 1:30–2:00 | In the judge console, click **Edit an unprocessed record**. | A judge changed data mid-run. If a worker read that record before the edit, its compare-and-swap guard sees the form no longer matches, so the scheduler re-reads instead of overwriting. Point at **Invalidations** in the **Coordination** panel. If the edit lands before the record is read, the run reads the new value. |
 | 2:00–2:30 | Click **Rename save buttons** or **Confirmation modal**. | Localized recovery: one repair, then reuse at level 0 across records; other workers continue. |
 | 2:30–2:50 | Show **Run summary**, **Independent checker**, then the benchmark table. | Verified records, time to first verified action, overlap, model calls, cost, and checker accuracy; the comparison with the baseline mode. Real numbers only. |
-| 2:50–3:00 | Show the network design or the two-runtime import. | "One agent discovers. Every agent becomes faster." |
+| 2:50–3:00 | Show the recorded `pnpm network:demo` report: A's cold run, B's import, C's strict-cold run, all graded 10/10. | "One agent discovers. Every agent becomes faster." |
 
 ## Fast reset
 

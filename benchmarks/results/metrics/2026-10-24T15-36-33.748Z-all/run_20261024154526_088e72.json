@@ -1,14 +1,14 @@
 {
   "summary": {
-    "runId": "run_20261024090857_b5d9c6",
+    "runId": "run_20261024154526_088e72",
     "mode": "overclock",
     "status": "completed",
-    "wallMs": 100707,
-    "discoveryMs": 1771,
-    "compileMs": 96899,
-    "executionMs": 92784,
+    "wallMs": 5669,
+    "discoveryMs": 0,
+    "compileMs": 0,
+    "executionMs": 5632,
     "records": 25,
-    "tasks": 802,
+    "tasks": 252,
     "verified": 22,
     "failed": 0,
     "unconfirmed": 0,
@@ -16,61 +16,58 @@
     "needsApproval": 0,
     "recordsVerified": 27,
     "recoveries": 0,
-    "modelCalls": 6,
-    "inputTokens": 47060,
-    "outputTokens": 14074,
-    "modelCostUsd": 0.37282,
-    "workerUtilization": 0.614,
-    "maxConcurrency": 12,
+    "modelCalls": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "modelCostUsd": 0,
+    "workerUtilization": 0.613,
+    "maxConcurrency": 16,
     "strategy": "per-record",
-    "firstActionMs": 7974.2,
-    "firstVerifiedMs": 99720.1,
-    "overlapMs": 90603,
+    "firstActionMs": 268.5,
+    "firstVerifiedMs": 1940.8,
+    "overlapMs": 0,
     "recoveryMs": 0,
     "stageMs": {
-      "discovery": 1771,
-      "planning": 87460,
-      "execution": 94914,
-      "critique": 9439
+      "execution": 5631
     },
-    "knowledge": "strict-cold"
+    "knowledge": "local-only"
   },
   "derived": {
-    "elapsedMs": 100707,
+    "elapsedMs": 5669,
     "verified": 22,
-    "throughputPerMin": 14.226483461174096,
+    "throughputPerMin": 233.20318711022384,
     "recentThroughputPerMin": 132,
-    "utilization": 0.01706145158271421,
+    "utilization": 0.6084692949136971,
     "activeWorkers": 0,
-    "costPerVerifiedUsd": 0.01694637427272727,
+    "costPerVerifiedUsd": 0,
     "modelFreeActionRatio": 1,
-    "firstActionMs": 7974.2,
-    "firstVerifiedMs": 99720.1,
-    "overlapMs": 90603
+    "firstActionMs": 268.5,
+    "firstVerifiedMs": 1940.8,
+    "overlapMs": 0
   },
   "spans": [
     {
       "name": "worker.task",
-      "count": 327,
-      "totalMs": 18991,
-      "p50": 30.56,
-      "p95": 202.08
+      "count": 152,
+      "totalMs": 55103,
+      "p50": 272.71,
+      "p95": 1419.41
     }
   ],
   "latency": {
-    "nav:Support": 9,
-    "nav:CRM": 14,
-    "nav:Orders": 13,
-    "write:Support": 75,
-    "write:Orders": 119,
-    "write:CRM": 75
+    "nav:Support": 555,
+    "nav:Orders": 290,
+    "nav:CRM": 500,
+    "write:Support": 585,
+    "write:Orders": 776,
+    "write:CRM": 525
   },
   "ledger": {
-    "calls": 6,
-    "inputTokens": 47060,
-    "outputTokens": 14074,
-    "costUsd": 0.372820234,
-    "ms": 97773.03058400001,
+    "calls": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "costUsd": 0,
+    "ms": 0,
     "failures": 0
   },
   "recovery": {
