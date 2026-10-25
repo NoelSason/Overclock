@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Overclock",
+  "short_name": "Overclock",
+  "description": "Teach your browser a task once. Run it again at machine speed, with every change verified.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "Open Overclock",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png" }
+  },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["sidePanel", "storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://127.0.0.1:* http://localhost:*; img-src 'self' blob: data:"
+  }
+}

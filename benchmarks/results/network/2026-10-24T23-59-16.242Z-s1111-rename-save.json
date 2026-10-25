@@ -1,0 +1,232 @@
+{
+  "at": "2026-10-24T23:59:16.242Z",
+  "passed": true,
+  "expectRefusal": false,
+  "aWarmCache": ".data/scratch/a-cache",
+  "conflict": null,
+  "checks": [
+    {
+      "check": "A passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "B passes the independent ground-truth check",
+      "ok": true,
+      "detail": "{\"accuracy\":1,\"correct\":10,\"total\":10,\"duplicateWrites\":0,\"collateralWrites\":0}"
+    },
+    {
+      "check": "A and B are distinct runtimes: different network identities; B started with an empty local cache",
+      "ok": true,
+      "detail": "A c2007159b378c78e, B c200133f1d4b0639, capability publisher c2007159b378c78e, B cache entries before its run 0"
+    },
+    {
+      "check": "B bound every control the capability needs (0 unbound)",
+      "ok": true,
+      "detail": "24 bound, 0 unbound"
+    },
+    {
+      "check": "B wrote through browser controls and verified each write by a fresh read",
+      "ok": true,
+      "detail": "actions {\"navigate\":48,\"extract\":40,\"fill\":4,\"select\":7,\"click\":8,\"verify\":8,\"compute\":1}; 8 VERIFIED receipts"
+    },
+    {
+      "check": "The arena's own counters saw exactly B's verified writes arrive during B's run (live execution, not replayed events)",
+      "ok": true,
+      "detail": "arena committed 8 write(s) while B ran; B holds 8 VERIFIED receipts"
+    },
+    {
+      "check": "B saw the UI change and rebound it: changed labels reported, writes behind a passed write canary",
+      "ok": true,
+      "detail": "\"Update order\" -> \"Apply changes\" (structural), \"Save ticket\" -> \"Commit ticket\" (structural), \"Save changes\" -> \"Update record\" (structural); write canary on, passed 4x"
+    },
+    {
+      "check": "B imported the shared capability (executable after rebinding)",
+      "ok": true,
+      "detail": "cap_abca6f91eff1982eedfb89ee@1 REQUIRES_REBINDING, 24 bound, 0 unbound"
+    },
+    {
+      "check": "B executed the imported plan (no cold planning)",
+      "ok": true,
+      "detail": "policy network-import, selected network"
+    },
+    {
+      "check": "B made no planner call (A reused its cached plan: regression run)",
+      "ok": true,
+      "detail": "A 0, B 0"
+    }
+  ],
+  "database": "overclock-demo",
+  "endpoint": "ws://127.0.0.1:3100",
+  "records": 10,
+  "seed": 1111,
+  "variation": "rename-save",
+  "mode": "overclock",
+  "versionId": "cap_abca6f91eff1982eedfb89ee@1",
+  "validation": {
+    "versionId": "cap_abca6f91eff1982eedfb89ee@1",
+    "outcome": "pass",
+    "category": "ok",
+    "ms": 744,
+    "detail": "pass: EXACT_COMPATIBLE; 24 controls bound; 9 pages; dry run 8 read segment(s) ok, 4 write/dependent segment(s) skipped; publisher receipts 7 | Writes were not executed: write validation relies on static analysis plus the publisher's verified-receipt evidence; full sandbox write-validation is not implemented."
+  },
+  "overhead": {
+    "aLookupMs": 3,
+    "aPublishMs": 62,
+    "validationMs": 744,
+    "promoteMs": 6,
+    "bLookupMs": 6,
+    "bFetchMs": 8,
+    "bRebindMs": 547
+  },
+  "plannerCalls": {
+    "a": 0,
+    "b": 0
+  },
+  "comparison": {
+    "note": "cold arm skipped"
+  },
+  "transfer": {
+    "identities": {
+      "a": "c2007159b378c78e",
+      "b": "c200133f1d4b0639",
+      "publisher": "c2007159b378c78e"
+    },
+    "bCacheBefore": 0,
+    "variations": {
+      "theme": "default",
+      "renameButtons": {
+        "CRM": {
+          "Save changes": "Update record"
+        },
+        "Orders": {
+          "Update order": "Apply changes"
+        },
+        "Support": {
+          "Save ticket": "Commit ticket"
+        }
+      },
+      "shuffleFields": {},
+      "confirmModal": {},
+      "announcementModal": {},
+      "pageSize": {},
+      "editInTab": {},
+      "latency": {},
+      "failures": {},
+      "concurrencyLimit": {}
+    },
+    "relabeled": [
+      {
+        "key": "Orders:/orders/:id/edit:button:update_order",
+        "from": "Update order",
+        "to": "Apply changes",
+        "evidence": "structural"
+      },
+      {
+        "key": "Support:/tickets/:id/edit:button:save_ticket",
+        "from": "Save ticket",
+        "to": "Commit ticket",
+        "evidence": "structural"
+      },
+      {
+        "key": "CRM:/customers/:id/edit:button:save_changes",
+        "from": "Save changes",
+        "to": "Update record",
+        "evidence": "structural"
+      }
+    ],
+    "writeCanary": true,
+    "canaryPassed": 4,
+    "refused": [],
+    "importOutcome": "REQUIRES_REBINDING",
+    "actionsB": {
+      "navigate": 48,
+      "extract": 40,
+      "fill": 4,
+      "select": 7,
+      "click": 8,
+      "verify": 8,
+      "compute": 1
+    },
+    "verifiedB": 8,
+    "arenaWritesB": 8
+  },
+  "a": {
+    "runtime": "runtime-a",
+    "status": "completed",
+    "knowledge": "network-read-and-contribute",
+    "network": {
+      "lookups": 1,
+      "hits": 0,
+      "outcome": "NO_CAPABILITY",
+      "lookupMs": 3,
+      "fetchMs": 0,
+      "rebindMs": 0,
+      "published": true,
+      "repairs": 0
+    },
+    "wallMs": 1072,
+    "firstActionMs": 442.2,
+    "firstVerifiedMs": 762.9,
+    "stageMs": {
+      "discovery": 4,
+      "execution": 637
+    },
+    "modelCalls": 0,
+    "modelCostUsd": 0,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {},
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "warm-cache: warm start: app fingerprints match a previously compiled program for this task"
+  },
+  "b": {
+    "runtime": "runtime-b",
+    "status": "completed",
+    "knowledge": "network-read",
+    "network": {
+      "lookups": 1,
+      "hits": 1,
+      "outcome": "REQUIRES_REBINDING",
+      "capabilityId": "cap_abca6f91eff1982eedfb89ee",
+      "version": 1,
+      "lookupMs": 6,
+      "fetchMs": 8,
+      "rebindMs": 547,
+      "published": false,
+      "repairs": 0
+    },
+    "wallMs": 1800,
+    "firstActionMs": 1018.4,
+    "firstVerifiedMs": 1302.9,
+    "stageMs": {
+      "discovery": 570,
+      "execution": 851
+    },
+    "modelCalls": 0,
+    "modelCostUsd": 0,
+    "recordsVerified": 10,
+    "records": 10,
+    "checker": {
+      "accuracy": 1,
+      "correct": 10,
+      "total": 10,
+      "duplicateWrites": 0,
+      "collateralWrites": 0
+    },
+    "modelCallsByPurpose": {},
+    "fallbacks": [],
+    "recoveries": 0,
+    "policy": "network-import: imported cap_abca6f91eff1982eedfb89ee@1 (REQUIRES_REBINDING) from the Overclock Network and rebound to this runtime's own observation; no planner call"
+  },
+  "c": null,
+  "warm": null
+}

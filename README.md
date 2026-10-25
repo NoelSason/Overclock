@@ -25,6 +25,19 @@ verified execution programs instead of reasoning about every action.
 > results](#benchmark-results-2026-10-24), [Feature status](#feature-status), and
 > [`PROGRESS.md`](PROGRESS.md).
 
+## Overclock for Chrome
+
+**Describe it. Approve it. Overclock runs it.** The Chrome extension (`apps/extension`) is the
+customer interface. Pick a workflow Overclock has learned, or describe a new task. Drop a CSV of
+records, review every step and which ones change data, approve, and watch the run finish with
+each change verified by re-reading the page. Reruns reuse the learned workflow with no AI
+planning; a teammate's validated workflow can be imported from the Overclock Network. Tasks run
+in Overclock's own browser on your computer, not in your Chrome tabs, and the demonstration
+environment is the arena's mock apps. Setup, security model, and a 90-second customer demo:
+[`docs/EXTENSION.md`](docs/EXTENSION.md).
+
+![Overclock for Chrome: results](docs/demo/extension-4-results.png)
+
 ## The problem
 
 Most browser agents run an observe, reason, act loop: they look at the page, ask a model what
@@ -502,5 +515,6 @@ it is evaluated only after a code freeze, so the engine can't be tuned to it.
 - [`docs/SECURITY.md`](docs/SECURITY.md): permission model and trust boundaries.
 - [`docs/NETWORK.md`](docs/NETWORK.md): Overclock Network design, status, and setup.
 - [`docs/DEMO.md`](docs/DEMO.md): the judging demo, its 90-second script, the recorded fallback (`docs/demo/transfer-recording.mp4`), and the reset procedure.
+- [`docs/EXTENSION.md`](docs/EXTENSION.md): Overclock for Chrome: what runs where, the gateway's security model, install, startup, and a 90-second customer demo.
 - [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): generated from real results only.
 - [`PROGRESS.md`](PROGRESS.md): status by milestone.

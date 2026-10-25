@@ -50,6 +50,8 @@ export interface PreviewStep {
   conditional: boolean;
   /** For a change: the page re-read afterwards to confirm it. */
   verifiedBy: string | null;
+  /** Secondary detail, e.g. the values a rule step works out. */
+  detail: string | null;
 }
 
 export interface PreviewPhase {
@@ -159,7 +161,7 @@ function labelsFromCapability(cap: PortableCapability): ControlLabel {
 }
 
 function describe(step: DslStep, label: ControlLabel): PreviewStep {
-  const base = { id: step.id, conditional: !!step.when, changesData: false, needsApproval: false, verifiedBy: null as string | null };
+  const base = { id: step.id, conditional: !!step.when, changesData: false, needsApproval: false, verifiedBy: null as string | null, detail: null as string | null };
   switch (step.op) {
     case "goto":
       return { ...base, action: "open", app: step.app, text: `Open ${step.app} ${readableTemplate(step.url)}` };
@@ -169,7 +171,7 @@ function describe(step: DslStep, label: ControlLabel): PreviewStep {
     }
     case "extractTable": {
       const t = label(step.table);
-      return { ...base, action: "read-table", app: t.app, text: `Read the ${t.label} table (${step.columns.map((c) => c.header).join(", ")})` };
+      return { ...base, action: "read-table", app: t.app, text: `Read the table’s ${step.columns.map((c) => c.header.toLowerCase()).join(", ")} columns` };
     }
     case "fill": {
       const c = label(step.control);
@@ -188,7 +190,7 @@ function describe(step: DslStep, label: ControlLabel): PreviewStep {
       return { ...base, action: "submit", app: c.app, text: `Save with “${c.label}”`, changesData: true, needsApproval: step.irreversible, verifiedBy: readableTemplate(step.verify.url) };
     }
     case "compute":
-      return { ...base, action: "decide", app: null, text: `Decide ${step.assign.map((a) => a.name).join(", ")} (no browser)` };
+      return { ...base, action: "decide", app: null, text: "Work out what needs changing (no browser)", detail: step.assign.map((a) => a.name).join(", ") };
     case "assert":
       return { ...base, action: "check", app: null, text: `Check: ${step.message}` };
     case "waitFor":
@@ -244,8 +246,11 @@ export class WorkflowService {
     const learned = e.learned;
     const steps = e.plan.phases.flatMap((p) => p.steps);
     const identityOk = !!learned && cacheKey({ goal: learned.goal, applications: learned.applications, records: [Object.fromEntries(learned.recordFields.map((f) => [f, ""]))] } as never) === e.key;
+    // A workflow imported from the network is rerun by importing it again (exact-operation lookup,
+    // live rebinding, write canary), so it needs no local review; one learned here needs its own.
+    const imported = learned?.source.kind === "network";
     const reviewed = e.review?.status === "passed";
-    const whyNot = !learned ? "Its instructions weren't stored when it was learned, so it can't be rerun from here." : !identityOk ? "Its stored instructions don't match its identity; it won't be reused." : !reviewed ? "Its plan has no passed review, so it can't run without planning again." : null;
+    const whyNot = !learned ? "Its instructions weren't stored when it was learned, so it can't be rerun from here." : !identityOk ? "Its stored instructions don't match its identity; it won't be reused." : !imported && !reviewed ? "Its plan has no passed review, so it can't run without planning again." : null;
     return {
       id: e.key,
       title: learned ? firstSentence(learned.goal) : (e.plan.strategy.summary || e.plan.strategy.name),
@@ -275,7 +280,7 @@ export class WorkflowService {
     return this.previewNew(req.instructions ?? "", req.applications ?? [], req.records);
   }
 
-  private previewLearned(id: string, rawRecords: unknown): WorkflowPreview {
+  private async previewLearned(id: string, rawRecords: unknown): Promise<WorkflowPreview> {
     const entry = this.workflow(id);
     if (!entry) throw new WorkflowError(404, "That workflow isn't in this engine's library.");
     const s = this.summary(entry);
@@ -285,6 +290,12 @@ export class WorkflowService {
     if (s.requiredRecords !== null && records.length !== s.requiredRecords) blocking.push(`These instructions say ${s.requiredRecords} records (“${s.title}”), and this batch has ${records.length}. Use ${s.requiredRecords} records, or describe a new task.`);
     const goal = entry.learned.goal;
     const apps = entry.learned.applications;
+    if (s.source === "imported") {
+      const base = { workflowId: id, title: s.title, instructions: goal, applications: apps, recordFields: s.recordFields, records: records.length, review: null, approvals: 0 };
+      const viaNetwork = await this.networkPreview(base, records, blocking);
+      if (viaNetwork) return viaNetwork;
+      return { ...base, previewId: previewId({ id, records }), source: "network", network: null, phases: phasesOf(entry.plan, labelsFromModels(entry.models)), writes: writeCounts(phasesOf(entry.plan, labelsFromModels(entry.models)), records.length), modelCalls: "none", blocking: [...blocking, "Your team's workflow for exactly this task isn't available on the network right now, so it can't be reused."], notes: [] };
+    }
     const notes: string[] = [];
     if (!blocking.length) {
       // The same lowering and compilation a run performs, on these records: a plan that no longer
@@ -332,29 +343,9 @@ export class WorkflowService {
     const same = this.workflow(id);
     if (same && this.summary(same).runnable) return this.previewLearned(id, rawRecords);
     const base = { workflowId: null, title: firstSentence(goal), instructions: goal, applications, recordFields: fields, records: records.length, review: null, approvals: 0 };
-    const client = await this.d.network().catch(() => null);
-    if (client && !errors.length) {
-      const op = canonicalOperation(goal, fields);
-      const look = await client.lookup({ origins: applications.map((a) => a.origin), canonicalOperation: op, signatures: [] }).catch(() => null);
-      const best = look?.candidates.find((c) => c.canonicalOperation === op && c.state === "ACTIVE");
-      if (best) {
-        const fetched = await client.fetchArtifact(best.versionId).catch(() => null);
-        if (fetched && fetched.capability.intent.canonicalOperation === op) {
-          const phases = phasesOf(fetched.capability.procedure.plan, labelsFromCapability(fetched.capability));
-          return {
-            ...base,
-            previewId: previewId({ op, applications, records, versionId: best.versionId }),
-            source: "network",
-            network: { versionId: best.versionId, publisher: best.publisherId.slice(0, 16), state: best.state, validations: best.validations, successfulReuses: best.successfulReuses },
-            phases,
-            writes: writeCounts(phases, records.length),
-            approvals: phases.reduce((n, p) => n + p.steps.filter((x) => x.needsApproval).length, 0),
-            modelCalls: "none",
-            blocking: errors,
-            notes: ["Before anything runs, this engine re-checks every control against the live pages (read-only) and refuses the workflow if a control can't be matched safely."],
-          };
-        }
-      }
+    if (!errors.length) {
+      const viaNetwork = await this.networkPreview(base, records, errors);
+      if (viaNetwork) return viaNetwork;
     }
     const blocking = [...errors];
     if (!this.d.planningAvailable) blocking.push("This engine has no model access configured, so it can't plan a new task. Pick a learned workflow instead.");
@@ -371,6 +362,34 @@ export class WorkflowService {
         "No learned workflow matches these exact instructions. Overclock will explore the applications (read-only) and plan the steps with Claude: model calls, typically about $0.40–0.50 for a three-app task.",
         "The plan passes an adversarial review before any write, and every write is checked by re-reading the page.",
       ],
+    };
+  }
+
+  /**
+   * A validated capability on the Overclock Network for exactly this operation (instructions and
+   * record fields), previewed from its own plan; null when the network has none.
+   */
+  private async networkPreview(base: Omit<WorkflowPreview, "previewId" | "source" | "network" | "phases" | "writes" | "modelCalls" | "blocking" | "notes">, records: RecordRow[], blocking: string[]): Promise<WorkflowPreview | null> {
+    const client = await this.d.network().catch(() => null);
+    if (!client) return null;
+    const op = canonicalOperation(base.instructions, base.recordFields);
+    const look = await client.lookup({ origins: base.applications.map((a) => a.origin), canonicalOperation: op, signatures: [] }).catch(() => null);
+    const best = look?.candidates.find((c) => c.canonicalOperation === op && c.state === "ACTIVE");
+    if (!best) return null;
+    const fetched = await client.fetchArtifact(best.versionId).catch(() => null);
+    if (!fetched || fetched.capability.intent.canonicalOperation !== op) return null;
+    const phases = phasesOf(fetched.capability.procedure.plan, labelsFromCapability(fetched.capability));
+    return {
+      ...base,
+      previewId: previewId({ op, applications: base.applications, records, versionId: best.versionId }),
+      source: "network",
+      network: { versionId: best.versionId, publisher: best.publisherId.slice(0, 16), state: best.state, validations: best.validations, successfulReuses: best.successfulReuses },
+      phases,
+      writes: writeCounts(phases, records.length),
+      approvals: phases.reduce((n, p) => n + p.steps.filter((x) => x.needsApproval).length, 0),
+      modelCalls: "none",
+      blocking,
+      notes: ["Before anything runs, this engine re-checks every control against the live pages (read-only), refuses the workflow if a control can't be matched safely, and writes one record first when a button was matched by structure."],
     };
   }
 

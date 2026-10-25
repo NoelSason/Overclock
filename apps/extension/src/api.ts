@@ -41,6 +41,7 @@ export interface PreviewStep {
   needsApproval: boolean;
   conditional: boolean;
   verifiedBy: string | null;
+  detail: string | null;
 }
 
 export interface WorkflowPreview {
@@ -106,6 +107,8 @@ export class ApiError extends Error {
 }
 
 type Fetch = typeof fetch;
+/** fetch must be called with the global as `this`; a stored reference called as a method throws "Illegal invocation" in browsers. */
+const globalFetch: Fetch = (input, init) => fetch(input, init);
 
 /** Normalize an engine address the user typed: loopback only, no path. */
 export function engineOrigin(input: string): string {
@@ -130,7 +133,7 @@ async function errorOf(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
-export async function pair(origin: string, code: string, fetchImpl: Fetch = fetch): Promise<{ token: string; expiresAt: number }> {
+export async function pair(origin: string, code: string, fetchImpl: Fetch = globalFetch): Promise<{ token: string; expiresAt: number }> {
   let res: Response;
   try {
     res = await fetchImpl(`${origin}/api/x/pair`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) });
@@ -145,7 +148,7 @@ export class OverclockApi {
   constructor(
     readonly origin: string,
     private readonly token: string,
-    private readonly fetchImpl: Fetch = fetch,
+    private readonly fetchImpl: Fetch = globalFetch,
   ) {}
 
   private async call<T>(path: string, init: RequestInit = {}): Promise<T> {

@@ -104,6 +104,29 @@ The cold version (A learns from scratch, plus a strict-cold comparison runtime C
 calls (about $0.86) and isn't part of the final demo:
 `pnpm network:demo --records 10 --seed 1111 --variation rename-save --warm-arm`.
 
+## Customer demo: Overclock for Chrome
+
+The customer-facing version of the same story: a side panel where someone picks a learned
+workflow, drops a CSV, previews every step, approves, and gets verified results. No model calls.
+Install the extension once (`pnpm extension:build`, then **Load unpacked** on
+`apps/extension/dist` at `chrome://extensions`), then:
+
+```bash
+pnpm arena
+```
+
+```bash
+OVERCLOCK_HEADLESS=0 pnpm engine
+```
+
+```bash
+pnpm extension:demo --seed 2222
+```
+
+Connect the side panel to `http://127.0.0.1:4000` with the pairing code the engine printed, then
+follow the 90-second script in [`EXTENSION.md`](EXTENSION.md#90-second-customer-demo). The
+independent check is `pnpm cli check`; new records are `pnpm extension:demo --seed 3333`.
+
 ## Alternative: a live mode E run (needs model calls)
 
 Not part of the final demo: a cold mode E run plans with Claude, which costs money per run.

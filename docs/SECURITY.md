@@ -342,6 +342,17 @@ on another record, or a fresh mutation-blocked read showing the record already i
 that write asserts. A run with an unproven skip doesn't publish, and an importer's run with one
 doesn't count as a successful reuse (`docs/NETWORK.md`, "Skipped writes need evidence").
 
+## Chrome extension gateway
+
+The extension talks to `/api/x/*` only (`services/engine/src/extension.ts`); details in
+`docs/EXTENSION.md`. A pairing code (single use, 30 minutes, replaced after 5 wrong guesses)
+buys a session token (12 hours) that the extension keeps in `chrome.storage.session`. A request
+with an Origin header must come from a `chrome-extension://` origin (one id when
+`OVERCLOCK_EXTENSION_ID` is set), the Host must be loopback (against DNS rebinding), and CORS is
+granted only to the extension. Runs are re-derived by the engine from its workflow library and
+an approved preview bound to the exact records; the extension can't set a run configuration,
+applications, or knowledge policy, sees only the runs it started, and never publishes.
+
 ## Known gaps
 
 - WebSocket blocking and the operator-session fallback for exploration have no automated

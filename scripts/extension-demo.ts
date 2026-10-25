@@ -1,7 +1,7 @@
 /**
  * Prepares the Chrome extension demo in the demonstration environment (the arena):
  *
- *   pnpm extension:demo [--seed 2222] [--records 10] [--data-dir .data/engine] [--from .data/scratch/a-cache]
+ *   pnpm extension:demo [--seed 2222] [--records 10] [--data-dir .data/engine] [--from .data/scratch/a-cache] [--no-library]
  *
  * 1. Loads a fresh batch of records into the arena (the harness's admin API; the extension never
  *    touches it) and writes them to `.data/extension-demo/records-seed<seed>.csv`, the file a
@@ -11,7 +11,8 @@
  *    instructions, the record fields, and the application origins). An entry written before the
  *    library stored instructions gets them added, but only after the identity computed from those
  *    instructions equals the key it was stored under. With --from, a cached entry with that exact
- *    key is copied in first. Nothing is planned and no model is called.
+ *    key is copied in first. Nothing is planned and no model is called. --no-library skips this
+ *    step: for an engine that should reuse a teammate's workflow from the network instead.
  *
  * Run it while the engine is up; the library is read from disk on every request.
  */
@@ -40,6 +41,12 @@ const cell = (v: unknown) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 writeFileSync(csvFile, [fields.join(","), ...scenario.records.map((r) => fields.map((f) => cell((r as Record<string, unknown>)[f])).join(","))].join("\n") + "\n");
+
+if (argv.includes("--no-library")) {
+  console.log(`arena: seed ${seed}, ${scenario.records.length} records loaded (${scenario.title})`);
+  console.log(`records file for the extension: ${csvFile}`);
+  process.exit(0);
+}
 
 // 2. The learned workflow for exactly this task.
 const applications = scenario.applications.map((a) => ({ name: a.name, origin: new URL(a.origin).origin }));

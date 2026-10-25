@@ -12,7 +12,7 @@
     "engine": "tsx services/engine/src/main.ts",
     "dashboard": "pnpm --filter @overclock/dashboard dev",
     "cli": "tsx apps/cli/src/main.ts",
-    "typecheck": "tsc -p tsconfig.json && pnpm --filter @overclock/dashboard typecheck",
+    "typecheck": "tsc -p tsconfig.json && pnpm --filter @overclock/dashboard typecheck && pnpm --filter @overclock/extension typecheck",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:adversarial": "vitest run --project adversarial",
@@ -37,7 +37,8 @@
     "network:authorize": "tsx scripts/network-authorize.ts",
     "network:demo": "tsx scripts/network-demo.ts",
     "extension:demo": "tsx scripts/extension-demo.ts",
-    "extension:build": "pnpm --filter @overclock/extension build"
+    "extension:build": "pnpm --filter @overclock/extension build",
+    "extension:smoke": "tsx scripts/extension-smoke.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

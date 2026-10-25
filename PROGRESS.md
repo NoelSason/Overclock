@@ -83,8 +83,8 @@ unless noted.
 | Command | Result |
 | --- | --- |
 | `pnpm typecheck` (workspace and dashboard) | Passed |
-| `npx vitest run --project unit` | 160 passed |
-| `npx vitest run --project integration` | 133 passed, 2 skipped (live) |
+| `npx vitest run --project unit` | 171 passed |
+| `npx vitest run --project integration` | 145 passed, 2 skipped (live) |
 | `npx vitest run --project adversarial` | 13 passed, 4 skipped (live model tiers) |
 | `pnpm test:network-capability` | 34 passed |
 | `pnpm test:network` | 26 passed |
@@ -103,6 +103,8 @@ unless noted.
 | Publication gate: skipped writes need evidence (`tests/integration/publication-gate.test.ts`) | 4 passed: a rule that never fires can't authorize publication (records stay SKIPPED), rule applied elsewhere and end state already present are accepted, one unproven record blocks it |
 | `pnpm network:demo --records 10 --seed <s> --variation rename-save --no-cold-arm --a-warm-cache ...` under the gate (no model spend) | Seeds 1111, 2222, 3333, 5151, 6262, 7777 published and passed every check; seed 4242 refused: its only hold candidate is a VIP, so the hold rule never fires and a fresh read shows "VIP" |
 | Final demo command, seed 1111, conflict arm, no model spend | 11/11 checks headless and 11/11 with visible browsers (OVERCLOCK_HEADLESS=0); the arena counted 8 writes during B's run, matching B's 8 VERIFIED receipts; X found no capability and made 0 writes |
+| Chrome extension: `tests/unit/extension.test.ts`, `tests/integration/extension-gateway.test.ts`, `tests/integration/extension-ui.test.ts` | 11, 10, and 2 passed (the UI test loads the built extension unpacked in Chromium) |
+| `pnpm extension:smoke` against a real engine and the arena (no model calls) | Seed 2222: 10/10 records (4 changed and verified, 6 no change), arena checker 10/10, 0 duplicate, 0 collateral; seed 3333 (reuse on new records): same, 801 ms; seed 5151 through engine B importing a teammate's workflow with renamed buttons: 10/10, checker 10/10, 0, 0 |
 | Worker and browser counts on the current code, alternating | 4 browsers with 16 workers fastest (13.1 s, 14.6 s); 24 workers 13.5 s, 14.8 s; 8 browsers 14.5–15.4 s |
 | Benchmarks `--mode overclock` / `--mode parallel`, fast and standard, 25 records; `--mode overclock --records 500` (live) | `docs/BENCHMARKS.md`, suites `modes@e2-*`, `modes@c-*`, `modes@scale-fast` |
 
