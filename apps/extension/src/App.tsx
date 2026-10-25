@@ -1,16 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { applyEvent, createRunView, type RunEvent, type RunView } from "@overclock/contracts";
 import { ApiError, engineOrigin, OverclockApi, pair, type EngineStatus, type PreviewStep, type RunResult, type WorkflowApp, type WorkflowPreview, type WorkflowSummary } from "./api";
+import { Ask } from "./Ask";
 import { parseRecordsCsv, type ParsedRecords } from "./csv";
 import { eventLine, fmtMs, fmtUsd, outcomeLabel, recordProgress, statusText, type Tone } from "./format";
 import { clearConnection, loadConnection, saveConnection, savedOrigin, type Connection } from "./storage";
 
 type Screen = "compose" | "preview" | "run";
 
+/** Connects without a code when the engine already trusts this extension; null when it doesn't. */
+async function connectQuietly(): Promise<Connection | null> {
+  try {
+    const origin = await savedOrigin();
+    const s = await pair(origin, "");
+    const c = { origin, token: s.token, expiresAt: s.expiresAt };
+    await saveConnection(c);
+    return c;
+  } catch {
+    return null;
+  }
+}
+
 export function App() {
   const [conn, setConn] = useState<Connection | null | undefined>(undefined);
   useEffect(() => {
-    void loadConnection().then(setConn);
+    void loadConnection().then(async (c) => setConn(c ?? (await connectQuietly())));
   }, []);
   const api = useMemo(() => (conn ? new OverclockApi(conn.origin, conn.token) : null), [conn]);
   if (conn === undefined) return <div className="boot" />;
@@ -29,6 +43,10 @@ export function App() {
       onDisconnect={async () => {
         await clearConnection();
         setConn(null);
+      }}
+      onExpired={async () => {
+        await clearConnection();
+        setConn(await connectQuietly());
       }}
     />
   );
@@ -68,7 +86,7 @@ function Connect({ onConnected }: { onConnected: (c: Connection) => Promise<void
       <p className="lede">Teach your browser a task once, then run it again on new records at machine speed, with every change checked by re-reading the page.</p>
       <div className="card">
         <h2>Connect to your Overclock engine</h2>
-        <p className="muted">The engine runs on this computer and prints a pairing code when it starts: “Chrome extension pairing code: XXXX-XXXX-XXXX”.</p>
+        <p className="muted">The engine runs on this computer and prints a pairing code when it starts: “Chrome extension pairing code: XXXX-XXXX-XXXX”. You only need it once.</p>
         <label className="field">
           <span>Engine address</span>
           <input value={origin} onChange={(e) => setOrigin(e.target.value)} spellCheck={false} />
@@ -81,7 +99,7 @@ function Connect({ onConnected }: { onConnected: (c: Connection) => Promise<void
         <button className="primary" disabled={!code || busy} onClick={() => void submit()}>
           {busy ? "Connecting…" : "Connect"}
         </button>
-        <p className="fine">The extension keeps the session only in memory until Chrome closes. It never stores API keys or site passwords.</p>
+        <p className="fine">Overclock remembers this connection on this computer. It never stores API keys or site passwords.</p>
       </div>
     </div>
   );
@@ -89,10 +107,11 @@ function Connect({ onConnected }: { onConnected: (c: Connection) => Promise<void
 
 // ------------------------------------------------------------------- main
 
-function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Promise<void> }) {
+function Main({ api, onDisconnect, onExpired }: { api: OverclockApi; onDisconnect: () => Promise<void>; onExpired: () => Promise<void> }) {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [library, setLibrary] = useState<WorkflowSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"ask" | "workflows">("ask");
   const [screen, setScreen] = useState<Screen>("compose");
   const [selected, setSelected] = useState<WorkflowSummary | null>(null);
   const [instructions, setInstructions] = useState("");
@@ -108,10 +127,10 @@ function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Pr
       setLibrary(w.workflows);
       setLoadError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) return onDisconnect();
+      if (err instanceof ApiError && err.status === 401) return onExpired();
       setLoadError(err instanceof Error ? err.message : String(err));
     }
-  }, [api, onDisconnect]);
+  }, [api, onExpired]);
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -127,6 +146,14 @@ function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Pr
     <div className="page">
       <header className="top">
         <Brand />
+        <nav className="modes">
+          <button className={mode === "ask" ? "on" : ""} onClick={() => setMode("ask")}>
+            Ask
+          </button>
+          <button className={mode === "workflows" ? "on" : ""} onClick={() => setMode("workflows")}>
+            Workflows
+          </button>
+        </nav>
         <span className={`dot ${status ? "ok" : loadError ? "bad" : ""}`} title={status ? "Connected" : (loadError ?? "Connecting")} />
         <button className="ghost small" onClick={() => void onDisconnect()}>
           Disconnect
@@ -140,7 +167,8 @@ function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Pr
           </button>
         </div>
       )}
-      {screen === "compose" && (
+      {mode === "ask" && <Ask api={api} status={status} onRefresh={refresh} />}
+      {mode === "workflows" && screen === "compose" && (
         <Compose
           api={api}
           status={status}
@@ -159,7 +187,7 @@ function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Pr
           }}
         />
       )}
-      {screen === "preview" && preview && records && (
+      {mode === "workflows" && screen === "preview" && preview && records && (
         <PreviewScreen
           api={api}
           preview={preview}
@@ -171,7 +199,7 @@ function Main({ api, onDisconnect }: { api: OverclockApi; onDisconnect: () => Pr
           }}
         />
       )}
-      {screen === "run" && runId && preview && records && (
+      {mode === "workflows" && screen === "run" && runId && preview && records && (
         <RunScreen
           api={api}
           runId={runId}

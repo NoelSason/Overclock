@@ -2,11 +2,14 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnv, repoRoot } from "@overclock/telemetry";
 import { ManagerWithHistory } from "./historical";
-import { EngineRunManager } from "./manager";
+import { ENGINE_VERSION, EngineRunManager } from "./manager";
 import { EngineRuntime, engineConfigFromEnv } from "./runtime";
 import { createEngineServer } from "./server";
 import { EngineStore } from "./store";
-import { ExtensionAccess, type ExtensionStatus } from "./extension";
+import { ClaudeProvider, type ClaudeRole } from "@overclock/models";
+import { BrowserAgentService } from "./agent";
+import { GOOGLE_CALLBACK_PATH, GoogleAccount } from "./google";
+import { ExtensionAccess, unpackedExtensionId, type ExtensionStatus } from "./extension";
 import { WorkflowService, type WorkflowApp } from "./workflows";
 
 /** OVERCLOCK_EXTENSION_APPS: a JSON list of {name, origin} a new task from the extension may use. */
@@ -34,7 +37,11 @@ const manager = new ManagerWithHistory(live, store);
 // The Chrome extension's gateway (/api/x/*): pairing code on the console and in the data dir.
 const pairingFile = join(config.dataDir, "extension-pairing-code");
 let listening = false;
+// Trusted without a code: the extension built in this repo (its unpacked id follows from the
+// folder it's loaded from), OVERCLOCK_EXTENSION_ID, and any extension that paired with a code before.
 const access = new ExtensionAccess({
+  file: join(config.dataDir, "extension-access.json"),
+  trusted: [unpackedExtensionId(join(repoRoot(), "apps", "extension", "dist")), ...(process.env.OVERCLOCK_EXTENSION_ID ? [process.env.OVERCLOCK_EXTENSION_ID] : [])],
   onCode: (code, expiresAt) => {
     try {
       writeFileSync(pairingFile, `${code}\n`, { mode: 0o600 });
@@ -50,20 +57,43 @@ const workflows = new WorkflowService({
   planningAvailable: !!process.env.ANTHROPIC_API_KEY,
   extraApplications: extensionApps(process.env.OVERCLOCK_EXTENSION_APPS),
 });
+// In-browser tasks from the extension ("Ask"): Haiku by default (OVERCLOCK_AGENT_ROLE=planner for Opus).
+// The user's Google account for in-browser tasks (Gmail read-only, Docs it creates); tokens stay in the data dir.
+const google = new GoogleAccount({
+  clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+  file: join(config.dataDir, "google-account.json"),
+  redirectUri: () => `http://127.0.0.1:${config.port}${GOOGLE_CALLBACK_PATH}`,
+});
+const agent = new BrowserAgentService({
+  model: (ledger) => new ClaudeProvider(runtime.claudeConfig, ledger),
+  available: () => !!process.env.ANTHROPIC_API_KEY,
+  role: (process.env.OVERCLOCK_AGENT_ROLE as ClaudeRole) || "helper",
+  maxSteps: Number(process.env.OVERCLOCK_AGENT_MAX_STEPS) || 60,
+  budgetUsd: Number(process.env.OVERCLOCK_AGENT_BUDGET_USD) || 0.5,
+  ledger: runtime.ledger,
+  google,
+  log: (line) => console.log(line),
+});
 const extension = {
   workflows,
+  agent,
+  google,
   access,
   extensionId: process.env.OVERCLOCK_EXTENSION_ID || undefined,
+  // Answers without launching a browser: the side panel polls this, and in-browser tasks never
+  // use Overclock's own Chromium. Workflow runs launch it on first use.
   status: async (): Promise<ExtensionStatus> => {
-    const health = await live.health();
     const applications = workflows.applications();
     const loopback = applications.length > 0 && applications.every((a) => /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(a.origin));
     return {
-      version: health.version,
-      browser: { kind: "overclock-chromium", visible: !config.headless, available: health.capabilities.browser.available },
-      planning: { available: health.capabilities.anthropic.available },
+      version: ENGINE_VERSION,
+      browser: { kind: "overclock-chromium", visible: !config.headless, available: true },
+      planning: { available: !!process.env.ANTHROPIC_API_KEY },
       network: { enabled: runtime.network.enabled, connected: runtime.network.enabled ? (await runtime.network.client()) !== null : false },
       environment: { label: process.env.OVERCLOCK_ENVIRONMENT_LABEL || (loopback ? "Demonstration apps on this computer (Overclock arena)" : "Applications configured on this engine"), applications },
+      agent: { available: agent.available(), model: agent.modelName() },
+      google: google.status(),
     };
   },
 };

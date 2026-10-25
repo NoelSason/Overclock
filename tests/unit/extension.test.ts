@@ -4,8 +4,11 @@ import { ApiError, engineOrigin } from "../../apps/extension/src/api";
 import { parseCsvRows, parseRecordsCsv } from "../../apps/extension/src/csv";
 import { eventLine, fmtMs, outcomeLabel, recordProgress } from "../../apps/extension/src/format";
 import { SseParser } from "../../apps/extension/src/sse";
-import { ExtensionAccess } from "../../services/engine/src/extension";
+import { ExtensionAccess, unpackedExtensionId } from "../../services/engine/src/extension";
 import { statedRecordCount, validateRecords } from "../../services/engine/src/workflows";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("extension: SSE parsing", () => {
   it("assembles messages split across chunks and ignores heartbeats", () => {
@@ -115,5 +118,27 @@ describe("engine: workflow records and pairing", () => {
     now = 2000;
     expect(a.verify(s!.token)).toBe(false); // expired
     expect(codes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("trusts an extension after one code pairing, and keeps tokens across restarts without storing them", () => {
+    const dir = mkdtempSync(join(tmpdir(), "oc-access-"));
+    const file = join(dir, "access.json");
+    const ext = "abcdefghijklmnopabcdefghijklmnop";
+    const a = new ExtensionAccess({ file });
+    expect(a.autoPair(ext)).toBeNull();
+    const s = a.pair(a.currentCode(), ext)!;
+    expect(readFileSync(file, "utf8")).not.toContain(s.token);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    const restarted = new ExtensionAccess({ file });
+    expect(restarted.verify(s.token)).toBe(true);
+    expect(restarted.autoPair(ext)?.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(restarted.autoPair("ponmlkjihgfedcbaponmlkjihgfedcba")).toBeNull();
+    expect(new ExtensionAccess({ trusted: [ext] }).autoPair(ext)).not.toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("computes an unpacked extension's id from its folder, as Chrome and Brave do", () => {
+    // Observed: Chromium gave this id to apps/extension/dist loaded unpacked from this path.
+    expect(unpackedExtensionId("/Users/noelsason/Desktop/Overclock/apps/extension/dist")).toBe("gepfmmhljeoapgnhhglelcghncaenpan");
   });
 });

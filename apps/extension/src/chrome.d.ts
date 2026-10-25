@@ -13,4 +13,18 @@ declare namespace chrome {
   namespace sidePanel {
     function setPanelBehavior(behavior: { openPanelOnActionClick: boolean }): Promise<void>;
   }
+  namespace tabs {
+    interface Tab {
+      id?: number;
+      index: number;
+      windowId: number;
+      url?: string;
+    }
+    function create(props: { url?: string; active?: boolean; index?: number; windowId?: number }): Promise<Tab>;
+    function query(q: { active?: boolean; currentWindow?: boolean }): Promise<Tab[]>;
+    function update(tabId: number, props: { active?: boolean }): Promise<Tab>;
+  }
+  namespace runtime {
+    const lastError: { message?: string } | undefined;
+  }
 }

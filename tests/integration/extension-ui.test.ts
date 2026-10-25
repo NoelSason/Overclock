@@ -126,7 +126,7 @@ beforeAll(async () => {
     benchmarksDir: dir,
     port: 0,
     heartbeatMs: 1000,
-    extension: { workflows, access, status: async () => ({ version: "test", browser: { kind: "overclock-chromium", visible: false, available: true }, planning: { available: false }, network: { enabled: false, connected: false }, environment: { label: "Demonstration apps on this computer", applications: workflows.applications() } }) },
+    extension: { workflows, access, status: async () => ({ version: "test", browser: { kind: "overclock-chromium", visible: false, available: true }, planning: { available: false }, network: { enabled: false, connected: false }, environment: { label: "Demonstration apps on this computer", applications: workflows.applications() }, agent: { available: false, model: null }, google: { configured: false, email: null } }) },
   });
   context = await chromium.launchPersistentContext(join(dir, "profile"), { channel: "chromium", headless: true, args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`] });
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
@@ -149,6 +149,7 @@ describe("Overclock for Chrome", () => {
     await page.getByLabel("Engine address").fill(server.url);
     await page.getByLabel("Pairing code").fill(access.currentCode());
     await page.getByRole("button", { name: "Connect" }).click();
+    await page.getByRole("button", { name: "Workflows", exact: true }).click();
 
     await page.getByText("Runs in").waitFor();
     await expect(page.getByText("Overclock’s own browser on this computer, not your Chrome tabs").isVisible()).resolves.toBe(true);
@@ -174,6 +175,7 @@ describe("Overclock for Chrome", () => {
   it("refuses a CSV whose columns don't match the workflow", async () => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+    await page.getByRole("button", { name: "Workflows", exact: true }).click();
     await page.getByRole("button", { name: /Fix the customer ID on these 2 orders/ }).click();
     await page.locator('input[type="file"]').setInputFiles({ name: "wrong.csv", mimeType: "text/csv", buffer: Buffer.from("customer\nC-9\n") });
     await page.getByText(/Missing column: orderId/).waitFor();

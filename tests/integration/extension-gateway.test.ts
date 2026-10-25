@@ -140,7 +140,7 @@ beforeAll(async () => {
   manager = new FakeManager();
   access = new ExtensionAccess();
   const workflows = new WorkflowService({ cache, network: async () => null, planningAvailable: false });
-  const status = async (): Promise<ExtensionStatus> => ({ version: "test", browser: { kind: "overclock-chromium", visible: false, available: true }, planning: { available: false }, network: { enabled: false, connected: false }, environment: { label: "test", applications: workflows.applications() } });
+  const status = async (): Promise<ExtensionStatus> => ({ version: "test", browser: { kind: "overclock-chromium", visible: false, available: true }, planning: { available: false }, network: { enabled: false, connected: false }, environment: { label: "test", applications: workflows.applications() }, agent: { available: false, model: null }, google: { configured: false, email: null } });
   server = await createEngineServer({ manager, benchmarksDir: dir, port: 0, heartbeatMs: 1000, extension: { workflows, access, status } });
 });
 afterAll(async () => {
@@ -152,6 +152,7 @@ describe("extension gateway: access", () => {
   it("requires pairing: no token, a wrong code, or a used code gets nothing", async () => {
     expect((await raw("GET", "/api/x/workflows")).status).toBe(401);
     expect((await raw("GET", "/api/x/workflows", { authorization: "Bearer nope" })).status).toBe(401);
+    await expect(pair(server.url, "")).rejects.toThrow(/Pair once with the code/);
     await expect(pair(server.url, "AAAA-AAAA-AAAA")).rejects.toThrow(/didn't match/);
     const code = access.currentCode();
     const s = await pair(server.url, code);

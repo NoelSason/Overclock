@@ -7,3 +7,4 @@ export * from "./reducer";
 export * from "./scenario";
 export * from "./api";
 export * from "./benchmark";
+export * from "./agent";

@@ -4,6 +4,8 @@ import { RunController } from "./run";
 import type { EngineRuntime } from "./runtime";
 import type { RunHandle, RunManager } from "./types";
 
+export const ENGINE_VERSION = "0.1.0";
+
 /** Live runs of this engine process. Historical runs are served by ManagerWithHistory. */
 export class EngineRunManager implements RunManager {
   private readonly runs = new Map<string, RunController>();
@@ -41,7 +43,7 @@ export class EngineRunManager implements RunManager {
     const j = this.runtime.jevConfig;
     return {
       ok: true,
-      version: "0.1.0",
+      version: ENGINE_VERSION,
       capabilities: {
         anthropic: { available: !!process.env.ANTHROPIC_API_KEY, plannerModel: c.plannerModel, helperModel: c.helperModel, reason: process.env.ANTHROPIC_API_KEY ? undefined : "ANTHROPIC_API_KEY is not set; planning, critique, deep repair and the sequential baseline are unavailable" },
         typesafe: { available: !!process.env.TYPESAFE_API_KEY, model: j.model, visionModel: j.visionModel, reason: process.env.TYPESAFE_API_KEY ? undefined : "TYPESAFE_API_KEY is not set; reflex decisions fall back to deterministic rules" },

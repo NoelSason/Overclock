@@ -1,7 +1,8 @@
 /**
- * Where the extension keeps its connection. The engine address is not secret (chrome.storage.local);
- * the session token lives only in chrome.storage.session, which is held in memory and cleared when
- * the browser restarts. No API keys or site credentials are ever stored: the engine holds those.
+ * Where the extension keeps its connection: the engine address and the session token, in
+ * chrome.storage.local, so reloading the extension or restarting the browser doesn't ask for a
+ * code again. The token only works from this extension, against an engine on this computer. No
+ * API keys or site credentials are ever stored: the engine holds those.
  */
 export interface Connection {
   origin: string;
@@ -32,16 +33,16 @@ export async function savedOrigin(): Promise<string> {
 }
 
 export async function loadConnection(): Promise<Connection | null> {
-  const v = (await read("session", "connection")) as Connection | undefined;
+  const v = (await read("local", "connection")) as Connection | undefined;
   return v && typeof v.token === "string" && v.expiresAt > Date.now() ? v : null;
 }
 
 export async function saveConnection(c: Connection): Promise<void> {
   await write("local", "engineOrigin", c.origin);
-  await write("session", "connection", c);
+  await write("local", "connection", c);
 }
 
 export async function clearConnection(): Promise<void> {
-  if (!hasChrome) memory.delete("session:connection");
-  else await chrome.storage.session.remove("connection");
+  if (!hasChrome) memory.delete("local:connection");
+  else await chrome.storage.local.remove("connection");
 }

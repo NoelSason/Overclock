@@ -1,4 +1,4 @@
-import type { RecordOutcome, RunEvent, RunStatus, RunSummary, RunView } from "@overclock/contracts";
+import type { AgentStepRequest, AgentStepResponse, AgentTaskInfo, RecordOutcome, RunEvent, RunStatus, RunSummary, RunView } from "@overclock/contracts";
 import { SseParser } from "./sse";
 
 /**
@@ -69,6 +69,8 @@ export interface EngineStatus {
   planning: { available: boolean };
   network: { enabled: boolean; connected: boolean };
   environment: { label: string; applications: WorkflowApp[] };
+  agent: { available: boolean; model: string | null };
+  google: { configured: boolean; email: string | null };
 }
 
 export interface Receipt {
@@ -155,7 +157,8 @@ export class OverclockApi {
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.origin}/api/x/${path}`, { ...init, headers: { authorization: `Bearer ${this.token}`, ...(init.body ? { "content-type": "application/json" } : {}), ...(init.headers ?? {}) } });
-    } catch {
+    } catch (err) {
+      if (init.signal?.aborted) throw err;
       throw new ApiError(0, `Lost the connection to the engine at ${this.origin}.`);
     }
     if (!res.ok) throw await errorOf(res);
@@ -185,6 +188,22 @@ export class OverclockApi {
   }
   cancel(id: string): Promise<{ ok: boolean }> {
     return this.call(`runs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" });
+  }
+
+  agentStart(task: string): Promise<AgentTaskInfo> {
+    return this.call("agent/tasks", { method: "POST", body: JSON.stringify({ task }) });
+  }
+  agentStep(id: string, body: AgentStepRequest, signal?: AbortSignal): Promise<AgentStepResponse> {
+    return this.call(`agent/tasks/${encodeURIComponent(id)}/step`, { method: "POST", body: JSON.stringify(body), ...(signal ? { signal } : {}) });
+  }
+  agentStop(id: string): Promise<{ ok: boolean }> {
+    return this.call(`agent/tasks/${encodeURIComponent(id)}/stop`, { method: "POST", body: "{}" });
+  }
+  googleConnect(): Promise<{ url: string }> {
+    return this.call("google/connect", { method: "POST", body: "{}" });
+  }
+  googleDisconnect(): Promise<{ ok: boolean }> {
+    return this.call("google/disconnect", { method: "POST", body: "{}" });
   }
 
   async thumbnail(id: string, workerId: string): Promise<Blob | null> {
